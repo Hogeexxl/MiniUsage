@@ -1,0 +1,313 @@
+import { act, renderHook, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import type { MiniUsageClient } from "../../data/miniUsageClient";
+import { createRevisionFeed, type RevisionEventSource } from "../../data/revisionFeed";
+import type { DashboardFilters, RangeKey, SessionItemDto, SessionSnapshotResponse, SessionSortField } from "../../data/types";
+import { useSessionTableController } from "./useSessionTableController";
+
+const emptyFilters: DashboardFilters = { models: [], projects: [] };
+const range = (key: RangeKey = "today") => ({ key, start_ms: 1, end_ms: 2, timezone: "Asia/Shanghai" });
+const usage = {
+  input_tokens: 1,
+  cached_tokens: 0,
+  cache_write_tokens: null,
+  uncached_input_tokens: null,
+  output_tokens: 2,
+  reasoning_tokens: 0,
+  other_output_tokens: 2,
+  total_tokens: 3,
+  cache_hit_rate: null,
+  estimated_cost: null,
+  estimated_cost_status: "unknown" as const,
+};
+
+function item(id: string, total = 3): SessionItemDto {
+  return {
+    root_session_id: id,
+    title: id,
+    project_name: "MiniUsage",
+    project_path: "/work/MiniUsage",
+    last_activity_at_ms: 1_700_000_000_000,
+    models_used: ["gpt-5"],
+    subagent_count: 0,
+    inclusive_usage: { ...usage, total_tokens: total },
+    self_usage: { ...usage, total_tokens: total },
+    subagent_usage: usage,
+  };
+}
+
+function snapshot(count: number, seedCount = 60, key: RangeKey = "today"): SessionSnapshotResponse {
+  const sort_index = Array.from({ length: count }, (_, index) => ({
+    root_session_id: `root-${index + 1}`,
+    last_activity_at_ms: count - index,
+    project_sort_key: index % 4 === 0 ? null : `/project/${index % 3}`,
+    model_sort_key: index % 5 === 0 ? null : `model-${index % 2}`,
+    total_tokens: count - index,
+    combined_total_tokens: count - index,
+    cache_hit_rate: index % 6 === 0 ? null : (index % 10) / 10,
+  }));
+  return {
+    range: range(key),
+    data_revision: 1,
+    total_items: count,
+    sort_index,
+    items: sort_index.slice(0, seedCount).map(({ root_session_id }, index) => item(root_session_id, count - index)),
+  };
+}
+
+function sourceAndFeed(client: MiniUsageClient) {
+  let source: RevisionEventSource | null = null;
+  const feed = createRevisionFeed({
+    client,
+    eventSourceFactory: () => {
+      const created: RevisionEventSource = { onerror: null, onmessage: null, close: vi.fn() };
+      source = created;
+      return created;
+    },
+  });
+  return { feed, source: () => source };
+}
+
+function clientWith(overrides: Partial<MiniUsageClient> = {}): MiniUsageClient {
+  return {
+    filterOptions: vi.fn(),
+    summary: vi.fn(),
+    getSessionSnapshot: vi.fn(async ({ range: key }) => snapshot(0, 0, key)),
+    getSessionRows: vi.fn(async ({ range: key, root_session_ids }) => ({
+      range: range(key),
+      data_revision: 1,
+      items: root_session_ids.map((id: string) => item(id)),
+    })),
+    getSessionDetail: vi.fn(),
+    getStatus: vi.fn(),
+    getRevision: vi.fn(async () => ({ data_revision: 1, status_revision: 1 })),
+    refresh: vi.fn(),
+    ...overrides,
+  };
+}
+
+afterEach(() => vi.useRealTimers());
+
+describe("useSessionTableController", () => {
+  it("T-S05-001 keeps a full index, shows 15/page, jumps windows, and isolates QueryKey caches", async () => {
+    const first = snapshot(200);
+    const getSessionSnapshot = vi.fn(async ({ range: key }: Parameters<MiniUsageClient["getSessionSnapshot"]>[0]) => ({ ...first, range: range(key) }));
+    const getSessionRows = vi.fn(async ({ range: key, root_session_ids }: Parameters<MiniUsageClient["getSessionRows"]>[0]) => ({
+      range: range(key),
+      data_revision: 1,
+      items: root_session_ids.map((id) => item(id)),
+    }));
+    const client = clientWith({ getSessionSnapshot, getSessionRows });
+    const { feed } = sourceAndFeed(client);
+    const { result, rerender } = renderHook(
+      ({ key, selectedFilters }: { key: RangeKey; selectedFilters: DashboardFilters }) => useSessionTableController(key, selectedFilters, { client, revisionFeed: feed }),
+      { initialProps: { key: "today", selectedFilters: emptyFilters } },
+    );
+    await waitFor(() => expect(result.current.rows).toHaveLength(15));
+    expect(result.current.total_items).toBe(200);
+    expect(result.current.total_pages).toBe(14);
+    expect(result.current.page).toBe(1);
+    expect(getSessionSnapshot).toHaveBeenCalledTimes(1);
+    await act(async () => result.current.next_page());
+    await waitFor(() => expect(result.current.page).toBe(2));
+    expect(getSessionRows).not.toHaveBeenCalled();
+    await act(async () => result.current.go_to_page(6));
+    await waitFor(() => expect(result.current.page).toBe(6));
+    await waitFor(() => expect(getSessionRows).toHaveBeenCalledTimes(1));
+    expect(getSessionRows.mock.calls[0][0].root_session_ids).toHaveLength(60);
+    expect(getSessionRows.mock.calls[0][0].root_session_ids[0]).toBe("root-61");
+    expect(getSessionRows.mock.calls[0][0].root_session_ids[59]).toBe("root-120");
+
+    await act(async () => result.current.select_sort("project"));
+    expect(result.current.page).toBe(6);
+    rerender({ key: "yesterday", selectedFilters: { models: ["gpt-5"], projects: [] } });
+    await waitFor(() => expect(result.current.page).toBe(1));
+    expect(result.current.sort_by).toBe("project");
+    expect(result.current.filters.models).toEqual(["gpt-5"]);
+    expect(getSessionSnapshot).toHaveBeenCalledTimes(2);
+    feed.dispose();
+  });
+
+  it("T-S06-001 covers global six-field ASC/DESC sorting, ties, nulls, page retention, and bounded prefetch", async () => {
+    const sortIndex = Array.from({ length: 200 }, (_, index) => ({
+      root_session_id: `root-${String(index + 1).padStart(3, "0")}`,
+      last_activity_at_ms: 200 - index,
+      project_sort_key: index === 198 ? null : index === 199 ? "" : `project-${index % 4}`,
+      model_sort_key: index === 198 ? null : index === 199 ? "" : `model-${index % 3}`,
+      total_tokens: index < 2 ? 200 : 200 - index,
+      combined_total_tokens: index < 2 ? 400 : 400 - index,
+      cache_hit_rate: index === 198 ? null : (index % 10) / 10,
+    }));
+    const full: SessionSnapshotResponse = {
+      range: range(),
+      data_revision: 1,
+      total_items: sortIndex.length,
+      sort_index: sortIndex,
+      items: sortIndex.slice(0, 60).map(({ root_session_id }) => item(root_session_id)),
+    };
+    const getSessionSnapshot = vi.fn(async ({ range: key }: Parameters<MiniUsageClient["getSessionSnapshot"]>[0]) => ({ ...full, range: range(key) }));
+    const getSessionRows = vi.fn(async ({ range: key, root_session_ids }: Parameters<MiniUsageClient["getSessionRows"]>[0]) => ({
+      range: range(key),
+      data_revision: 1,
+      items: root_session_ids.map((id) => item(id)),
+    }));
+    const client = clientWith({ getSessionSnapshot, getSessionRows });
+    const { feed } = sourceAndFeed(client);
+    const { result, unmount } = renderHook(() => useSessionTableController("today", emptyFilters, { client, revisionFeed: feed }));
+    await waitFor(() => expect(result.current.rows).toHaveLength(15));
+    expect(full.items).toHaveLength(60);
+    expect(result.current.total_items).toBe(200);
+    expect(result.current.total_pages).toBe(14);
+
+    const validText = (value: string | null) => value !== null && value.length > 0;
+    const compare = (left: (typeof sortIndex)[number], right: (typeof sortIndex)[number], field: SessionSortField, order: "asc" | "desc") => {
+      const leftValue = left[field === "project" ? "project_sort_key" : field === "model" ? "model_sort_key" : field === "last_activity" ? "last_activity_at_ms" : field === "total_tokens" ? "total_tokens" : field === "combined_total_tokens" ? "combined_total_tokens" : "cache_hit_rate"];
+      const rightValue = right[field === "project" ? "project_sort_key" : field === "model" ? "model_sort_key" : field === "last_activity" ? "last_activity_at_ms" : field === "total_tokens" ? "total_tokens" : field === "combined_total_tokens" ? "combined_total_tokens" : "cache_hit_rate"];
+      if (field === "project" || field === "model") {
+        const leftPresent = validText(leftValue as string | null);
+        const rightPresent = validText(rightValue as string | null);
+        if (leftPresent !== rightPresent) return leftPresent ? -1 : 1;
+      } else if (leftValue === null || rightValue === null) {
+        if (leftValue !== rightValue) return leftValue === null ? 1 : -1;
+      }
+      const valueComparison = leftValue === null || rightValue === null ? 0 : leftValue < rightValue ? -1 : leftValue > rightValue ? 1 : 0;
+      return valueComparison === 0 ? (left.root_session_id < right.root_session_id ? -1 : left.root_session_id > right.root_session_id ? 1 : 0) : order === "asc" ? valueComparison : -valueComparison;
+    };
+    const expectedPage = (field: SessionSortField, order: "asc" | "desc", page: number) => [...sortIndex]
+      .sort((left, right) => compare(left, right, field, order))
+      .slice((page - 1) * 15, page * 15)
+      .map((entry) => entry.root_session_id);
+    const setSort = async (field: SessionSortField, order: "asc" | "desc") => {
+      if (result.current.sort_by !== field) await act(async () => result.current.select_sort(field));
+      if (result.current.sort_order !== order) await act(async () => result.current.select_sort(field));
+      expect(result.current.page).toBe(2);
+    };
+
+    await act(async () => result.current.go_to_page(2));
+    await waitFor(() => expect(result.current.page).toBe(2));
+    for (const field of ["last_activity", "project", "model", "total_tokens", "combined_total_tokens", "cache_hit_rate"] as const) {
+      await setSort(field, "asc");
+      await waitFor(() => expect(result.current.rows.map((row) => row.root_session_id)).toEqual(expectedPage(field, "asc", 2)));
+      await setSort(field, "desc");
+      await waitFor(() => expect(result.current.rows.map((row) => row.root_session_id)).toEqual(expectedPage(field, "desc", 2)));
+    }
+    await setSort("project", "asc");
+    await act(async () => result.current.go_to_page(14));
+    await waitFor(() => expect(result.current.rows.map((row) => row.root_session_id)).toEqual(expectedPage("project", "asc", 14)));
+    expect(result.current.rows.map((row) => row.root_session_id).slice(-2)).toEqual(["root-199", "root-200"]);
+
+    unmount();
+    feed.dispose();
+    const prefetchRows = vi.fn(async ({ range: key, root_session_ids }: Parameters<MiniUsageClient["getSessionRows"]>[0]) => ({
+      range: range(key),
+      data_revision: 1,
+      items: root_session_ids.map((id) => item(id)),
+    }));
+    const prefetchClient = clientWith({
+      getSessionSnapshot: vi.fn(async ({ range: key }: Parameters<MiniUsageClient["getSessionSnapshot"]>[0]) => ({ ...full, range: range(key) })),
+      getSessionRows: prefetchRows,
+    });
+    const { feed: prefetchFeed } = sourceAndFeed(prefetchClient);
+    const { result: prefetchResult } = renderHook(() => useSessionTableController("today", emptyFilters, { client: prefetchClient, revisionFeed: prefetchFeed }));
+    await waitFor(() => expect(prefetchResult.current.rows).toHaveLength(15));
+    const requestCountBeforePrefetch = prefetchRows.mock.calls.length;
+    await act(async () => prefetchResult.current.go_to_page(3));
+    await waitFor(() => expect(prefetchRows.mock.calls.length).toBeGreaterThan(requestCountBeforePrefetch));
+    const page3Request = prefetchRows.mock.calls.at(-1)?.[0].root_session_ids ?? [];
+    expect(page3Request).toHaveLength(60);
+    expect(page3Request[0]).toBe("root-061");
+    expect(page3Request[59]).toBe("root-120");
+    const countAfterPage3 = prefetchRows.mock.calls.length;
+    await waitFor(() => expect(prefetchRows.mock.calls.length).toBe(countAfterPage3));
+    await act(async () => prefetchResult.current.go_to_page(7));
+    await waitFor(() => expect(prefetchRows.mock.calls.length).toBeGreaterThan(countAfterPage3));
+    const page7Request = prefetchRows.mock.calls.at(-1)?.[0].root_session_ids ?? [];
+    expect(page7Request).toHaveLength(60);
+    expect(page7Request[0]).toBe("root-121");
+    expect(page7Request[59]).toBe("root-180");
+    const countAfterPage7 = prefetchRows.mock.calls.length;
+    await waitFor(() => expect(prefetchRows.mock.calls.length).toBe(countAfterPage7));
+    await act(async () => prefetchResult.current.select_sort("last_activity"));
+    expect(prefetchRows.mock.calls.length).toBe(countAfterPage7);
+    prefetchFeed.dispose();
+  });
+
+  it("T-S06-001 upgrades a pending prefetch when the foreground jumps into its window", async () => {
+    let resolveBatch!: () => void;
+    const getSessionRows = vi.fn(({ range: key, root_session_ids }: Parameters<MiniUsageClient["getSessionRows"]>[0]) =>
+      new Promise<Awaited<ReturnType<MiniUsageClient["getSessionRows"]>>>((resolve) => {
+        resolveBatch = () => resolve({ range: range(key), data_revision: 1, items: root_session_ids.map((id) => item(id)) });
+      }),
+    );
+    const full = snapshot(200);
+    const client = clientWith({
+      getSessionSnapshot: vi.fn(async ({ range: key }: Parameters<MiniUsageClient["getSessionSnapshot"]>[0]) => ({ ...full, range: range(key) })),
+      getSessionRows,
+    });
+    const { feed } = sourceAndFeed(client);
+    const { result } = renderHook(() => useSessionTableController("today", emptyFilters, { client, revisionFeed: feed }));
+    await waitFor(() => expect(result.current.rows).toHaveLength(15));
+
+    await act(async () => result.current.go_to_page(3));
+    await waitFor(() => expect(getSessionRows).toHaveBeenCalledTimes(1));
+    expect(getSessionRows.mock.calls[0][0].root_session_ids).toHaveLength(60);
+    expect(result.current.page_state).toBe("idle");
+
+    await act(async () => {
+      result.current.go_to_page(5);
+      result.current.go_to_page(6);
+    });
+    await waitFor(() => expect(result.current.page_state).toBe("loading"));
+    expect(getSessionRows).toHaveBeenCalledTimes(1);
+
+    await act(async () => resolveBatch());
+    await waitFor(() => expect(result.current.page_state).toBe("idle"));
+    await waitFor(() => expect(result.current.rows).toHaveLength(15));
+    expect(result.current.page).toBe(6);
+    expect(getSessionRows).toHaveBeenCalledTimes(1);
+    feed.dispose();
+  });
+
+  it("does not let a late row response cross scope or revision", async () => {
+    let resolveRows!: (value: Awaited<ReturnType<MiniUsageClient["getSessionRows"]>>) => void;
+    const client = clientWith({
+      getSessionSnapshot: vi.fn(async ({ range: key }) => ({ ...snapshot(80), range: range(key) })),
+      getSessionRows: vi.fn(() => new Promise<Awaited<ReturnType<MiniUsageClient["getSessionRows"]>>>((resolve) => { resolveRows = resolve; })),
+    });
+    const { feed } = sourceAndFeed(client);
+    const { result, rerender } = renderHook(({ key }: { key: RangeKey }) => useSessionTableController(key, emptyFilters, { client, revisionFeed: feed }), { initialProps: { key: "today" } });
+    await waitFor(() => expect(result.current.rows).toHaveLength(15));
+    await act(async () => result.current.go_to_page(6));
+    rerender({ key: "yesterday" });
+    resolveRows({ range: range("today"), data_revision: 1, items: [item("root-61")] });
+    await act(async () => undefined);
+    expect(result.current.range).toBe("yesterday");
+    expect(result.current.rows.every((row) => row.root_session_id !== "root-61")).toBe(true);
+    feed.dispose();
+  });
+
+  it("T-S05-001 settles a revision refresh after bounded stale snapshot responses", async () => {
+    let snapshotCalls = 0;
+    let resolveStale!: (value: SessionSnapshotResponse) => void;
+    const fresh = snapshot(1);
+    const getSessionSnapshot = vi.fn(async ({ range: key }: Parameters<MiniUsageClient["getSessionSnapshot"]>[0]) => {
+      snapshotCalls += 1;
+      if (snapshotCalls === 1) return { ...fresh, range: range(key) };
+      if (snapshotCalls === 2) return await new Promise<SessionSnapshotResponse>((resolve) => { resolveStale = resolve; });
+      return { ...fresh, range: range(key), data_revision: 2, items: [item("root-fresh", 99)], sort_index: [{ ...fresh.sort_index[0], root_session_id: "root-fresh", total_tokens: 99, combined_total_tokens: 99 }] };
+    });
+    const client = clientWith({ getSessionSnapshot });
+    const { feed, source } = sourceAndFeed(client);
+    const { result } = renderHook(() => useSessionTableController("today", emptyFilters, { client, revisionFeed: feed }));
+    await waitFor(() => expect(result.current.rows.map((row) => row.root_session_id)).toEqual(["root-1"]));
+    await act(async () => source()?.onmessage?.({ data: JSON.stringify({ data_revision: 2, status_revision: 2 }) } as MessageEvent<string>));
+    await waitFor(() => expect(snapshotCalls).toBe(2));
+    resolveStale({ ...fresh, data_revision: 1 });
+    await waitFor(() => expect(snapshotCalls).toBe(3));
+    await waitFor(() => expect(result.current.load_state).toBe("ready"));
+    expect(result.current.rows.map((row) => row.root_session_id)).toEqual(["root-fresh"]);
+    expect(result.current.load_state).not.toBe("refreshing");
+    feed.dispose();
+  });
+});

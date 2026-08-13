@@ -1,0 +1,39 @@
+[package]
+name = "mini-usage"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = []
+embedded-frontend = ["dep:rust-embed"]
+
+[dependencies]
+axum = "0.8"
+directories = "6"
+form_urlencoded = "1.2"
+blake3 = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "sync", "time"] }
+tower-http = { version = "0.6", features = ["fs"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
+sha2 = "0.10"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1.0", default-features = false, features = ["std"] }
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+chrono = { version = "0.4", default-features = false, features = ["std"] }
+uuid = { version = "1.24", default-features = false, features = ["std"] }
+mime_guess = "2"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+rust-embed = { version = "8", optional = true }
+semver = "1"
+webbrowser = "1"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Storage_FileSystem",
+    "Win32_System_ProcessStatus",
+    "Win32_System_Threading",
+] }
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+tokio = { version = "1", features = ["test-util"] }

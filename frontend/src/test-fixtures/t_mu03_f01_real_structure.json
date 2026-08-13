@@ -1,0 +1,318 @@
+{
+  "root_session_id": "00000000-03e8-7000-8000-000000000101",
+  "child_session_id": "00000000-03e8-7000-8000-000000000102",
+  "main_rollout": [
+    {
+      "type": "session_meta",
+      "timestamp": "2026-08-08T02:00:00Z",
+      "payload": {
+        "id": "00000000-03e8-7000-8000-000000000101",
+        "cwd": "/project/a",
+        "agent_role": "main"
+      }
+    },
+    {
+      "type": "turn_context",
+      "timestamp": "2026-08-08T02:00:01Z",
+      "payload": {
+        "turn_id": "f01-sol-high",
+        "model": "gpt-5.6-sol",
+        "effort": "high"
+      }
+    },
+    {
+      "type": "event_msg",
+      "timestamp": "2026-08-08T02:00:02Z",
+      "payload": {
+        "type": "token_count",
+        "info": {
+          "total_token_usage": {
+            "input_tokens": 100000,
+            "cached_input_tokens": 0,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 0,
+            "reasoning_output_tokens": 0,
+            "total_tokens": 100000
+          },
+          "last_token_usage": {
+            "input_tokens": 100000,
+            "cached_input_tokens": 0,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 0,
+            "reasoning_output_tokens": 0,
+            "total_tokens": 100000
+          }
+        }
+      }
+    },
+    {
+      "type": "turn_context",
+      "timestamp": "2026-08-08T02:00:03Z",
+      "payload": {
+        "turn_id": "f01-sol-medium",
+        "model": "gpt-5.6-sol",
+        "effort": "medium"
+      }
+    },
+    {
+      "type": "event_msg",
+      "timestamp": "2026-08-08T02:00:04Z",
+      "payload": {
+        "type": "token_count",
+        "info": {
+          "total_token_usage": {
+            "input_tokens": 200000,
+            "cached_input_tokens": 0,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 0,
+            "reasoning_output_tokens": 0,
+            "total_tokens": 200000
+          },
+          "last_token_usage": {
+            "input_tokens": 200000,
+            "cached_input_tokens": 0,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 0,
+            "reasoning_output_tokens": 0,
+            "total_tokens": 200000
+          }
+        }
+      }
+    },
+    {
+      "type": "turn_context",
+      "timestamp": "2026-08-08T02:00:05Z",
+      "payload": {
+        "turn_id": "f01-terra-max",
+        "model": "gpt-5.6-terra",
+        "effort": "max"
+      }
+    },
+    {
+      "type": "event_msg",
+      "timestamp": "2026-08-08T02:00:06Z",
+      "payload": {
+        "type": "token_count",
+        "info": {
+          "total_token_usage": {
+            "input_tokens": 300000,
+            "cached_input_tokens": 0,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 0,
+            "reasoning_output_tokens": 0,
+            "total_tokens": 300000
+          },
+          "last_token_usage": {
+            "input_tokens": 300000,
+            "cached_input_tokens": 0,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 0,
+            "reasoning_output_tokens": 0,
+            "total_tokens": 300000
+          }
+        }
+      }
+    }
+  ],
+  "subagent_rollout": [
+    {
+      "type": "session_meta",
+      "timestamp": "2026-08-08T02:00:07Z",
+      "payload": {
+        "id": "00000000-03e8-7000-8000-000000000102",
+        "cwd": "/project/a",
+        "parent_thread_id": "00000000-03e8-7000-8000-000000000101",
+        "agent_path": "/root/gate_b_rereview",
+        "source": {
+          "subagent": {
+            "other": "gate"
+          }
+        }
+      }
+    },
+    {
+      "type": "turn_context",
+      "timestamp": "2026-08-08T02:00:08Z",
+      "payload": {
+        "turn_id": "f01-luna-high",
+        "model": "gpt-5.6-luna",
+        "effort": "high"
+      }
+    },
+    {
+      "type": "event_msg",
+      "timestamp": "2026-08-08T02:00:09Z",
+      "payload": {
+        "type": "token_count",
+        "info": {
+          "total_token_usage": {
+            "input_tokens": 100000,
+            "cached_input_tokens": 0,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 0,
+            "reasoning_output_tokens": 0,
+            "total_tokens": 100000
+          },
+          "last_token_usage": {
+            "input_tokens": 100000,
+            "cached_input_tokens": 0,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 0,
+            "reasoning_output_tokens": 0,
+            "total_tokens": 100000
+          }
+        }
+      }
+    }
+  ],
+  "state_threads": [
+    {
+      "id": "00000000-03e8-7000-8000-000000000101",
+      "rollout": "main",
+      "created_at_ms": 1,
+      "updated_at_ms": 2,
+      "title": "Gate root",
+      "model": "gpt-5.6-sol",
+      "agent_role": "main"
+    },
+    {
+      "id": "00000000-03e8-7000-8000-000000000102",
+      "rollout": "subagent",
+      "created_at_ms": 3,
+      "updated_at_ms": 4,
+      "title": null,
+      "model": "gpt-5.6-luna",
+      "agent_role": "subagent"
+    }
+  ],
+  "state_spawn_edges": [
+    {
+      "parent_thread_id": "00000000-03e8-7000-8000-000000000101",
+      "child_thread_id": "00000000-03e8-7000-8000-000000000102",
+      "status": "spawned",
+      "observed_at_ms": 3
+    }
+  ],
+  "session_index": [
+    {
+      "id": "00000000-03e8-7000-8000-000000000101",
+      "thread_name": "Gate root"
+    }
+  ],
+  "api_detail": {
+    "range": {
+      "key": "year",
+      "start_ms": 0,
+      "end_ms": 4102444800000,
+      "timezone": "Asia/Shanghai"
+    },
+    "data_revision": 4,
+    "root_session_id": "00000000-03e8-7000-8000-000000000101",
+    "last_activity_at_ms": 1786154409000,
+    "main": {
+      "title": null,
+      "thread_id": "00000000-03e8-7000-8000-000000000101",
+      "root_session_id": "00000000-03e8-7000-8000-000000000101",
+      "models_used": ["gpt-5.6-sol", "gpt-5.6-terra"],
+      "model_usage": [
+        {
+          "model": "gpt-5.6-sol",
+          "reasoning_effort": "high",
+          "usage": {
+            "input_tokens": 100000,
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+            "uncached_input_tokens": 100000,
+            "output_tokens": 0,
+            "reasoning_tokens": 0,
+            "other_output_tokens": 0,
+            "total_tokens": 100000,
+            "cache_hit_rate": 0,
+            "estimated_cost": 0.5
+          }
+        },
+        {
+          "model": "gpt-5.6-sol",
+          "reasoning_effort": "medium",
+          "usage": {
+            "input_tokens": 200000,
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+            "uncached_input_tokens": 200000,
+            "output_tokens": 0,
+            "reasoning_tokens": 0,
+            "other_output_tokens": 0,
+            "total_tokens": 200000,
+            "cache_hit_rate": 0,
+            "estimated_cost": 1.0
+          }
+        },
+        {
+          "model": "gpt-5.6-terra",
+          "reasoning_effort": "max",
+          "usage": {
+            "input_tokens": 300000,
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+            "uncached_input_tokens": 300000,
+            "output_tokens": 0,
+            "reasoning_tokens": 0,
+            "other_output_tokens": 0,
+            "total_tokens": 300000,
+            "cache_hit_rate": 0,
+            "estimated_cost": 1.2
+          }
+        }
+      ],
+      "self_usage": {
+        "input_tokens": 600000,
+        "cached_tokens": 0,
+        "cache_write_tokens": 0,
+        "uncached_input_tokens": 600000,
+        "output_tokens": 0,
+        "reasoning_tokens": 0,
+        "other_output_tokens": 0,
+        "total_tokens": 600000,
+        "cache_hit_rate": 0,
+        "estimated_cost": 2.7
+      },
+      "subagent_count": 1,
+      "inclusive_usage": {
+        "input_tokens": 700000,
+        "cached_tokens": 0,
+        "cache_write_tokens": 0,
+        "uncached_input_tokens": 700000,
+        "output_tokens": 0,
+        "reasoning_tokens": 0,
+        "other_output_tokens": 0,
+        "total_tokens": 700000,
+        "cache_hit_rate": 0,
+        "estimated_cost": 2.72
+      }
+    },
+    "subagents": [
+      {
+        "thread_id": "00000000-03e8-7000-8000-000000000102",
+        "parent_thread_id": "00000000-03e8-7000-8000-000000000101",
+        "root_session_id": "00000000-03e8-7000-8000-000000000101",
+        "title": "Gate b rereview",
+        "model": "gpt-5.6-luna",
+        "reasoning_effort": "high",
+        "reasoning_effort_mixed": false,
+        "last_activity_at_ms": 1786154409000,
+        "usage": {
+          "input_tokens": 100000,
+          "cached_tokens": 0,
+          "cache_write_tokens": 0,
+          "uncached_input_tokens": 100000,
+          "output_tokens": 0,
+          "reasoning_tokens": 0,
+          "other_output_tokens": 0,
+          "total_tokens": 100000,
+          "cache_hit_rate": 0,
+          "estimated_cost": 0.02
+        }
+      }
+    ]
+  }
+}

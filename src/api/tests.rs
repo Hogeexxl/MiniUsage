@@ -1,0 +1,564 @@
+use super::*;
+
+use std::sync::{
+    Arc, Mutex as StdMutex,
+    atomic::{AtomicUsize, Ordering},
+};
+
+use axum::{
+    body::to_bytes,
+    http::{Method, Request, StatusCode, header},
+};
+use futures_util::{FutureExt, future::BoxFuture};
+use serde_json::{Value, json};
+use tokio::sync::{Mutex, Notify};
+use tower::ServiceExt;
+
+use crate::{
+    platform::browser::{BrowserError, BrowserOpener},
+    update::{ReleaseInfo, ReleaseProvider, UpdateFailureKind, UpdateService},
+};
+
+#[derive(Clone)]
+struct FixtureProvider {
+    result: Arc<Mutex<Result<ReleaseInfo, UpdateFailureKind>>>,
+    calls: Arc<AtomicUsize>,
+}
+
+impl FixtureProvider {
+    fn success(version: semver::Version) -> Self {
+        Self {
+            result: Arc::new(Mutex::new(Ok(ReleaseInfo::stable(version).unwrap()))),
+            calls: Arc::new(AtomicUsize::new(0)),
+        }
+    }
+
+    fn failure(failure: UpdateFailureKind) -> Self {
+        Self {
+            result: Arc::new(Mutex::new(Err(failure))),
+            calls: Arc::new(AtomicUsize::new(0)),
+        }
+    }
+}
+
+impl ReleaseProvider for FixtureProvider {
+    fn fetch_latest(&self) -> BoxFuture<'_, Result<ReleaseInfo, UpdateFailureKind>> {
+        async move {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            self.result.lock().await.clone()
+        }
+        .boxed()
+    }
+}
+
+struct BlockingProvider {
+    release: ReleaseInfo,
+    calls: Arc<AtomicUsize>,
+    entered: Arc<Notify>,
+    proceed: Arc<Notify>,
+}
+
+impl ReleaseProvider for BlockingProvider {
+    fn fetch_latest(&self) -> BoxFuture<'_, Result<ReleaseInfo, UpdateFailureKind>> {
+        async move {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            self.entered.notify_waiters();
+            self.proceed.notified().await;
+            Ok(self.release.clone())
+        }
+        .boxed()
+    }
+}
+
+#[derive(Clone, Default)]
+struct RecordingBrowser(Arc<StdMutex<Vec<String>>>);
+
+impl BrowserOpener for RecordingBrowser {
+    fn open(&self, url: &str) -> Result<(), BrowserError> {
+        self.0.lock().unwrap().push(url.to_owned());
+        Ok(())
+    }
+}
+
+#[derive(Clone, Copy)]
+struct FailingBrowser;
+
+impl BrowserOpener for FailingBrowser {
+    fn open(&self, _url: &str) -> Result<(), BrowserError> {
+        Err(BrowserError::new("browser fixture failure"))
+    }
+}
+
+fn fixed_service(provider: Arc<dyn ReleaseProvider>) -> Arc<UpdateService> {
+    Arc::new(UpdateService::new_with_clock(provider, Arc::new(|| 1_234)))
+}
+
+async fn json_body(response: axum::response::Response) -> Value {
+    serde_json::from_slice(&to_bytes(response.into_body(), 64 * 1024).await.unwrap()).unwrap()
+}
+
+#[tokio::test]
+async fn t_dist_008_status_dto_is_fixed_and_does_not_check_provider() {
+    let provider = Arc::new(FixtureProvider::success(semver::Version::new(0, 1, 1)));
+    let service = fixed_service(Arc::clone(&provider) as Arc<dyn ReleaseProvider>);
+    let browser = Arc::new(RecordingBrowser::default());
+    let fixture = support::ApiFixture::with_updates(
+        "dist-008-status",
+        service,
+        browser as Arc<dyn BrowserOpener>,
+    );
+
+    let response = fixture.call(Method::GET, "/api/update/status", &[]).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = json_body(response).await;
+    assert_eq!(
+        body,
+        json!({
+            "current_version": env!("CARGO_PKG_VERSION"),
+            "latest_version": null,
+            "update_available": false,
+            "release_url": null,
+            "last_checked_at_ms": null,
+            "checking": false,
+        })
+    );
+    assert_eq!(provider.calls.load(Ordering::SeqCst), 0);
+    fixture.scanner.shutdown().unwrap();
+}
+
+#[tokio::test]
+async fn t_dist_008_check_requires_active_header_and_maps_success_or_failure_safely() {
+    let provider = Arc::new(FixtureProvider::success(semver::Version::new(0, 1, 1)));
+    let service = fixed_service(Arc::clone(&provider) as Arc<dyn ReleaseProvider>);
+    let fixture = support::ApiFixture::with_updates(
+        "dist-008-check-success",
+        service,
+        Arc::new(RecordingBrowser::default()),
+    );
+
+    let rejected = fixture.call(Method::POST, "/api/update/check", &[]).await;
+    assert_eq!(rejected.status(), StatusCode::FORBIDDEN);
+    assert_eq!(json_body(rejected).await["error"]["code"], "FORBIDDEN");
+
+    let accepted = fixture
+        .call(
+            Method::POST,
+            "/api/update/check",
+            &[("x-miniusage-request", "1")],
+        )
+        .await;
+    assert_eq!(accepted.status(), StatusCode::OK);
+    let body = json_body(accepted).await;
+    assert_eq!(body["current_version"], env!("CARGO_PKG_VERSION"));
+    assert_eq!(body["latest_version"], "0.1.1");
+    assert_eq!(body["update_available"], true);
+    assert_eq!(
+        body["release_url"],
+        "https://github.com/Hogeexxl/MiniUsage/releases/tag/v0.1.1"
+    );
+    assert_eq!(body["checking"], false);
+    assert_eq!(body["last_checked_at_ms"], 1_234);
+    assert_eq!(provider.calls.load(Ordering::SeqCst), 1);
+    fixture.scanner.shutdown().unwrap();
+
+    let provider = Arc::new(FixtureProvider::failure(UpdateFailureKind::HttpStatus(599)));
+    let service = fixed_service(Arc::clone(&provider) as Arc<dyn ReleaseProvider>);
+    let fixture = support::ApiFixture::with_updates(
+        "dist-008-check-failure",
+        service,
+        Arc::new(RecordingBrowser::default()),
+    );
+    let failed = fixture
+        .call(
+            Method::POST,
+            "/api/update/check",
+            &[("x-miniusage-request", "1")],
+        )
+        .await;
+    assert_eq!(failed.status(), StatusCode::SERVICE_UNAVAILABLE);
+    let bytes = to_bytes(failed.into_body(), 64 * 1024).await.unwrap();
+    let rendered = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(rendered.contains("UPDATE_CHECK_FAILED"));
+    assert!(!rendered.contains("599"));
+    assert!(!rendered.contains("github"));
+    fixture.scanner.shutdown().unwrap();
+}
+
+#[tokio::test]
+async fn t_dist_008_concurrent_check_requests_share_one_provider_call() {
+    let provider = Arc::new(BlockingProvider {
+        release: ReleaseInfo::stable(semver::Version::new(0, 1, 1)).unwrap(),
+        calls: Arc::new(AtomicUsize::new(0)),
+        entered: Arc::new(Notify::new()),
+        proceed: Arc::new(Notify::new()),
+    });
+    let service = fixed_service(Arc::clone(&provider) as Arc<dyn ReleaseProvider>);
+    let fixture = support::ApiFixture::with_updates(
+        "dist-008-single-flight",
+        service,
+        Arc::new(RecordingBrowser::default()),
+    );
+    let first_app = fixture.app.clone();
+    let first = tokio::spawn(async move {
+        first_app
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/api/update/check")
+                    .header("host", "127.0.0.1:3210")
+                    .header("x-miniusage-request", "1")
+                    .body(axum::body::Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap()
+    });
+    provider.entered.notified().await;
+    let second_app = fixture.app.clone();
+    let second = tokio::spawn(async move {
+        second_app
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/api/update/check")
+                    .header("host", "127.0.0.1:3210")
+                    .header("x-miniusage-request", "1")
+                    .body(axum::body::Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap()
+    });
+    tokio::task::yield_now().await;
+    assert_eq!(provider.calls.load(Ordering::SeqCst), 1);
+    provider.proceed.notify_waiters();
+    assert_eq!(first.await.unwrap().status(), StatusCode::OK);
+    assert_eq!(second.await.unwrap().status(), StatusCode::OK);
+    assert_eq!(provider.calls.load(Ordering::SeqCst), 1);
+    fixture.scanner.shutdown().unwrap();
+}
+
+#[tokio::test]
+async fn t_dist_008_open_release_requires_valid_state_and_preserves_state_on_browser_failure() {
+    let current = semver::Version::parse(env!("CARGO_PKG_VERSION")).unwrap();
+    let no_update_provider = Arc::new(FixtureProvider::success(current));
+    let no_update_browser = Arc::new(RecordingBrowser::default());
+    let fixture = support::ApiFixture::with_updates(
+        "dist-008-open-no-update",
+        fixed_service(no_update_provider as Arc<dyn ReleaseProvider>),
+        no_update_browser.clone() as Arc<dyn BrowserOpener>,
+    );
+    let no_update = fixture
+        .call(
+            Method::POST,
+            "/api/update/open-release",
+            &[("x-miniusage-request", "1")],
+        )
+        .await;
+    assert_eq!(no_update.status(), StatusCode::CONFLICT);
+    assert_eq!(
+        json_body(no_update).await["error"]["code"],
+        "UPDATE_NOT_AVAILABLE"
+    );
+    assert!(no_update_browser.0.lock().unwrap().is_empty());
+    fixture.scanner.shutdown().unwrap();
+
+    let provider = Arc::new(FixtureProvider::success(semver::Version::new(0, 1, 1)));
+    let browser = Arc::new(RecordingBrowser::default());
+    let fixture = support::ApiFixture::with_updates(
+        "dist-008-open-success",
+        fixed_service(provider as Arc<dyn ReleaseProvider>),
+        browser.clone() as Arc<dyn BrowserOpener>,
+    );
+    let checked = fixture
+        .call(
+            Method::POST,
+            "/api/update/check",
+            &[("x-miniusage-request", "1")],
+        )
+        .await;
+    assert_eq!(checked.status(), StatusCode::OK);
+    let opened = fixture
+        .call(
+            Method::POST,
+            "/api/update/open-release",
+            &[("x-miniusage-request", "1")],
+        )
+        .await;
+    assert_eq!(opened.status(), StatusCode::NO_CONTENT);
+    assert_eq!(
+        browser.0.lock().unwrap().as_slice(),
+        ["https://github.com/Hogeexxl/MiniUsage/releases/tag/v0.1.1"]
+    );
+    fixture.scanner.shutdown().unwrap();
+
+    let provider = Arc::new(FixtureProvider::success(semver::Version::new(0, 1, 1)));
+    let service = fixed_service(provider as Arc<dyn ReleaseProvider>);
+    let fixture = support::ApiFixture::with_updates(
+        "dist-008-open-browser-failure",
+        service,
+        Arc::new(FailingBrowser),
+    );
+    let checked = fixture
+        .call(
+            Method::POST,
+            "/api/update/check",
+            &[("x-miniusage-request", "1")],
+        )
+        .await;
+    assert_eq!(checked.status(), StatusCode::OK);
+    let failed = fixture
+        .call(
+            Method::POST,
+            "/api/update/open-release",
+            &[("x-miniusage-request", "1")],
+        )
+        .await;
+    assert_eq!(failed.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    assert_eq!(
+        json_body(failed).await["error"]["code"],
+        "UPDATE_BROWSER_OPEN_FAILED"
+    );
+    let status = fixture.call(Method::GET, "/api/update/status", &[]).await;
+    let status = json_body(status).await;
+    assert_eq!(status["update_available"], true);
+    assert_eq!(
+        status["release_url"],
+        "https://github.com/Hogeexxl/MiniUsage/releases/tag/v0.1.1"
+    );
+    fixture.scanner.shutdown().unwrap();
+}
+
+#[tokio::test]
+async fn t_dist_008_update_routes_keep_existing_http_security_guard() {
+    let fixture = support::ApiFixture::new("dist-008-security");
+    for (method, uri) in [
+        (Method::GET, "/api/update/status"),
+        (Method::POST, "/api/update/check"),
+        (Method::POST, "/api/update/open-release"),
+    ] {
+        let response = fixture
+            .app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(method.clone())
+                    .uri(uri)
+                    .header("host", "example.test")
+                    .body(axum::body::Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN, "{method} {uri}");
+        assert_eq!(json_body(response).await["error"]["code"], "FORBIDDEN_HOST");
+
+        let response = fixture
+            .app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(method.clone())
+                    .uri(uri)
+                    .header("host", "127.0.0.1:3210")
+                    .header("origin", "http://example.test")
+                    .body(axum::body::Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN, "{method} {uri}");
+        assert_eq!(
+            json_body(response).await["error"]["code"],
+            "FORBIDDEN_ORIGIN"
+        );
+
+        let response = fixture
+            .app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(method)
+                    .uri(uri)
+                    .header("host", "127.0.0.1:3210")
+                    .header("sec-fetch-site", "cross-site")
+                    .body(axum::body::Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN, "{uri}");
+        assert_eq!(
+            json_body(response).await["error"]["code"],
+            "FORBIDDEN_ORIGIN"
+        );
+    }
+    fixture.scanner.shutdown().unwrap();
+}
+
+#[test]
+fn listen_contract_is_fixed_loopback_only() {
+    let address = listen_address();
+    assert_eq!(address.ip().to_string(), "127.0.0.1");
+    assert_eq!(address.port(), 3210);
+    assert!(!address.ip().is_unspecified());
+}
+
+#[tokio::test]
+async fn health_exposes_exact_launcher_markers() {
+    let fixture = support::ApiFixture::new("health-marker");
+    let health = fixture.call(Method::GET, "/api/health", &[]).await;
+    assert_eq!(health.status(), StatusCode::NO_CONTENT);
+    assert_eq!(
+        health.headers()[header::HeaderName::from_static("x-miniusage-app")],
+        "MiniUsage"
+    );
+    assert_eq!(
+        health.headers()[header::HeaderName::from_static("x-miniusage-version")],
+        env!("CARGO_PKG_VERSION")
+    );
+    fixture.scanner.shutdown().unwrap();
+}
+
+#[tokio::test]
+async fn service_control_stops_the_scanner_and_requests_full_process_shutdown() {
+    let fixture = support::ApiFixture::new("service-control");
+
+    let running = fixture.call(Method::GET, "/api/service", &[]).await;
+    assert_eq!(running.status(), StatusCode::OK);
+    let running: Value =
+        serde_json::from_slice(&to_bytes(running.into_body(), 1024).await.unwrap()).unwrap();
+    assert_eq!(running["state"], "running");
+
+    let events = fixture.call(Method::GET, "/api/events", &[]).await;
+    let events_finished =
+        tokio::spawn(async move { to_bytes(events.into_body(), 64 * 1024).await.unwrap() });
+
+    let rejected = fixture.call(Method::POST, "/api/service/stop", &[]).await;
+    assert_eq!(rejected.status(), StatusCode::FORBIDDEN);
+    assert!(!*fixture.process_shutdown.borrow());
+
+    let stopped = fixture
+        .call(
+            Method::POST,
+            "/api/service/stop",
+            &[("x-miniusage-request", "1")],
+        )
+        .await;
+    assert_eq!(stopped.status(), StatusCode::OK);
+    let stopped: Value =
+        serde_json::from_slice(&to_bytes(stopped.into_body(), 1024).await.unwrap()).unwrap();
+    assert_eq!(stopped["state"], "stopped");
+    assert!(*fixture.process_shutdown.borrow());
+    let event_bytes = tokio::time::timeout(std::time::Duration::from_secs(1), events_finished)
+        .await
+        .expect("SSE must close during process shutdown")
+        .unwrap();
+    assert!(String::from_utf8_lossy(&event_bytes).contains("event: revision"));
+
+    let refresh = fixture
+        .call(
+            Method::POST,
+            "/api/refresh",
+            &[("x-miniusage-request", "1")],
+        )
+        .await;
+    assert_eq!(refresh.status(), StatusCode::SERVICE_UNAVAILABLE);
+
+    let start_is_not_implemented = fixture.call(Method::POST, "/api/service/start", &[]).await;
+    assert_eq!(start_is_not_implemented.status(), StatusCode::NOT_FOUND);
+
+    fixture.scanner.shutdown().unwrap();
+}
+
+#[tokio::test]
+async fn t_s06_002_http_compatibility_and_filter_boundary_matrix() {
+    let fixture = support::ApiFixture::new("s06-http");
+
+    let summary = fixture
+        .call(Method::GET, "/api/usage/summary?range=year", &[])
+        .await;
+    assert_eq!(summary.status(), StatusCode::OK);
+    let summary: Value =
+        serde_json::from_slice(&to_bytes(summary.into_body(), 64 * 1024).await.unwrap()).unwrap();
+    assert!(summary["range"].is_object());
+    assert!(summary["data_revision"].is_i64());
+    assert!(summary["usage"].is_object());
+    assert!(summary["usage"].get("cache_write_tokens").is_some());
+    assert!(summary["usage"]["reasoning_tokens"].is_i64());
+
+    let options = fixture
+        .call(Method::GET, "/api/usage/filter-options", &[])
+        .await;
+    assert_eq!(options.status(), StatusCode::OK);
+    let options: Value =
+        serde_json::from_slice(&to_bytes(options.into_body(), 64 * 1024).await.unwrap()).unwrap();
+    assert!(options["data_revision"].is_i64());
+    assert!(options["models"].is_array());
+    assert!(options["projects"].is_array());
+
+    let models = fixture
+        .call(Method::GET, "/api/usage/models?range=year", &[])
+        .await;
+    let models: Value =
+        serde_json::from_slice(&to_bytes(models.into_body(), 64 * 1024).await.unwrap()).unwrap();
+    let models_with_filter = fixture
+        .call(
+            Method::GET,
+            "/api/usage/models?range=year&model=ignored&project_path=%2Fignored",
+            &[],
+        )
+        .await;
+    assert_eq!(models_with_filter.status(), StatusCode::OK);
+    let models_with_filter: Value = serde_json::from_slice(
+        &to_bytes(models_with_filter.into_body(), 64 * 1024)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(models_with_filter, models);
+
+    let sessions = fixture
+        .call(Method::GET, "/api/usage/sessions?range=year", &[])
+        .await;
+    let sessions: Value =
+        serde_json::from_slice(&to_bytes(sessions.into_body(), 64 * 1024).await.unwrap()).unwrap();
+    let sessions_with_filter = fixture
+        .call(
+            Method::GET,
+            "/api/usage/sessions?range=year&model=ignored&project_path=%2Fignored&sort=last_activity",
+            &[],
+        )
+        .await;
+    assert_eq!(sessions_with_filter.status(), StatusCode::OK);
+    let sessions_with_filter: Value = serde_json::from_slice(
+        &to_bytes(sessions_with_filter.into_body(), 64 * 1024)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(sessions_with_filter, sessions);
+
+    for query in [
+        "/api/usage/summary?range=year&model=",
+        "/api/usage/summary?range=year&project_path=",
+        "/api/usage/summary?range=year&model=%00",
+        "/api/usage/summary?range=year&include_projectless=0",
+        "/api/usage/summary?range=year&include_unknown_project=2",
+    ] {
+        let response = fixture.call(Method::GET, query, &[]).await;
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{query}");
+        let body: Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), 64 * 1024).await.unwrap())
+                .unwrap();
+        assert_eq!(body["error"]["code"], "INVALID_FILTER", "{query}");
+    }
+
+    fixture.scanner.shutdown().unwrap();
+}
+
+mod support;
+
+mod spec05_concurrency;
+
+mod spec05_p2;
