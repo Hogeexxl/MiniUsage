@@ -35,7 +35,7 @@ fn current_rss_kib() -> u64 {
             )
         };
         assert_ne!(result, 0, "GetProcessMemoryInfo failed");
-        counters.WorkingSetSize / 1024
+        (counters.WorkingSetSize as u64) / 1024
     }
     #[cfg(not(any(unix, windows)))]
     {
