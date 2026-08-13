@@ -125,6 +125,11 @@ fn absolute_path(value: &str, field: &'static str) -> Result<(), DomainError> {
     Ok(())
 }
 
+#[cfg(windows)]
+const INTERNAL_VALIDATION_PATH: &str = r"C:\validated\by\storage";
+#[cfg(not(windows))]
+const INTERNAL_VALIDATION_PATH: &str = "/validated/by/storage";
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct UsageEpochState {
     pub active_epoch: i64,
@@ -1826,7 +1831,7 @@ impl MetadataSourceCommit {
             &SourceFileState {
                 source_file_id: self.source_file_id,
                 thread_id: Some(self.confirmed_owning_thread_id.clone()),
-                current_path: "/validated/by/storage".to_string(),
+                current_path: INTERNAL_VALIDATION_PATH.to_owned(),
                 source_area: SourceArea::Sessions,
                 device_id: 0,
                 inode: 0,
@@ -2849,6 +2854,15 @@ mod tests {
                 .unwrap();
         assert!(advance.validate_against(2, &source()).is_err());
         advance.validate_against(1, &source()).unwrap();
+    }
+
+    #[test]
+    fn internal_metadata_validation_path_is_platform_absolute() {
+        assert!(Path::new(INTERNAL_VALIDATION_PATH).is_absolute());
+        #[cfg(not(windows))]
+        assert_eq!(INTERNAL_VALIDATION_PATH, "/validated/by/storage");
+        #[cfg(windows)]
+        assert_eq!(INTERNAL_VALIDATION_PATH, r"C:\validated\by\storage");
     }
 
     #[test]

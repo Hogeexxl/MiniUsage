@@ -1619,26 +1619,23 @@ pub(crate) fn normalize_agent_path(raw: &str) -> Option<String> {
     if raw.is_empty() || raw.chars().any(char::is_control) {
         return None;
     }
-    let path = Path::new(raw);
-    if !path.is_absolute() {
+    if !raw.starts_with('/') || raw.starts_with("//") {
         return None;
     }
 
-    let mut normalized = PathBuf::new();
-    for component in path.components() {
+    let mut components = Vec::new();
+    for component in raw[1..].split('/') {
         match component {
-            Component::RootDir => normalized.push(component.as_os_str()),
-            Component::Prefix(_) => return None,
-            Component::CurDir => {}
-            Component::ParentDir => {
-                if normalized == Path::new("/") || !normalized.pop() {
+            "" | "." => {}
+            ".." => {
+                if components.pop().is_none() {
                     return None;
                 }
             }
-            Component::Normal(component) => normalized.push(component),
+            component => components.push(component),
         }
     }
-    let normalized = normalized.to_str()?.to_owned();
+    let normalized = format!("/{}", components.join("/"));
     if normalized == "/root" {
         return None;
     }
@@ -2329,6 +2326,10 @@ mod tests {
         assert_eq!(normalize_agent_path("/rooted/task"), None);
         assert_eq!(normalize_agent_path("/tmp/task"), None);
         assert_eq!(normalize_agent_path("root/task"), None);
+        assert_eq!(normalize_agent_path("//root/task"), None);
+        assert_eq!(normalize_agent_path(r"C:\root\task"), None);
+        assert_eq!(normalize_agent_path("C:/root/task"), None);
+        assert_eq!(normalize_agent_path("/root/task\0"), None);
         assert_eq!(normalize_agent_path("/root/task/\u{1f}"), None);
         assert_eq!(normalize_agent_path("/root/../../task"), None);
     }
