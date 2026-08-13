@@ -133,7 +133,10 @@ impl GlobalStateReader {
         let path = path.as_ref();
         let mut file = match File::open(path) {
             Ok(file) => file,
-            Err(error) if error.kind() == io::ErrorKind::NotFound && !path.exists() => {
+            Err(error)
+                if error.kind() == io::ErrorKind::NotFound
+                    && matches!(path.try_exists(), Ok(false)) =>
+            {
                 return GlobalStateSnapshot::unavailable(
                     GlobalStateStatus::NotPresent,
                     vec![GlobalStateDiagnostic::new(

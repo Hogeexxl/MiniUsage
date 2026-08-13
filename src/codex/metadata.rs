@@ -970,7 +970,7 @@ fn resolve_thread_title(
 
 fn subagent_title_from_agent_path(agent_path: &str) -> Option<String> {
     let normalized = normalize_agent_path(agent_path)?;
-    let component = Path::new(&normalized).file_name()?.to_str()?;
+    let component = normalized.rsplit('/').next()?;
     let mut collapsed = String::new();
     for character in component.replace('_', " ").chars() {
         if character == ' ' {
@@ -1441,6 +1441,10 @@ mod tests {
         assert_eq!(
             subagent_title_from_agent_path("/root/group/a__b"),
             Some("A b".to_owned())
+        );
+        assert_eq!(
+            subagent_title_from_agent_path(r"/root/a\b"),
+            Some(r"A\b".to_owned())
         );
 
         let resolve = |child: StateThreadFact,
