@@ -28,6 +28,8 @@ semver = "1"
 webbrowser = "1"
 
 [target.'cfg(windows)'.dependencies]
+chrono-tz = "0.10"
+iana-time-zone = "0.1"
 windows-sys = { version = "0.61", features = [
     "Win32_Storage_FileSystem",
     "Win32_System_ProcessStatus",
@@ -35,5 +37,6 @@ windows-sys = { version = "0.61", features = [
 ] }
 
 [dev-dependencies]
+chrono-tz = "0.10"
 tower = { version = "0.5", features = ["util"] }
 tokio = { version = "1", features = ["test-util"] }

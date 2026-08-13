@@ -10,7 +10,6 @@ v0.1.0 的正式目标是：
 
 - Windows 10/11 x64：`MiniUsage-v0.1.0-windows-x64-setup.exe`
 - macOS Apple Silicon arm64：`MiniUsage-v0.1.0-macos-arm64.dmg`
-- macOS Intel x64：`MiniUsage-v0.1.0-macos-x64.dmg`
 
 发布后，Windows 用户运行 x64 安装程序，再从开始菜单或快捷方式启动 MiniUsage；macOS 用户打开对应架构的 DMG 并运行应用。v0.1.0 的 macOS 应用未做 Developer ID 签名或 notarization，首次启动若被系统拦截，请在 Finder 中按住 Control 点按应用并选择“打开”，或在“系统设置 → 隐私与安全性”中选择“仍要打开”。
 

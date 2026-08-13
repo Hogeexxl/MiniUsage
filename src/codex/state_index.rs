@@ -802,6 +802,8 @@ mod tests {
         let connection = database.connection();
         let rollout_path = fixture_path("sessions/rollout-child.jsonl");
         let cwd_path = fixture_path("work/./project");
+        let expected_rollout_path = normalize_absolute_path(&rollout_path).unwrap();
+        let expected_cwd_path = normalize_absolute_path(&fixture_path("work/project")).unwrap();
         connection
             .execute_batch(&format!(
                 "CREATE TABLE threads (
@@ -828,14 +830,14 @@ mod tests {
         let snapshot = StateIndexReader::read_snapshot(&database.path).unwrap();
         assert!(snapshot.is_available());
         let fact = snapshot.thread("child").unwrap();
-        assert_eq!(fact.rollout_path.as_deref(), Some(rollout_path.as_str()));
+        assert_eq!(
+            fact.rollout_path.as_deref(),
+            Some(expected_rollout_path.as_str())
+        );
         assert_eq!(fact.created_at_ms, Some(2000));
         assert_eq!(fact.updated_at_ms, Some(4000));
         assert_eq!(fact.archived, Some(true));
-        assert_eq!(
-            fact.cwd.as_deref(),
-            Some(fixture_path("work/project").as_str())
-        );
+        assert_eq!(fact.cwd.as_deref(), Some(expected_cwd_path.as_str()));
         assert_eq!(fact.title.as_deref(), Some("Title"));
         assert_eq!(fact.name.as_deref(), Some("Name"));
         assert_eq!(fact.metadata_model.as_deref(), Some("model-a"));

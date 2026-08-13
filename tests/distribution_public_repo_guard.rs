@@ -126,7 +126,6 @@ fn t_dist_010_public_repository_static_guard() {
     for required in [
         "Windows 10/11 x64",
         "macOS Apple Silicon arm64",
-        "macOS Intel x64",
         "127.0.0.1:3210",
         "CODEX_HOME",
         "mu.sqlite3",
@@ -143,6 +142,18 @@ fn t_dist_010_public_repository_static_guard() {
         assert!(
             readme.contains(required),
             "README is missing required release fact: {required}"
+        );
+    }
+
+    for forbidden in [
+        "macOS Intel x64",
+        "MiniUsage-v0.1.0-macos-x64.dmg",
+        "macos-15-intel",
+        "x86_64 dmg",
+    ] {
+        assert!(
+            !readme.contains(forbidden),
+            "README must not advertise unsupported macOS Intel targets: {forbidden}"
         );
     }
 

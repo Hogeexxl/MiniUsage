@@ -13,6 +13,9 @@ use std::{
 
 use chrono::{DateTime, Datelike, Days, NaiveDate};
 
+#[cfg(any(windows, test))]
+use chrono::{LocalResult, Offset, TimeZone};
+
 use crate::{api::query::ApiError, usage::aggregate::TimeRange};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -77,8 +80,38 @@ pub fn resolve_range_at(
     now_utc_ms: i64,
     timezone: &str,
 ) -> Result<ResolvedRange, ApiError> {
-    let zone = TzifZone::load(timezone)?;
+    #[cfg(windows)]
+    {
+        return resolve_range_at_with_loader(key, now_utc_ms, timezone, EmbeddedZone::load);
+    }
+
+    #[cfg(not(windows))]
+    {
+        resolve_range_at_with_loader(key, now_utc_ms, timezone, TzifZone::load)
+    }
+}
+
+fn resolve_range_at_with_loader<L, Z>(
+    key: RangeKey,
+    now_utc_ms: i64,
+    timezone: &str,
+    loader: L,
+) -> Result<ResolvedRange, ApiError>
+where
+    L: FnOnce(&str) -> Result<Z, ApiError>,
+    Z: CivilZone,
+{
+    let zone = loader(timezone)?;
     resolve_with_zone(key, now_utc_ms, timezone, &zone)
+}
+
+#[cfg(test)]
+pub(crate) fn resolve_range_at_with_embedded_loader(
+    key: RangeKey,
+    now_utc_ms: i64,
+    timezone: &str,
+) -> Result<ResolvedRange, ApiError> {
+    resolve_range_at_with_loader(key, now_utc_ms, timezone, EmbeddedZone::load)
 }
 
 #[cfg(test)]
@@ -98,7 +131,7 @@ fn resolve_with_zone(
     key: RangeKey,
     now_utc_ms: i64,
     timezone: &str,
-    zone: &TzifZone,
+    zone: &impl CivilZone,
 ) -> Result<ResolvedRange, ApiError> {
     let utc_seconds = now_utc_ms.div_euclid(1_000);
     let local_seconds = utc_seconds
@@ -176,13 +209,29 @@ fn civil_dates(key: RangeKey, today: NaiveDate) -> Result<(NaiveDate, NaiveDate)
 
 fn system_timezone_name() -> Result<String, ApiError> {
     if let Some(name) = env::var_os("TZ").and_then(|value| value.into_string().ok()) {
-        if valid_timezone_name(&name) {
-            return Ok(name);
-        }
-        return Err(ApiError::LocalTimeUnavailable);
+        return system_timezone_name_from_provider(|| Ok(name));
     }
-    let localtime = fs::read_link("/etc/localtime").map_err(|_| ApiError::LocalTimeUnavailable)?;
-    timezone_name_from_path(&localtime).ok_or(ApiError::LocalTimeUnavailable)
+    system_timezone_name_from_provider(system_timezone_from_os)
+}
+
+fn system_timezone_name_from_provider(
+    provider: impl FnOnce() -> Result<String, ()>,
+) -> Result<String, ApiError> {
+    let name = provider().map_err(|_| ApiError::LocalTimeUnavailable)?;
+    valid_timezone_name(&name)
+        .then_some(name)
+        .ok_or(ApiError::LocalTimeUnavailable)
+}
+
+#[cfg(windows)]
+fn system_timezone_from_os() -> Result<String, ()> {
+    iana_time_zone::get_timezone().map_err(|_| ())
+}
+
+#[cfg(not(windows))]
+fn system_timezone_from_os() -> Result<String, ()> {
+    let localtime = fs::read_link("/etc/localtime").map_err(|_| ())?;
+    timezone_name_from_path(&localtime).ok_or(())
 }
 
 fn timezone_name_from_path(path: &Path) -> Option<String> {
@@ -214,6 +263,11 @@ fn valid_timezone_name(name: &str) -> bool {
         })
 }
 
+trait CivilZone {
+    fn offset_at(&self, utc_seconds: i64) -> Result<i32, ApiError>;
+    fn local_midnight_to_utc_ms(&self, date: NaiveDate) -> Result<i64, ApiError>;
+}
+
 #[derive(Clone, Copy, Debug)]
 struct ZoneTransition {
     utc_seconds: i64,
@@ -225,6 +279,61 @@ struct TzifZone {
     initial_offset: i32,
     transitions: Vec<ZoneTransition>,
     offsets: Vec<i32>,
+}
+
+impl CivilZone for TzifZone {
+    fn offset_at(&self, utc_seconds: i64) -> Result<i32, ApiError> {
+        TzifZone::offset_at(self, utc_seconds)
+    }
+
+    fn local_midnight_to_utc_ms(&self, date: NaiveDate) -> Result<i64, ApiError> {
+        TzifZone::local_midnight_to_utc_ms(self, date)
+    }
+}
+
+#[cfg(any(windows, test))]
+#[derive(Clone, Copy, Debug)]
+struct EmbeddedZone {
+    timezone: chrono_tz::Tz,
+}
+
+#[cfg(any(windows, test))]
+impl EmbeddedZone {
+    fn load(name: &str) -> Result<Self, ApiError> {
+        if !valid_timezone_name(name) {
+            return Err(ApiError::LocalTimeUnavailable);
+        }
+        let timezone = name.parse().map_err(|_| ApiError::LocalTimeUnavailable)?;
+        Ok(Self { timezone })
+    }
+}
+
+#[cfg(any(windows, test))]
+impl CivilZone for EmbeddedZone {
+    fn offset_at(&self, utc_seconds: i64) -> Result<i32, ApiError> {
+        let utc = DateTime::from_timestamp(utc_seconds, 0).ok_or(ApiError::LocalTimeUnavailable)?;
+        Ok(self
+            .timezone
+            .offset_from_utc_datetime(&utc.naive_utc())
+            .fix()
+            .local_minus_utc())
+    }
+
+    fn local_midnight_to_utc_ms(&self, date: NaiveDate) -> Result<i64, ApiError> {
+        let local = date
+            .and_hms_opt(0, 0, 0)
+            .ok_or(ApiError::LocalTimeUnavailable)?;
+        let utc_seconds = match self.timezone.from_local_datetime(&local) {
+            LocalResult::Single(value) => value.timestamp(),
+            LocalResult::Ambiguous(first, second) => first.timestamp().min(second.timestamp()),
+            LocalResult::None => chrono_tz::GapInfo::new(&local, &self.timezone)
+                .and_then(|gap| gap.end.map(|value| value.timestamp()))
+                .ok_or(ApiError::LocalTimeUnavailable)?,
+        };
+        utc_seconds
+            .checked_mul(1_000)
+            .ok_or(ApiError::LocalTimeUnavailable)
+    }
 }
 
 impl TzifZone {
@@ -460,6 +569,96 @@ mod tests {
     use chrono::DateTime;
 
     use super::*;
+
+    #[test]
+    fn timezone_provider_validates_injected_system_names() {
+        assert_eq!(
+            system_timezone_name_from_provider(|| Ok("America/New_York".to_owned())),
+            Ok("America/New_York".to_owned())
+        );
+        assert_eq!(
+            system_timezone_name_from_provider(|| Ok("../escape".to_owned())),
+            Err(ApiError::LocalTimeUnavailable)
+        );
+        assert_eq!(
+            system_timezone_name_from_provider(|| Err(())),
+            Err(ApiError::LocalTimeUnavailable)
+        );
+    }
+
+    #[test]
+    fn embedded_provider_resolves_named_dst_boundaries_without_tzif_files() {
+        let timezone =
+            system_timezone_name_from_provider(|| Ok("America/Havana".to_owned())).unwrap();
+        let range = resolve_range_at_with_embedded_loader(
+            RangeKey::Today,
+            DateTime::parse_from_rfc3339("2026-03-08T12:00:00Z")
+                .unwrap()
+                .timestamp_millis(),
+            &timezone,
+        )
+        .unwrap();
+        assert_eq!(range.timezone, "America/Havana");
+        assert_eq!(
+            range.start_ms,
+            DateTime::parse_from_rfc3339("2026-03-08T05:00:00Z")
+                .unwrap()
+                .timestamp_millis()
+        );
+        assert_eq!(
+            range.end_ms,
+            DateTime::parse_from_rfc3339("2026-03-09T04:00:00Z")
+                .unwrap()
+                .timestamp_millis()
+        );
+
+        let lord_howe = resolve_range_at_with_embedded_loader(
+            RangeKey::Today,
+            DateTime::parse_from_rfc3339("2026-10-04T12:00:00Z")
+                .unwrap()
+                .timestamp_millis(),
+            "Australia/Lord_Howe",
+        )
+        .unwrap();
+        assert_eq!(
+            lord_howe.start_ms,
+            DateTime::parse_from_rfc3339("2026-10-03T13:30:00Z")
+                .unwrap()
+                .timestamp_millis()
+        );
+        assert_eq!(
+            lord_howe.end_ms,
+            DateTime::parse_from_rfc3339("2026-10-04T13:00:00Z")
+                .unwrap()
+                .timestamp_millis()
+        );
+
+        let apia = resolve_range_at_with_embedded_loader(
+            RangeKey::Yesterday,
+            DateTime::parse_from_rfc3339("2011-12-30T12:00:00Z")
+                .unwrap()
+                .timestamp_millis(),
+            "Pacific/Apia",
+        )
+        .unwrap();
+        assert_eq!(
+            apia.start_ms,
+            DateTime::parse_from_rfc3339("2011-12-30T10:00:00Z")
+                .unwrap()
+                .timestamp_millis()
+        );
+        assert_eq!(apia.start_ms, apia.end_ms);
+    }
+
+    #[test]
+    fn embedded_loader_rejects_invalid_timezone_names() {
+        for timezone in ["", "/absolute", "../escape", "Missing/Timezone"] {
+            assert_eq!(
+                resolve_range_at_with_embedded_loader(RangeKey::Today, 0, timezone),
+                Err(ApiError::LocalTimeUnavailable)
+            );
+        }
+    }
 
     fn utc_range(key: RangeKey) -> ResolvedRange {
         let now = DateTime::parse_from_rfc3339("2026-08-08T12:34:56Z")

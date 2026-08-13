@@ -1650,6 +1650,17 @@ pub(crate) fn normalize_agent_path(raw: &str) -> Option<String> {
 mod tests {
     use super::*;
 
+    fn physical_path(value: &str) -> String {
+        std::env::temp_dir()
+            .join(value.trim_start_matches('/'))
+            .to_string_lossy()
+            .into_owned()
+    }
+
+    fn json_path(value: &str) -> String {
+        serde_json::to_string(value).unwrap()
+    }
+
     fn uuid7(timestamp_ms: u64, suffix: u8) -> String {
         let mut bytes = [0_u8; 16];
         for (index, byte) in bytes[..6].iter_mut().enumerate() {
@@ -1699,12 +1710,14 @@ mod tests {
     fn parses_main_rollout_whitelist_and_envelopes() {
         let owning = uuid7(2_000, 1);
         let turn = uuid7(2_100, 2);
+        let session_cwd = json_path(&physical_path("rollout/work/./mini"));
+        let turn_cwd = json_path(&physical_path("rollout/fallback"));
         let records = vec![
             format!(
-                r#"{{"timestamp":"2026-08-08T00:00:00Z","type":"session_meta","payload":{{"id":"{owning}","timestamp":"2026-08-08T00:00:00Z","cwd":"/work/./mini","agent_role":"main","base_instructions":"never retain"}}}}"#
+                r#"{{"timestamp":"2026-08-08T00:00:00Z","type":"session_meta","payload":{{"id":"{owning}","timestamp":"2026-08-08T00:00:00Z","cwd":{session_cwd},"agent_role":"main","base_instructions":"never retain"}}}}"#
             ),
             format!(
-                r#"{{"timestamp":"2026-08-08T00:00:01Z","type":"turn_context","payload":{{"turn_id":"{turn}","cwd":"/fallback","model":"gpt-main","timezone":"UTC","other":"ignored"}}}}"#
+                r#"{{"timestamp":"2026-08-08T00:00:01Z","type":"turn_context","payload":{{"turn_id":"{turn}","cwd":{turn_cwd},"model":"gpt-main","timezone":"UTC","other":"ignored"}}}}"#
             ),
             r#"{"type":"event_msg","payload":{"type":"token_count","total":999}}"#.to_owned(),
             r#"{"type":"response_item","payload":{"type":"message","content":"ignored"}}"#
@@ -1736,7 +1749,7 @@ mod tests {
         );
         let fact = result.fact.unwrap();
         assert_eq!(fact.owning_thread_id, owning);
-        assert_eq!(fact.cwd.unwrap().value, "/work/mini");
+        assert_eq!(fact.cwd.unwrap().value, physical_path("rollout/work/mini"));
         assert_eq!(fact.latest_context_model.as_deref(), Some("gpt-main"));
         assert_eq!(fact.agent_role_hint.unwrap().value, "main");
         assert!(matches!(
@@ -1954,17 +1967,24 @@ mod tests {
         let child = uuid7(2_000, 2);
         let parent_turn = uuid7(1_500, 3);
         let child_turn = uuid7(2_100, 4);
+        let child_cwd = physical_path("rollout/child");
+        let parent_cwd = json_path(&physical_path("rollout/parent"));
+        let parent_turn_cwd = json_path(&physical_path("rollout/parent-turn"));
+        let child_turn_cwd = json_path(&physical_path("rollout/child-turn"));
+        let child_cwd_json = json_path(&child_cwd);
         let records = vec![
             format!(
-                r#"{{"type":"session_meta","payload":{{"id":"{child}","cwd":"/child","source":{{"subagent":{{"thread_spawn":{{"parent_thread_id":"{parent}","depth":1}}}}}}}}}}"#
+                r#"{{"type":"session_meta","payload":{{"id":"{child}","cwd":{child_cwd_json},"source":{{"subagent":{{"thread_spawn":{{"parent_thread_id":"{parent}","depth":1}}}}}}}}}}"#
             ),
-            format!(r#"{{"type":"session_meta","payload":{{"id":"{parent}","cwd":"/parent"}}}}"#),
             format!(
-                r#"{{"type":"turn_context","payload":{{"turn_id":"{parent_turn}","cwd":"/parent-turn","model":"parent-model"}}}}"#
+                r#"{{"type":"session_meta","payload":{{"id":"{parent}","cwd":{parent_cwd}}}}}"#
+            ),
+            format!(
+                r#"{{"type":"turn_context","payload":{{"turn_id":"{parent_turn}","cwd":{parent_turn_cwd},"model":"parent-model"}}}}"#
             ),
             r#"{"type":"event_msg","payload":{"type":"token_count","total":111}}"#.to_owned(),
             format!(
-                r#"{{"type":"turn_context","payload":{{"turn_id":"{child_turn}","cwd":"/child-turn","model":"child-model"}}}}"#
+                r#"{{"type":"turn_context","payload":{{"turn_id":"{child_turn}","cwd":{child_turn_cwd},"model":"child-model"}}}}"#
             ),
         ];
         let result = RolloutMetadataParser::parse_chunk(
@@ -1986,7 +2006,7 @@ mod tests {
             ]
         );
         let fact = result.fact.unwrap();
-        assert_eq!(fact.cwd.unwrap().value, "/child");
+        assert_eq!(fact.cwd.unwrap().value, child_cwd);
         assert_eq!(fact.latest_context_model.as_deref(), Some("child-model"));
         assert_eq!(fact.parent_thread_id_hint.unwrap().value, parent);
         assert_eq!(

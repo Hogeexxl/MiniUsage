@@ -1063,6 +1063,8 @@ mod tests {
             rows,
             vec![("metadata".into(), 0, None), ("usage".into(), 0, None)]
         );
+        drop(connection);
+        drop(ledger);
         cleanup(root);
     }
 
@@ -1151,6 +1153,7 @@ mod tests {
             state.entries[0].safe_fact,
             SafeFactState::Stale(SafeFactMismatchReason::SourceMissing)
         );
+        drop(ledger);
         cleanup(root);
     }
 
@@ -1218,6 +1221,8 @@ mod tests {
             .unwrap();
         assert_eq!(metadata, (0, None, "rebuild_required".into()));
         assert_eq!(usage, (70, Some(vec![2]), "ready".into()));
+        drop(connection);
+        drop(ledger);
         cleanup(root);
     }
 
@@ -1315,6 +1320,8 @@ mod tests {
                 ("usage".into(), 19, "ready".into())
             ]
         );
+        drop(connection);
+        drop(ledger);
         cleanup(root);
     }
 
@@ -1394,6 +1401,8 @@ mod tests {
             .unwrap();
         assert_eq!(a_path, fixture_path("mu-sessions/b.jsonl"));
         assert_eq!(b_path, fixture_path("mu-sessions/a.jsonl"));
+        drop(connection);
+        drop(ledger);
         cleanup(root);
     }
 
@@ -1445,6 +1454,7 @@ mod tests {
         assert!(moved_source.moved);
         assert!(!moved_source.replaced);
         assert_eq!(moved_source.file_generation, 1);
+        drop(ledger);
         cleanup(root);
     }
 
@@ -1534,6 +1544,8 @@ mod tests {
                 )
                 .unwrap();
         }
+        drop(connection);
+        drop(ledger);
         cleanup(root);
     }
 
@@ -1569,6 +1581,7 @@ mod tests {
             )
             .unwrap();
         assert_eq!(metadata_status, "pending");
+        drop(ledger);
         cleanup(root);
     }
 
@@ -1638,6 +1651,7 @@ mod tests {
             )
             .unwrap();
         assert_eq!(status, "present");
+        drop(ledger);
         cleanup(root);
     }
 
@@ -1678,6 +1692,7 @@ mod tests {
             )
             .unwrap();
         assert_eq!(status, "missing");
+        drop(ledger);
         cleanup(root);
     }
 
@@ -1976,6 +1991,8 @@ mod tests {
             )
             .unwrap();
         assert_eq!(affected, (2, 0, "rebuild_required".into()));
+        drop(connection);
+        drop(ledger);
         cleanup(root);
     }
 
@@ -2105,6 +2122,7 @@ mod tests {
             .unwrap();
         assert_eq!(row, ("none".into(), None, "rebuild_required".into(), 0, 0));
         drop(connection);
+        drop(ledger);
         cleanup(root);
 
         let (ledger, root, source) = prepare();
@@ -2144,6 +2162,7 @@ mod tests {
             .unwrap();
         assert_eq!(row, ("occurrences".into(), "rebuild_required".into(), 0));
         drop(connection);
+        drop(ledger);
         cleanup(root);
     }
 
@@ -2250,6 +2269,7 @@ mod tests {
                 .execute_batch("DROP TRIGGER fail_spec04_source_build_replace;")
                 .unwrap();
         }
+        drop(ledger);
         cleanup(root);
     }
 }

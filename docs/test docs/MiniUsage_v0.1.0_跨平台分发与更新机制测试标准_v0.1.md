@@ -9,6 +9,8 @@
 > **本文是 MiniUsage v0.1.0“跨平台分发与更新机制”范围内的唯一正式测试执行标准。**  
 > 本轮功能语义以对应实施方案为准；实施方案 S0～S13 中的 Gate 继续作为施工阶段门禁，但不得替代本文正式测试条目。最终是否可发布 v0.1.0，以本文完成门为准。
 
+> **范围决策（2026-08-14）**：v0.1.0 正式测试与发布只覆盖两个安装包：Windows 10/11 x64 安装包和 macOS Apple Silicon arm64 DMG，另附 `SHA256SUMS.txt`。macOS Intel/x86_64 不属于本版本正式支持范围，不纳入 runner、构建、smoke、Release asset、Gate 或 DoD；这是范围决策，不表示 Intel 测试失败。
+
 ---
 
 # 1. 测试边界与条目设立原则
@@ -44,7 +46,7 @@ Update API
 GitHub CI
 GitHub Release
 Windows 安装包
-macOS arm64 / x64 分发包
+macOS arm64 分发包
 真实已发布 Release 的更新检查
 本轮改动后的全量回归
 ```
@@ -184,10 +186,10 @@ v0.1.0 是正式公开发布，因此本文登记的 P2 在 **FINAL Gate 必须�
 | **T-DIST-008** | 前置联动：S05 HTTP 安全 | P0 | S8 / Gate D | **Update API 契约矩阵**：`GET /api/update/status` 返回当前版本、latest/update_available/release_url/last_checked/check 状态的固定 DTO；`POST /api/update/check` 只触发/复用单次检查；`POST /api/update/open-release` 仅在已有合法 Release URL 时打开对应页面。继续受既有 Host/Origin/Sec-Fetch/loopback 安全边界保护，响应不泄漏 GitHub 原始错误/Token/路径。 | ⏳ 待实现 | 未进行 | real Axum router integration + DTO tests | API 字段在 S8 Gate 冻结；前端不得直接请求 `api.github.com`。 |
 | **T-DIST-009** | 前置联动：S8 | P0 | S9 / Gate D | **前端更新按钮完整状态机**：默认 `检查更新`；主动点击仅本按钮进入 `检查中…`，其它 Dashboard 操作不被禁用；latest 时提示“当前已是最新版本 vX.Y.Z”并恢复按钮；newer 时变 `版本升级`；自动后台发现新版时不弹强制窗口，只把按钮变为 `版本升级`；主动失败给用户提示，自动失败静默；点击 `版本升级` 调用后端打开准确 Release。页面以本地 status 初始读取 + 60s localhost 轮询感知后端 4h 检查结果，timer/unmount 不泄漏，不产生外网前端请求。 | ⏳ 待实现 | 未进行 | `useUpdateController` + `UpdateButton` tests，fake timers；必要 browser integration | 60s 前端轮询只是读取 localhost 状态，不等于每 60s 请求 GitHub。 |
 | **T-DIST-010** | 独立闭环 | P1 | S10 / Gate E | **公开仓库交付边界**：README 只按当前事实描述 Windows/macOS 安装、源码构建、未签名 macOS 首次允许方式、更新机制；已确认的 LICENSE 存在；tracked source 不包含真实 DB/rollout、明显 secret、用户私人绝对路径或 `.cargo/config.toml.saved`；README 不要求最终用户安装 Rust/Cargo/Node/SQLite。 | ⏳ 待实现 | 未进行 | repo static guard + README review | 不把通用示例路径误判为 secret；许可证内容必须来自用户确认。 |
-| **T-DIST-011** | 前置联动：全部实现 | P0 | S11 / Gate E | **GitHub CI 真环境矩阵**：frontend `npm ci/test/check/build`；Rust 在 Windows x64 与两个 macOS 发布架构对应环境执行 `cargo check/test --locked`；embedded release smoke 在无 `frontend/dist` 工作目录执行；所有 job 对同一 commit 全绿。Windows job 必须实际执行 T-DIST-003/004 相关测试，不能只 cross-compile。 | ⏳ 待实现 | 未进行 | `.github/workflows/ci.yml` run evidence | runner 名称可随 GitHub 官方支持调整，但“目标架构真实执行证据”不可降级。 |
-| **T-DIST-012** | 独立闭环 | P0 | S12 / Gate F | **版本与 Release 资产一致性**：Release workflow 仅正式 `vX.Y.Z` tag 触发；tag `v0.1.0`、`Cargo.toml 0.1.0`、binary reported version、GitHub Release tag/name、三个安装包文件名中的版本一致；不一致时 workflow 必须在上传正式 Release 前失败。生成 `SHA256SUMS`，其中每个正式 asset 均有对应校验值。 | ⏳ 待实现 | 未进行 | release workflow dry-run + artifact metadata assertions | `frontend/package.json` 不参与产品版本判定。 |
+| **T-DIST-011** | 前置联动：全部实现 | P0 | S11 / Gate E | **GitHub CI 真环境矩阵**：frontend `npm ci/test/check/build`；Rust 在 Windows x64 与 macOS arm64 对应环境执行 `cargo check/test --locked`；embedded release smoke 在无 `frontend/dist` 工作目录执行；所有 job 对同一 commit 全绿。Windows job 必须实际执行 T-DIST-003/004 相关测试，不能只 cross-compile。 | ⏳ 待实现 | 未进行 | `.github/workflows/ci.yml` run evidence | runner 名称可随 GitHub 官方支持调整，但“目标架构真实执行证据”不可降级。 |
+| **T-DIST-012** | 独立闭环 | P0 | S12 / Gate F | **版本与 Release 资产一致性**：Release workflow 仅正式 `vX.Y.Z` tag 触发；tag `v0.1.0`、`Cargo.toml 0.1.0`、binary reported version、GitHub Release tag/name、两个安装包文件名中的版本一致；不一致时 workflow 必须在上传正式 Release 前失败。生成 `SHA256SUMS`，其中每个正式 asset 均有对应校验值。 | ⏳ 待实现 | 未进行 | release workflow dry-run + artifact metadata assertions | `frontend/package.json` 不参与产品版本判定。 |
 | **T-DIST-013** | 前置联动：Windows 全链路 | P0 | S12 / Gate F | **Windows x64 正式安装包 clean-runtime smoke**：只使用 Release workflow 产出的 installer；在与仓库无关的临时用户环境安装，运行目录无源码/`frontend/dist`；用受限 PATH 启动并验证 health + Dashboard；不得调用 Rust/Cargo/Node/npm/SQLite CLI/Visual Studio 工具。若采用静态 CRT，则检查 PE 依赖中不存在未计划的 VC runtime 前置依赖；卸载/覆盖行为至少不破坏用户数据目录。 | ⏳ 待实现 | 未进行 | Windows release artifact install/launch smoke + dependency inspection | GitHub runner 本身装有开发工具不等于测试失效；关键是运行时不解析/调用它们，并检查动态依赖。 |
-| **T-DIST-014** | 前置联动：macOS 全链路 | P0 | S12 / Gate F | **macOS arm64 + Intel x64 正式分发包 smoke**：两个 Release workflow 产物架构正确；从与仓库无关的位置展开/安装并启动，health + embedded Dashboard 可用，默认 DB/Codex 路径保持平台约定；不依赖源码/Node/Rust。v0.1.0 明确允许未签名，因此不以“Gatekeeper 无警告”为 PASS 条件，但 README 必须给出首次允许运行说明。 | ⏳ 待实现 | 未进行 | 两个目标架构的 GitHub/macOS artifact smoke + `file`/架构检查 | 不要求 Developer ID、notarization 或代码签名。 |
+| **T-DIST-014** | 前置联动：macOS 全链路 | P0 | S12 / Gate F | **macOS arm64 正式分发包 smoke**：Release workflow 产物架构正确；从与仓库无关的位置展开/安装并启动，health + embedded Dashboard 可用，默认 DB/Codex 路径保持平台约定；不依赖源码/Node/Rust。v0.1.0 明确允许未签名，因此不以“Gatekeeper 无警告”为 PASS 条件，但 README 必须给出首次允许运行说明。 | ⏳ 待实现 | 未进行 | macOS arm64 GitHub artifact smoke + `file`/架构检查 | 不要求 Developer ID、notarization 或代码签名。 |
 | **T-DIST-015** | 最终外部联动：GitHub Public Release | P0 | S13 / Gate G | **真实公开 Release 更新 E2E**：正式 `v0.1.0` 发布后，真实 MiniUsage v0.1.0 访问公开仓库 latest release，识别“当前已是最新”；另以不污染正式 tag 的内部测试构建（如 current=`0.0.9`）访问同一个 public latest release，识别 `v0.1.0` 为新版并得到正确 Release URL；不需要 GitHub Token。 | ⏳ 待实现 | 未进行 | real GitHub public API + released repository | 这是唯一必须访问真实 GitHub 网络的更新测试；失败需区分代码错误与 GitHub 暂时不可用。 |
 | **T-DIST-016** | 最终回归 | P0 | FINAL | **本轮改动后的完整回归**：macOS 与 Windows 对各自可执行范围运行 `cargo fmt --check`、`cargo check --locked`、无过滤 `cargo test --locked`；前端 `npm run test`、`npm run check`、`npm run build`；原有 Dashboard/Session/refresh/SSE/Scanner 核心链不得因平台/launcher/update 改造回退。正式 Gate 不允许用仅定向测试代替全量回归。 | ⏳ 待实现 | 未进行 | CI final matrix + local macOS evidence | 已有业务测试复用原测试，不在本文复制新的 T-DIST 条目。 |
 | **T-DIST-017** | 最终资源复核 | P2 | FINAL | **受影响平台资源测试**：执行本轮因 Windows 适配实际修改到的既有 scanner/chunk-reader/RSS 资源 P2；Windows 使用等价平台 RSS sampler，不以 `ps` 缺失跳过；复用既有批大小/内存/时间预算，不因本轮发布工程另造新性能指标。 | ⏳ 待实现 | 未进行 | 既有 P2 测试 + Windows/macOS 平台 adapter evidence | 只复核“本轮修改路径触及的 P2”，不机械重跑与发布工程无关的所有历史压力矩阵。 |
@@ -326,7 +328,6 @@ P2（本文登记项）：0 FAIL
 ```text
 Windows x64 安装包真实安装/启动通过
 macOS arm64 正式产物真实启动通过
-macOS Intel x64 正式产物真实启动通过
 公开 GitHub Release v0.1.0 可匿名访问
 v0.1.0 客户端真实 latest check 判定为最新版
 低版本内部测试构建真实判定 v0.1.0 为可升级版本
@@ -407,7 +408,6 @@ embedded production frontend
 同一 commit
 Windows x64
 macOS arm64 目标
-macOS Intel x64 目标
 frontend
 release artifact smoke
 ```
@@ -526,7 +526,6 @@ Windows SDK
 
 ```text
 Apple Silicon arm64
-Intel x64
 ```
 
 v0.1.0：
@@ -547,7 +546,7 @@ v0.1.0：
 ```text
 README 正确说明首次手动允许方式
 用户允许后应用可正常运行
-两个正式架构 artifact 均可启动
+两个正式目标 artifact 均可启动
 ```
 
 ---
@@ -650,7 +649,6 @@ SHA256SUMS
 ```text
 Windows x64 安装包
 macOS arm64 分发包
-macOS Intel x64 分发包
 SHA256SUMS
 ```
 
@@ -765,7 +763,6 @@ Luna 在本轮不得：
 [ ] Windows 使用真实文件 identity，不存在正式 (0,0) fallback
 [ ] macOS 原有默认数据库路径保持不变
 [ ] macOS arm64 正式 artifact 可启动
-[ ] macOS Intel x64 正式 artifact 可启动
 [ ] 正式 binary 不依赖 frontend/dist
 [ ] 首实例正常启动并打开 Dashboard
 [ ] 第二实例不启动第二 scanner
@@ -782,7 +779,7 @@ Luna 在本轮不得：
 [ ] 前端不直接请求 GitHub
 [ ] CI 对 Windows/macOS 目标真实执行并全绿
 [ ] Cargo/tag/binary/Release/assets 版本一致
-[ ] Release 含三个目标平台/架构产物和 SHA256SUMS
+[ ] Release 含两个目标平台/架构产物和 SHA256SUMS
 [ ] Public GitHub Release 可匿名下载
 [ ] 正式 v0.1.0 可真实检查出“当前已是最新”
 [ ] 低版本测试构建可真实发现 v0.1.0

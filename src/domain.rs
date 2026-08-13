@@ -2625,7 +2625,10 @@ mod tests {
         SourceFileState::new(
             1,
             Some("thread".to_string()),
-            "/tmp/rollout.jsonl",
+            std::env::temp_dir()
+                .join("rollout.jsonl")
+                .to_string_lossy()
+                .into_owned(),
             SourceArea::Sessions,
             1,
             2,

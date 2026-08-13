@@ -7,6 +7,8 @@
 > 目标：把当前已完成的 MiniUsage 功能基线整理为第一个可公开分发版本，并支持 Windows/macOS、GitHub Release 与版本更新提示。  
 > 注意：本文是**实施方案**，不是独立测试标准。每阶段只定义施工 Gate；正式测试条目另行编写。
 
+> **范围决策（2026-08-14）**：v0.1.0 正式分发收敛为两个安装包：Windows 10/11 x64 安装包与 macOS Apple Silicon arm64 DMG，另附 `SHA256SUMS.txt`。macOS Intel/x86_64 不属于本版本正式支持范围，因此不纳入 CI runner、构建、smoke、Release asset、Gate 或 DoD；这是范围决策，不表示 Intel 测试失败。
+
 ---
 
 # 0. 执行边界
@@ -48,7 +50,7 @@
    - 不做应用内下载和自动覆盖安装。
 9. 增加 GitHub Actions：
    - CI：在真实 Windows/macOS runner 上构建/测试；
-   - Release：Tag 发布时自动构建正式安装包并上传同一 GitHub 仓库的 Releases。
+   - Release：Tag 发布时自动构建上述两个正式安装包并上传同一 GitHub 仓库的 Releases。
 10. macOS v0.1.0 **不做 Developer ID 签名、不做 notarization**，README 必须明确首次运行可能需要用户手动允许。
 
 ---
@@ -350,7 +352,7 @@ release page opener
 
 ```text
 Windows 真环境自动构建
-macOS 双架构自动构建
+macOS arm64 自动构建
 push / PR 自动测试
 Tag 自动打安装包
 GitHub Release 自动上传
@@ -373,7 +375,7 @@ GitHub Public Repository
 └─ Releases
       ├─ Windows x64 installer
       ├─ macOS arm64 package
-      └─ macOS x64 package
+      └─ SHA256SUMS.txt
 
 用户安装/启动 MiniUsage
         │
@@ -1715,7 +1717,6 @@ npm run build
 ```text
 windows-latest
 macos-latest        // arm64
-macos-15-intel      // Intel
 ```
 
 每个平台：
@@ -1862,11 +1863,10 @@ MSVCP*.dll
 
 ## 13.4 macOS build
 
-两个 native runner：
+一个 native runner：
 
 ```text
 macos-latest   → arm64
-macos-15-intel → x86_64
 ```
 
 各自：
@@ -1897,9 +1897,6 @@ MiniUsage-v0.1.0-windows-x64-setup.exe
 
 macOS arm64:
 MiniUsage-v0.1.0-macos-arm64.dmg
-
-macOS Intel:
-MiniUsage-v0.1.0-macos-x64.dmg
 ```
 
 禁止把源码目录或 Node/Rust runtime 打进安装包。
@@ -1915,7 +1912,6 @@ React 已在 executable 内，不需要把 `frontend/` 作为 runtime resource �
 ```text
 MiniUsage-v0.1.0-windows-x64-setup.exe
 MiniUsage-v0.1.0-macos-arm64.dmg
-MiniUsage-v0.1.0-macos-x64.dmg
 SHA256SUMS.txt
 ```
 
@@ -1979,7 +1975,7 @@ SQLite CLI
 ## 14.2 macOS
 
 ```text
-下载对应 arm64 / x64 dmg
+下载 macOS arm64 dmg
 ↓
 安装/运行 MiniUsage
 ↓
@@ -2350,7 +2346,6 @@ UI style
 ```text
 Windows
 macOS arm64
-macOS Intel
 frontend
 ```
 
@@ -2375,14 +2370,13 @@ packager config
 tag/version match
 Windows x64 release
 mac arm64 release
-mac Intel release
 SHA256
 GitHub Release upload
 ```
 
 先用测试 tag / draft Release 做 dry run，不直接把失败产物标记为正式 v0.1.0。
 
-**Gate S12：** 三个目标安装包均由 GitHub runner 产出，并能执行安装/启动 smoke。
+**Gate S12：** 两个目标安装包均由 GitHub runner 产出，并能执行安装/启动 smoke。
 
 ---
 
@@ -2547,7 +2541,7 @@ S13 final release
                    ↓
 ┌──────────────────────────────────────────────┐
 │ S12 Release workflow + packager              │
-│ Win x64 + mac arm64 + mac x64 + SHA256       │
+│ Win x64 + mac arm64 + SHA256                 │
 └───────────────────────┬──────────────────────┘
                         ↓
             [Gate III Install/Launch Smoke]
@@ -2782,7 +2776,6 @@ Luna 执行时明确禁止：
 [ ] Windows x64 能真实构建和运行
 [ ] Windows 使用真实物理文件 identity
 [ ] macOS arm64 能构建
-[ ] macOS Intel 能构建
 [ ] React 静态资源已嵌入正式 binary
 [ ] 正式运行不需要 frontend/dist
 [ ] 启动后自动打开 Dashboard
@@ -2799,7 +2792,7 @@ Luna 执行时明确禁止：
 [ ] 不做自动下载安装
 [ ] CI 在 Windows/macOS 真 runner 全绿
 [ ] Tag 与 Cargo version 有自动一致性检查
-[ ] GitHub Release 自动生成三类安装包
+[ ] GitHub Release 自动生成两个正式安装包
 [ ] Release 有 SHA256SUMS
 [ ] README 已改为 Windows + macOS 当前事实
 [ ] 公共仓库不存在明显 secret / 私人绝对路径
@@ -2845,6 +2838,6 @@ clean-machine install smoke
 - Windows：`GetFileInformationByHandle` / `BY_HANDLE_FILE_INFORMATION` 的 Volume Serial Number + File Index 可用于比较文件物理身份。
 - GitHub：公开仓库的 Latest Release REST endpoint 可以匿名读取公开 Release。
 - GitHub Actions：公开仓库使用 standard GitHub-hosted runners 可用于 Windows/macOS CI。
-- GitHub 2026 public runners：`windows-latest` 为 x64；`macos-latest` 为 arm64；`macos-15-intel` 为 Intel runner。
+- GitHub 2026 public runners：`windows-latest` 为 x64；`macos-latest` 为 arm64。
 - `rust-embed`：用于在编译时把 CSS/JS/images 等静态文件嵌入 Rust executable。
 - `cargo-packager`：支持 Windows NSIS installer 与 macOS app/dmg；本方案只把它作为 release tooling，不加入运行时逻辑。

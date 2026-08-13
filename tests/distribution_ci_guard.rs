@@ -22,10 +22,8 @@ fn t_dist_011_ci_workflow_covers_required_matrix_and_commands() {
         "runs-on: ubuntu-latest",
         "os: windows-latest",
         "os: macos-latest",
-        "os: macos-15-intel",
         "architecture: AMD64",
         "architecture: arm64",
-        "architecture: x86_64",
         "uses: actions/checkout@v4",
         "uses: actions/setup-node@v4",
         "uses: dtolnay/rust-toolchain@stable",
@@ -45,6 +43,23 @@ fn t_dist_011_ci_workflow_covers_required_matrix_and_commands() {
         "uname -m",
     ] {
         assert!(ci.contains(required), "CI workflow is missing: {required}");
+    }
+}
+
+#[test]
+fn t_dist_011_ci_workflow_excludes_unsupported_macos_intel_targets() {
+    let ci = workflow();
+    for forbidden in [
+        "macos-15-intel",
+        "macOS Intel x64",
+        "architecture: x86_64",
+        "macos-x64.dmg",
+        "x86_64.dmg",
+    ] {
+        assert!(
+            !ci.contains(forbidden),
+            "CI workflow must not reference unsupported macOS Intel artifacts or runners: {forbidden}"
+        );
     }
 }
 
