@@ -2219,7 +2219,7 @@ not-json
 
     #[test]
     fn required_usage_reload_failures_have_fatal_control_flow() {
-        let source = include_str!("usage_consumer.rs");
+        let source = include_str!("usage_consumer.rs").replace("\r\n", "\n");
         assert!(source.contains("USAGE_WORKLIST_RELOAD_FAILED"));
         assert!(source.contains("USAGE_PLAN_RELOAD_FAILED"));
         assert!(source.contains(

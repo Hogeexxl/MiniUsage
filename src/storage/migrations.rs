@@ -1538,6 +1538,16 @@ mod tests {
     fn s4_s5_runtime_reads_upgraded_v3_database_without_dead_column_errors() {
         let (database, connection) = file_v3_connection_with_rows();
         seed_v3_metadata_fixture(&connection);
+        let portable_source_path = std::env::temp_dir()
+            .join("miniusage-s04-s05-v3-rollout.jsonl")
+            .to_string_lossy()
+            .into_owned();
+        connection
+            .execute(
+                "UPDATE source_files SET current_path = ?1 WHERE source_file_id = 1",
+                [&portable_source_path],
+            )
+            .unwrap();
         drop(connection);
 
         let codex_home = std::env::temp_dir().join(format!(

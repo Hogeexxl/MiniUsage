@@ -891,12 +891,26 @@ mod tests {
         Internal,
         SourceChanged,
         Delay(Duration),
+        BlockAfter,
+    }
+
+    struct BlockGate {
+        entered: mpsc::SyncSender<()>,
+        release: mpsc::Receiver<()>,
+        returned: mpsc::SyncSender<()>,
+    }
+
+    struct BlockControl {
+        entered: mpsc::Receiver<()>,
+        release: mpsc::SyncSender<()>,
+        returned: mpsc::Receiver<()>,
     }
 
     struct FaultStore {
         ledger: Arc<Ledger>,
         failures: Mutex<VecDeque<(StoreOperation, InjectedFailure)>>,
         operations: Mutex<Vec<StoreOperation>>,
+        block_gate: Mutex<Option<BlockGate>>,
     }
 
     impl FaultStore {
@@ -905,6 +919,23 @@ mod tests {
                 ledger,
                 failures: Mutex::new(VecDeque::new()),
                 operations: Mutex::new(Vec::new()),
+                block_gate: Mutex::new(None),
+            }
+        }
+
+        fn install_block_gate(&self) -> BlockControl {
+            let (entered_tx, entered_rx) = mpsc::sync_channel(0);
+            let (release_tx, release_rx) = mpsc::sync_channel(0);
+            let (returned_tx, returned_rx) = mpsc::sync_channel(0);
+            *self.block_gate.lock().unwrap() = Some(BlockGate {
+                entered: entered_tx,
+                release: release_rx,
+                returned: returned_tx,
+            });
+            BlockControl {
+                entered: entered_rx,
+                release: release_tx,
+                returned: returned_rx,
             }
         }
 
@@ -924,23 +955,37 @@ mod tests {
                 .count()
         }
 
-        fn before(&self, operation: StoreOperation) -> Result<(), StorageError> {
+        fn before(&self, operation: StoreOperation) -> Result<bool, StorageError> {
             self.operations.lock().unwrap().push(operation);
             let mut failures = self.failures.lock().unwrap();
             let Some(index) = failures
                 .iter()
                 .position(|(candidate, _)| *candidate == operation)
             else {
-                return Ok(());
+                return Ok(false);
             };
             let (_, failure) = failures.remove(index).unwrap();
             drop(failures);
             if let InjectedFailure::Delay(duration) = failure {
                 thread::sleep(duration);
-                Ok(())
+                Ok(false)
+            } else if failure == InjectedFailure::BlockAfter {
+                Ok(true)
             } else {
                 Err(injected_storage_error(failure))
             }
+        }
+
+        fn wait_on_block_gate(&self) {
+            let gate = self
+                .block_gate
+                .lock()
+                .unwrap()
+                .take()
+                .expect("block gate should be installed before injection");
+            gate.entered.send(()).unwrap();
+            gate.release.recv().unwrap();
+            gate.returned.send(()).unwrap();
         }
     }
 
@@ -959,8 +1004,12 @@ mod tests {
             &self,
             event: ReserveScanFollowupEvent,
         ) -> Result<ScanState, StorageError> {
-            self.before(StoreOperation::Reserve)?;
-            self.ledger.reserve_scan_followup(event)
+            let block_after = self.before(StoreOperation::Reserve)?;
+            let state = self.ledger.reserve_scan_followup(event)?;
+            if block_after {
+                self.wait_on_block_gate();
+            }
+            Ok(state)
         }
 
         fn mark_followup_started(
@@ -995,7 +1044,9 @@ mod tests {
             )),
             InjectedFailure::Internal => StorageError::invalid_state("injected lifecycle failure"),
             InjectedFailure::SourceChanged => StorageError::source_changed("old", "new"),
-            InjectedFailure::Delay(_) => unreachable!("delay is not a storage error"),
+            InjectedFailure::Delay(_) | InjectedFailure::BlockAfter => {
+                unreachable!("test-only timing controls are not storage errors")
+            }
         }
     }
 
@@ -1231,19 +1282,22 @@ mod tests {
         .unwrap();
         started.recv_timeout(Duration::from_secs(2)).unwrap();
         let baseline_reads = store.operation_count(StoreOperation::ScanState);
-        store.inject(
-            StoreOperation::ScanState,
-            InjectedFailure::Delay(Duration::from_millis(75)),
-        );
-        wait_until(Duration::from_secs(2), || {
-            ledger.app_state().unwrap().followup_state == Some(FollowupState::Queued)
-        });
+        let block = store.install_block_gate();
+        store.inject(StoreOperation::Reserve, InjectedFailure::BlockAfter);
+        block
+            .entered
+            .recv_timeout(Duration::from_secs(2))
+            .expect("scheduled request did not reach the deterministic gate");
         let queued = ledger.app_state().unwrap();
         assert_eq!(queued.followup_state, Some(FollowupState::Queued));
         let queued_id = queued.followup_scan_id.clone().unwrap();
         let reads_after_delayed_tick = store.operation_count(StoreOperation::ScanState);
         assert_eq!(reads_after_delayed_tick, baseline_reads + 1);
-        thread::sleep(Duration::from_millis(10));
+        block.release.send(()).unwrap();
+        block
+            .returned
+            .recv_timeout(Duration::from_secs(2))
+            .expect("scheduled request did not leave the deterministic gate");
         assert_eq!(
             store.operation_count(StoreOperation::ScanState),
             reads_after_delayed_tick,

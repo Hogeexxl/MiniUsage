@@ -14,10 +14,11 @@ async fn t_s05_021_blocked_sqlite_query_does_not_block_tokio_executor() {
     let fixture = ApiFixture::new("executor-isolation");
     let ledger = fixture.ledger.clone();
     let (ready_tx, ready_rx) = mpsc::sync_channel(0);
+    let (release_tx, release_rx) = mpsc::sync_channel(0);
     let holder = std::thread::spawn(move || {
         let _guard = ledger.connection().unwrap();
         ready_tx.send(()).unwrap();
-        std::thread::sleep(Duration::from_millis(220));
+        release_rx.recv().unwrap();
     });
     ready_rx.recv().unwrap();
 
@@ -27,7 +28,7 @@ async fn t_s05_021_blocked_sqlite_query_does_not_block_tokio_executor() {
         use tower::ServiceExt;
         app.oneshot(
             Request::builder()
-                .uri("/api/usage/summary?range=year")
+                .uri("/api/revision")
                 .header("host", "127.0.0.1:3210")
                 .body(Body::empty())
                 .unwrap(),
@@ -36,7 +37,7 @@ async fn t_s05_021_blocked_sqlite_query_does_not_block_tokio_executor() {
         .unwrap()
     });
 
-    tokio::time::sleep(Duration::from_millis(25)).await;
+    tokio::task::yield_now().await;
     assert!(
         !blocked.is_finished(),
         "the SQLite query should still be waiting for the Ledger mutex"
@@ -53,6 +54,7 @@ async fn t_s05_021_blocked_sqlite_query_does_not_block_tokio_executor() {
     .expect("Tokio executor was starved by synchronous SQLite work");
     assert_eq!(health.status(), StatusCode::NO_CONTENT);
 
+    release_tx.send(()).unwrap();
     let response = tokio::time::timeout(Duration::from_secs(1), blocked)
         .await
         .unwrap()

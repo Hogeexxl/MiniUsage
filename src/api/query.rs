@@ -898,16 +898,16 @@ mod tests {
             AppState, FollowupState, ScanLifecycleState, ScanRequestKind, ScanResult, ScanRunState,
             ScanState, ScanTrigger, SourceBindingStatus,
         },
-        range::{RangeKey, resolve_range_at},
+        range::{RangeKey, resolve_utc_range_at_for_test},
         usage::aggregate::{CostCompleteness, ModelUsageRow, SessionUsageRow, TokenTotals},
     };
     use chrono::DateTime;
 
-    fn shanghai_range(key: RangeKey) -> ResolvedRange {
-        let now = DateTime::parse_from_rfc3339("2026-08-08T12:34:56+08:00")
+    fn utc_range(key: RangeKey) -> ResolvedRange {
+        let now = DateTime::parse_from_rfc3339("2026-08-08T12:34:56Z")
             .unwrap()
             .timestamp_millis();
-        resolve_range_at(key, now, "Asia/Shanghai").unwrap()
+        resolve_utc_range_at_for_test(key, now).unwrap()
     }
 
     fn totals(cache_write_tokens: Option<i64>, input: i64, cached: i64) -> TokenTotals {
@@ -984,7 +984,7 @@ mod tests {
 
     #[test]
     fn t_s05_004_006_dto_mapping_preserves_cache_semantics_cost_and_model_sort() {
-        let range = shanghai_range(RangeKey::Today);
+        let range = utc_range(RangeKey::Today);
         let summary = summary_response(
             &range,
             UsageSnapshot {

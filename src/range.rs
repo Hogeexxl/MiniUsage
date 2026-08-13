@@ -81,6 +81,19 @@ pub fn resolve_range_at(
     resolve_with_zone(key, now_utc_ms, timezone, &zone)
 }
 
+#[cfg(test)]
+pub(crate) fn resolve_utc_range_at_for_test(
+    key: RangeKey,
+    now_utc_ms: i64,
+) -> Result<ResolvedRange, ApiError> {
+    let zone = TzifZone {
+        initial_offset: 0,
+        transitions: Vec::new(),
+        offsets: vec![0],
+    };
+    resolve_with_zone(key, now_utc_ms, "UTC", &zone)
+}
+
 fn resolve_with_zone(
     key: RangeKey,
     now_utc_ms: i64,
@@ -448,11 +461,26 @@ mod tests {
 
     use super::*;
 
-    fn shanghai_range(key: RangeKey) -> ResolvedRange {
-        let now = DateTime::parse_from_rfc3339("2026-08-08T12:34:56+08:00")
+    fn utc_range(key: RangeKey) -> ResolvedRange {
+        let now = DateTime::parse_from_rfc3339("2026-08-08T12:34:56Z")
             .unwrap()
             .timestamp_millis();
-        resolve_range_at(key, now, "Asia/Shanghai").unwrap()
+        resolve_utc_range_at_for_test(key, now).unwrap()
+    }
+
+    fn synthetic_havana_zone() -> TzifZone {
+        let transition = |value: &str, offset_seconds| ZoneTransition {
+            utc_seconds: DateTime::parse_from_rfc3339(value).unwrap().timestamp(),
+            offset_seconds,
+        };
+        TzifZone {
+            initial_offset: -18_000,
+            transitions: vec![
+                transition("2026-03-08T05:00:00Z", -14_400),
+                transition("2026-11-01T05:00:00Z", -18_000),
+            ],
+            offsets: vec![-18_000, -14_400],
+        }
     }
 
     #[test]
@@ -460,32 +488,32 @@ mod tests {
         let expected = [
             (
                 RangeKey::Today,
-                "2026-08-07T16:00:00Z",
-                "2026-08-08T16:00:00Z",
+                "2026-08-08T00:00:00Z",
+                "2026-08-09T00:00:00Z",
             ),
             (
                 RangeKey::Yesterday,
-                "2026-08-06T16:00:00Z",
-                "2026-08-07T16:00:00Z",
+                "2026-08-07T00:00:00Z",
+                "2026-08-08T00:00:00Z",
             ),
             (
                 RangeKey::Week,
-                "2026-08-02T16:00:00Z",
-                "2026-08-09T16:00:00Z",
+                "2026-08-03T00:00:00Z",
+                "2026-08-10T00:00:00Z",
             ),
             (
                 RangeKey::Month,
-                "2026-07-31T16:00:00Z",
-                "2026-08-31T16:00:00Z",
+                "2026-08-01T00:00:00Z",
+                "2026-09-01T00:00:00Z",
             ),
             (
                 RangeKey::Year,
-                "2025-12-31T16:00:00Z",
-                "2026-12-31T16:00:00Z",
+                "2026-01-01T00:00:00Z",
+                "2027-01-01T00:00:00Z",
             ),
         ];
         for (key, start, end) in expected {
-            let range = shanghai_range(key);
+            let range = utc_range(key);
             assert_eq!(
                 range.start_ms,
                 DateTime::parse_from_rfc3339(start)
@@ -500,12 +528,19 @@ mod tests {
             );
         }
 
-        // Named `today` also exercises real tzdb midnight gap/overlap rules.
+        // Named `today` exercises the same midnight gap/overlap rules with a
+        // deterministic transition fixture rather than host tzdb files.
         let havana_gap_now = DateTime::parse_from_rfc3339("2026-03-08T12:00:00Z")
             .unwrap()
             .timestamp_millis();
-        let havana_gap =
-            resolve_range_at(RangeKey::Today, havana_gap_now, "America/Havana").unwrap();
+        let havana_zone = synthetic_havana_zone();
+        let havana_gap = resolve_with_zone(
+            RangeKey::Today,
+            havana_gap_now,
+            "America/Havana",
+            &havana_zone,
+        )
+        .unwrap();
         assert_eq!(
             havana_gap.start_ms,
             DateTime::parse_from_rfc3339("2026-03-08T05:00:00Z")
@@ -521,8 +556,13 @@ mod tests {
         let havana_overlap_now = DateTime::parse_from_rfc3339("2026-11-01T12:00:00Z")
             .unwrap()
             .timestamp_millis();
-        let havana_overlap =
-            resolve_range_at(RangeKey::Today, havana_overlap_now, "America/Havana").unwrap();
+        let havana_overlap = resolve_with_zone(
+            RangeKey::Today,
+            havana_overlap_now,
+            "America/Havana",
+            &havana_zone,
+        )
+        .unwrap();
         assert_eq!(
             havana_overlap.start_ms,
             DateTime::parse_from_rfc3339("2026-11-01T04:00:00Z")
