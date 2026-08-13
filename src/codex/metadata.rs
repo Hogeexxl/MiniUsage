@@ -1224,6 +1224,14 @@ mod tests {
     };
     use crate::domain::{FileStatus, SourceArea};
 
+    fn fixture_path(name: &str) -> String {
+        std::env::temp_dir()
+            .join("miniusage-codex-metadata")
+            .join(name.trim_start_matches('/'))
+            .to_string_lossy()
+            .into_owned()
+    }
+
     fn state(threads: Vec<StateThreadFact>, edges: Vec<(&str, &str)>) -> StateSnapshot {
         StateSnapshot {
             status: StateSourceStatus::Complete,
@@ -1364,13 +1372,13 @@ mod tests {
         let mut primary = state_thread("thread-a");
         primary.name = Some("State Name".to_owned());
         primary.title = Some("State Title".to_owned());
-        primary.cwd = Some("/state/project".to_owned());
+        primary.cwd = Some(fixture_path("state/project"));
         primary.metadata_model = Some("state-model".to_owned());
         let null_fact = state_thread("thread-b");
 
         let mut rollout_fact = rollout(1, "thread-a");
         rollout_fact.cwd = Some(Candidate {
-            value: "/rollout/project".to_owned(),
+            value: fixture_path("rollout/project"),
             provenance: CwdProvenance::SessionMeta,
             record_offset: 2,
         });
@@ -1393,7 +1401,7 @@ mod tests {
                 1,
                 "thread-a",
                 SourceArea::Sessions,
-                "/sessions/rollout-a.jsonl",
+                &fixture_path("sessions/rollout-a.jsonl"),
             )],
             existing_threads: vec![existing("thread-a"), old_b],
             resolved_at_ms: 100,
@@ -1403,7 +1411,7 @@ mod tests {
         assert_eq!(resolved.title, Patch::Set("State Name".to_owned()));
         assert_eq!(
             resolved.project_path,
-            Patch::Set("/rollout/project".to_owned())
+            Patch::Set(fixture_path("rollout/project"))
         );
         assert_eq!(
             resolved.metadata_model,
@@ -1629,7 +1637,7 @@ mod tests {
                 10,
                 "unknown",
                 SourceArea::Sessions,
-                "/sessions/unknown.jsonl",
+                &fixture_path("sessions/unknown.jsonl"),
             )],
             existing_threads: vec![
                 existing("missing-child"),
@@ -1816,7 +1824,7 @@ mod tests {
                 1,
                 "child",
                 SourceArea::Sessions,
-                "/sessions/guardian.jsonl",
+                &fixture_path("sessions/guardian.jsonl"),
             )],
             existing_threads: vec![existing("root"), existing("child")],
             resolved_at_ms: 100,
@@ -2007,7 +2015,7 @@ mod tests {
 
         let mut selected = rollout(1, "merged");
         selected.cwd = Some(Candidate {
-            value: "/chosen/project".to_owned(),
+            value: fixture_path("chosen/project"),
             provenance: CwdProvenance::SessionMeta,
             record_offset: 2,
         });
@@ -2050,7 +2058,7 @@ mod tests {
 
         let mut same_priority = rollout(2, "merged");
         same_priority.cwd = Some(Candidate {
-            value: "/other/project".to_owned(),
+            value: fixture_path("other/project"),
             provenance: CwdProvenance::SessionMeta,
             record_offset: 8,
         });
@@ -2077,9 +2085,24 @@ mod tests {
             global_state_snapshot: global_state(),
             rollout_facts: vec![lower_priority, same_priority, selected],
             source_file_observations: vec![
-                source(1, "merged", SourceArea::Sessions, "/sessions/one.jsonl"),
-                source(2, "merged", SourceArea::Sessions, "/sessions/two.jsonl"),
-                source(3, "merged", SourceArea::Sessions, "/sessions/three.jsonl"),
+                source(
+                    1,
+                    "merged",
+                    SourceArea::Sessions,
+                    &fixture_path("sessions/one.jsonl"),
+                ),
+                source(
+                    2,
+                    "merged",
+                    SourceArea::Sessions,
+                    &fixture_path("sessions/two.jsonl"),
+                ),
+                source(
+                    3,
+                    "merged",
+                    SourceArea::Sessions,
+                    &fixture_path("sessions/three.jsonl"),
+                ),
             ],
             existing_threads: vec![existing("merged")],
             resolved_at_ms: 101,
@@ -2090,7 +2113,7 @@ mod tests {
         assert_eq!(merged.title, Patch::Set("New State Title".to_owned()));
         assert_eq!(
             merged.project_path,
-            Patch::Set("/chosen/project".to_owned())
+            Patch::Set(fixture_path("chosen/project"))
         );
         assert_eq!(
             merged.parent_thread_id,
@@ -2112,17 +2135,19 @@ mod tests {
     #[test]
     fn t_s03_001_project_kind_resolution_matrix_uses_only_global_state_identity() {
         let mut project = state_thread("project");
-        project.cwd = Some("/workspace/project".to_owned());
+        project.cwd = Some(fixture_path("workspace/project"));
         let mut projectless = state_thread("projectless");
-        projectless.cwd = Some("/generated/workspace/projectless".to_owned());
+        projectless.cwd = Some(fixture_path("generated/workspace/projectless"));
         let mut projectless_only = state_thread("projectless-only");
-        projectless_only.cwd = Some("/generated/workspace/projectless-only".to_owned());
+        projectless_only.cwd = Some(fixture_path("generated/workspace/projectless-only"));
         let mut heuristic = state_thread("heuristic");
-        heuristic.cwd = Some("/Users/example/Documents/Codex/generated-workspace".to_owned());
+        heuristic.cwd = Some(fixture_path(
+            "Users/example/Documents/Codex/generated-workspace",
+        ));
         let mut root = state_thread("root");
-        root.cwd = Some("/workspace/root".to_owned());
+        root.cwd = Some(fixture_path("workspace/root"));
         let mut child = state_thread("child");
-        child.cwd = Some("/generated/workspace/child".to_owned());
+        child.cwd = Some(fixture_path("generated/workspace/child"));
         let mut existing_conflict = existing("projectless");
         existing_conflict.project_kind = ProjectKind::Project;
         let mut existing_no_path = existing("no-path");
@@ -2174,7 +2199,7 @@ mod tests {
         );
         assert_eq!(
             patch(&result, "projectless").project_path,
-            Patch::Set("/generated/workspace/projectless".to_owned())
+            Patch::Set(fixture_path("generated/workspace/projectless"))
         );
         assert_eq!(
             patch(&result, "projectless-only").project_kind,
@@ -2182,7 +2207,7 @@ mod tests {
         );
         assert_eq!(
             patch(&result, "projectless-only").project_path,
-            Patch::Set("/generated/workspace/projectless-only".to_owned())
+            Patch::Set(fixture_path("generated/workspace/projectless-only"))
         );
         assert_eq!(
             patch(&result, "projectless-only").project_name,
@@ -2216,11 +2241,11 @@ mod tests {
     fn t_s03_002_global_state_unavailable_preserves_existing_and_recovers_idempotently() {
         let mut existing_projectless = existing("existing-projectless");
         existing_projectless.project_kind = ProjectKind::Projectless;
-        existing_projectless.project_path = Some("/generated/existing".to_owned());
+        existing_projectless.project_path = Some(fixture_path("generated/existing"));
         existing_projectless.project_name = Some("existing".to_owned());
         let mut existing_project = existing("existing-project");
         existing_project.project_kind = ProjectKind::Project;
-        existing_project.project_path = Some("/workspace/existing".to_owned());
+        existing_project.project_path = Some(fixture_path("workspace/existing"));
 
         let malformed = GlobalStateSnapshot::unavailable(GlobalStateStatus::Malformed, Vec::new());
         let unavailable = ThreadMetadataResolver::resolve(ResolutionInput {
@@ -2228,17 +2253,17 @@ mod tests {
                 vec![
                     {
                         let mut fact = state_thread("existing-projectless");
-                        fact.cwd = Some("/generated/existing".to_owned());
+                        fact.cwd = Some(fixture_path("generated/existing"));
                         fact
                     },
                     {
                         let mut fact = state_thread("existing-project");
-                        fact.cwd = Some("/workspace/existing".to_owned());
+                        fact.cwd = Some(fixture_path("workspace/existing"));
                         fact
                     },
                     {
                         let mut fact = state_thread("new-thread");
-                        fact.cwd = Some("/workspace/new".to_owned());
+                        fact.cwd = Some(fixture_path("workspace/new"));
                         fact
                     },
                 ],
@@ -2275,12 +2300,12 @@ mod tests {
                 vec![
                     {
                         let mut fact = state_thread("existing-projectless");
-                        fact.cwd = Some("/generated/existing".to_owned());
+                        fact.cwd = Some(fixture_path("generated/existing"));
                         fact
                     },
                     {
                         let mut fact = state_thread("existing-project");
-                        fact.cwd = Some("/workspace/existing".to_owned());
+                        fact.cwd = Some(fixture_path("workspace/existing"));
                         fact
                     },
                 ],
@@ -2309,7 +2334,7 @@ mod tests {
                 vec![
                     {
                         let mut fact = state_thread("path-without-global-state");
-                        fact.cwd = Some("/workspace/path".to_owned());
+                        fact.cwd = Some(fixture_path("workspace/path"));
                         fact
                     },
                     state_thread("no-path-without-global-state"),

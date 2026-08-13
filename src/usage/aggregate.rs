@@ -1715,10 +1715,20 @@ mod tests {
 
     use super::*;
 
+    fn fixture_path(name: &str) -> String {
+        std::env::temp_dir()
+            .join("miniusage-usage-aggregate")
+            .join(name.trim_start_matches('/'))
+            .to_string_lossy()
+            .into_owned()
+    }
+
     fn fixture() -> Connection {
         let connection = Connection::open_in_memory().unwrap();
+        let project_a = fixture_path("project/a");
+        let project_b = fixture_path("project/b");
         connection
-            .execute_batch(
+            .execute_batch(&format!(
                 "CREATE TABLE app_meta (id INTEGER PRIMARY KEY, usage_active_epoch INTEGER NOT NULL);
                  CREATE TABLE threads (
                     thread_id TEXT PRIMARY KEY, title TEXT, project_name TEXT, project_path TEXT,
@@ -1735,10 +1745,10 @@ mod tests {
                  );
                  INSERT INTO app_meta(id, usage_active_epoch) VALUES (1, 7);
                  INSERT INTO threads(thread_id,title,project_name,project_path) VALUES
-                    ('root-a','Root A','project-a','/project/a'),
-                    ('child-a','Child A','project-a','/project/a'),
-                    ('root-b','Root B','project-b','/project/b');",
-            )
+                    ('root-a','Root A','project-a','{project_a}'),
+                    ('child-a','Child A','project-a','{project_a}'),
+                    ('root-b','Root B','project-b','{project_b}');"
+            ))
             .unwrap();
         insert_event(
             &connection,
@@ -1837,8 +1847,12 @@ mod tests {
 
     fn filter_fixture() -> Connection {
         let connection = Connection::open_in_memory().unwrap();
+        let project_a = fixture_path("project/a");
+        let project_b = fixture_path("project/b");
+        let child_project = fixture_path("generated/child-a");
+        let projectless_path = fixture_path("Users/me/generated-cwd");
         connection
-            .execute_batch(
+            .execute_batch(&format!(
                 "CREATE TABLE app_meta (
                     id INTEGER PRIMARY KEY,
                     data_revision INTEGER NOT NULL DEFAULT 0,
@@ -1859,12 +1873,12 @@ mod tests {
                  );
                  INSERT INTO app_meta(id, usage_active_epoch) VALUES (1, 7);
                  INSERT INTO threads(thread_id,title,project_name,project_path,project_kind) VALUES
-                    ('root-a','Root A','project-a','/project/a','project'),
-                    ('child-a','Child A','project-a','/generated/child-a','project'),
-                    ('root-b','Root B','project-b','/project/b','project'),
-                    ('root-p','Root P',NULL,'/Users/me/generated-cwd','projectless'),
+                    ('root-a','Root A','project-a','{project_a}','project'),
+                    ('child-a','Child A','project-a','{child_project}','project'),
+                    ('root-b','Root B','project-b','{project_b}','project'),
+                    ('root-p','Root P',NULL,'{projectless_path}','projectless'),
                     ('root-u','Root U',NULL,NULL,'unknown');",
-            )
+            ))
             .unwrap();
         insert_event(
             &connection,
@@ -1962,8 +1976,9 @@ mod tests {
 
     fn cost_fixture() -> Connection {
         let connection = Connection::open_in_memory().unwrap();
+        let project_path = fixture_path("project");
         connection
-            .execute_batch(
+            .execute_batch(&format!(
                 "CREATE TABLE app_meta (id INTEGER PRIMARY KEY, usage_active_epoch INTEGER NOT NULL);
                  CREATE TABLE threads (
                     thread_id TEXT PRIMARY KEY, parent_thread_id TEXT, root_session_id TEXT,
@@ -1981,9 +1996,9 @@ mod tests {
                  );
                  INSERT INTO app_meta(id, usage_active_epoch) VALUES (1, 7);
                  INSERT INTO threads(thread_id,parent_thread_id,root_session_id,agent_role,title,project_name,project_path,project_kind) VALUES
-                    ('root','', 'root','main','Root','project','/project','project'),
-                    ('child','root','root','subagent','Child','project','/project','project');",
-            )
+                    ('root','', 'root','main','Root','project','{project_path}','project'),
+                    ('child','root','root','subagent','Child','project','{project_path}','project');"
+            ))
             .unwrap();
         connection
             .execute(
@@ -2501,8 +2516,8 @@ mod tests {
         connection
             .execute(
                 "INSERT INTO threads(thread_id,title,project_name,project_path)
-                 VALUES ('grandchild-a','Grandchild A','project-a','/project/a')",
-                [],
+                 VALUES ('grandchild-a','Grandchild A','project-a',?1)",
+                [fixture_path("project/a")],
             )
             .unwrap();
         insert_event(
@@ -2644,8 +2659,18 @@ mod tests {
         let connection = filter_fixture();
         let reader = AggregateReader::new(&connection);
         let range = TimeRange::new(0, 500).unwrap();
+        let project_a_path = fixture_path("project/a");
+        let project_b_path = fixture_path("project/b");
+        let projectless_path = fixture_path("Users/me/generated-cwd");
 
-        let project_a = summary_for(&reader, range, &[], &["/project/a"], false, false);
+        let project_a = summary_for(
+            &reader,
+            range,
+            &[],
+            &[project_a_path.as_str()],
+            false,
+            false,
+        );
         assert_eq!(project_a.totals.input_tokens, 3_300);
         assert_eq!(project_a.totals.cache_write_tokens, None);
         assert_eq!(project_a.session_count, 1);
@@ -2654,7 +2679,7 @@ mod tests {
             &reader,
             range,
             &[],
-            &["/Users/me/generated-cwd"],
+            &[projectless_path.as_str()],
             false,
             false,
         );
@@ -2669,7 +2694,7 @@ mod tests {
             &reader,
             range,
             &[],
-            &["/Users/me/generated-cwd"],
+            &[projectless_path.as_str()],
             true,
             false,
         );
@@ -2681,7 +2706,8 @@ mod tests {
         assert_eq!(unknown.totals.cache_write_tokens, Some(17));
         assert_eq!(unknown.session_count, 2);
 
-        let path_or_special = summary_for(&reader, range, &[], &["/project/b"], true, false);
+        let path_or_special =
+            summary_for(&reader, range, &[], &[project_b_path.as_str()], true, false);
         assert_eq!(path_or_special.totals.input_tokens, 1_200);
         assert_eq!(path_or_special.session_count, 2);
     }
@@ -2691,6 +2717,8 @@ mod tests {
         let connection = filter_fixture();
         let reader = AggregateReader::new(&connection);
         let all_range = TimeRange::new(0, 500).unwrap();
+        let project_a_path = fixture_path("project/a");
+        let project_b_path = fixture_path("project/b");
 
         let unfiltered = summary_for(&reader, all_range, &[], &[], false, false);
         assert_eq!(unfiltered.totals.input_tokens, 6_200);
@@ -2708,7 +2736,11 @@ mod tests {
             &reader,
             TimeRange::new(150, 350).unwrap(),
             &["gpt-b", "gpt-a", "gpt-b"],
-            &["/project/b", "/project/a", "/project/a"],
+            &[
+                project_b_path.as_str(),
+                project_a_path.as_str(),
+                project_a_path.as_str(),
+            ],
             false,
             false,
         );
@@ -2755,9 +2787,12 @@ mod tests {
             .execute(
                 "INSERT INTO threads(
                     thread_id,title,project_name,project_path,project_kind
-                 ) VALUES ('root-a-alt','Root A alt','project-a','/project/other','project'),
-                 ('root-unused','Unused','unused','/project/unused','project')",
-                [],
+                 ) VALUES ('root-a-alt','Root A alt','project-a',?1,'project'),
+                 ('root-unused','Unused','unused',?2,'project')",
+                params![
+                    fixture_path("project/other"),
+                    fixture_path("project/unused")
+                ],
             )
             .unwrap();
         insert_event(
@@ -2810,15 +2845,15 @@ mod tests {
             vec![
                 ProjectFilterOption::Project {
                     project_name: "project-a".to_owned(),
-                    project_path: "/project/a".to_owned(),
+                    project_path: fixture_path("project/a"),
                 },
                 ProjectFilterOption::Project {
                     project_name: "project-b".to_owned(),
-                    project_path: "/project/b".to_owned(),
+                    project_path: fixture_path("project/b"),
                 },
                 ProjectFilterOption::Project {
                     project_name: "project-a".to_owned(),
-                    project_path: "/project/other".to_owned(),
+                    project_path: fixture_path("project/other"),
                 },
                 ProjectFilterOption::Projectless,
                 ProjectFilterOption::Unknown,
@@ -2827,7 +2862,7 @@ mod tests {
         assert!(options.projects.iter().all(|option| !matches!(
             option,
             ProjectFilterOption::Project { project_path, .. }
-                if project_path == "/Users/me/generated-cwd"
+                if project_path == &fixture_path("Users/me/generated-cwd")
         )));
         transaction.commit().unwrap();
     }

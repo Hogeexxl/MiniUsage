@@ -882,6 +882,14 @@ mod tests {
 
     static TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
 
+    fn fixture_path(name: &str) -> String {
+        std::env::temp_dir()
+            .join("miniusage-storage-source")
+            .join(name.trim_start_matches('/'))
+            .to_string_lossy()
+            .into_owned()
+    }
+
     fn test_ledger() -> (Ledger, std::path::PathBuf) {
         let root = std::env::temp_dir().join(format!(
             "miniusage-source-{}-{}",
@@ -946,7 +954,7 @@ mod tests {
         let first = one_observation(
             &ledger,
             observation(
-                "/tmp/mu-sessions/rollout.jsonl",
+                &fixture_path("mu-sessions/rollout.jsonl"),
                 SourceArea::Sessions,
                 10,
                 20,
@@ -983,7 +991,7 @@ mod tests {
         let moved = one_observation(
             &ledger,
             observation(
-                "/tmp/mu-archive/rollout.jsonl",
+                &fixture_path("mu-archive/rollout.jsonl"),
                 SourceArea::ArchivedSessions,
                 10,
                 20,
@@ -1008,7 +1016,7 @@ mod tests {
                 |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
             )
             .unwrap();
-        assert_eq!(path, "/tmp/mu-archive/rollout.jsonl");
+        assert_eq!(path, fixture_path("mu-archive/rollout.jsonl"));
         assert_eq!(metadata_offset, 77);
         assert_eq!(usage_offset, 88);
         drop(connection);
@@ -1016,7 +1024,7 @@ mod tests {
         let rewritten = one_observation(
             &ledger,
             observation(
-                "/tmp/mu-archive/rollout.jsonl",
+                &fixture_path("mu-archive/rollout.jsonl"),
                 SourceArea::ArchivedSessions,
                 10,
                 20,
@@ -1064,7 +1072,7 @@ mod tests {
         let result = one_observation(
             &ledger,
             observation(
-                "/tmp/mu-sessions/fact.jsonl",
+                &fixture_path("mu-sessions/fact.jsonl"),
                 SourceArea::Sessions,
                 3,
                 4,
@@ -1152,7 +1160,7 @@ mod tests {
         let result = one_observation(
             &ledger,
             observation(
-                "/tmp/mu-sessions/rebuild.jsonl",
+                &fixture_path("mu-sessions/rebuild.jsonl"),
                 SourceArea::Sessions,
                 5,
                 6,
@@ -1219,7 +1227,7 @@ mod tests {
         let first = one_observation(
             &ledger,
             observation(
-                "/tmp/mu-sessions/old.jsonl",
+                &fixture_path("mu-sessions/old.jsonl"),
                 SourceArea::Sessions,
                 9,
                 10,
@@ -1258,7 +1266,7 @@ mod tests {
         let restored = one_observation(
             &ledger,
             observation(
-                "/tmp/mu-sessions/new.jsonl",
+                &fixture_path("mu-sessions/new.jsonl"),
                 SourceArea::Sessions,
                 9,
                 10,
@@ -1285,7 +1293,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             source,
-            (1, "/tmp/mu-sessions/new.jsonl".into(), "present".into())
+            (1, fixture_path("mu-sessions/new.jsonl"), "present".into())
         );
         let checkpoints: Vec<(String, i64, String)> = connection
             .prepare(
@@ -1316,7 +1324,7 @@ mod tests {
         let initial = ledger
             .record_source_observations(complete_batch(vec![
                 observation(
-                    "/tmp/mu-sessions/a.jsonl",
+                    &fixture_path("mu-sessions/a.jsonl"),
                     SourceArea::Sessions,
                     21,
                     31,
@@ -1325,7 +1333,7 @@ mod tests {
                     1,
                 ),
                 observation(
-                    "/tmp/mu-sessions/b.jsonl",
+                    &fixture_path("mu-sessions/b.jsonl"),
                     SourceArea::Sessions,
                     22,
                     32,
@@ -1341,7 +1349,7 @@ mod tests {
         let swapped = ledger
             .record_source_observations(complete_batch(vec![
                 observation(
-                    "/tmp/mu-sessions/b.jsonl",
+                    &fixture_path("mu-sessions/b.jsonl"),
                     SourceArea::Sessions,
                     21,
                     31,
@@ -1350,7 +1358,7 @@ mod tests {
                     2,
                 ),
                 observation(
-                    "/tmp/mu-sessions/a.jsonl",
+                    &fixture_path("mu-sessions/a.jsonl"),
                     SourceArea::Sessions,
                     22,
                     32,
@@ -1384,8 +1392,8 @@ mod tests {
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(a_path, "/tmp/mu-sessions/b.jsonl");
-        assert_eq!(b_path, "/tmp/mu-sessions/a.jsonl");
+        assert_eq!(a_path, fixture_path("mu-sessions/b.jsonl"));
+        assert_eq!(b_path, fixture_path("mu-sessions/a.jsonl"));
         cleanup(root);
     }
 
@@ -1395,7 +1403,7 @@ mod tests {
         let first = one_observation(
             &ledger,
             observation(
-                "/tmp/mu-sessions/a-slot.jsonl",
+                &fixture_path("mu-sessions/a-slot.jsonl"),
                 SourceArea::Sessions,
                 41,
                 51,
@@ -1410,7 +1418,7 @@ mod tests {
         let outcome = ledger
             .record_source_observations(complete_batch(vec![
                 observation(
-                    "/tmp/mu-sessions/a-slot.jsonl",
+                    &fixture_path("mu-sessions/a-slot.jsonl"),
                     SourceArea::Sessions,
                     42,
                     52,
@@ -1419,7 +1427,7 @@ mod tests {
                     2,
                 ),
                 observation(
-                    "/tmp/mu-sessions/b-slot.jsonl",
+                    &fixture_path("mu-sessions/b-slot.jsonl"),
                     SourceArea::Sessions,
                     41,
                     51,
@@ -1446,7 +1454,7 @@ mod tests {
         let result = one_observation(
             &ledger,
             observation(
-                "/tmp/mu-sessions/offsets.jsonl",
+                &fixture_path("mu-sessions/offsets.jsonl"),
                 SourceArea::Sessions,
                 61,
                 71,
@@ -1456,6 +1464,7 @@ mod tests {
             ),
         );
         let source_file_id = result.source_file_id;
+        let project_path = fixture_path("project");
         let connection = Connection::open(ledger.database_path()).unwrap();
         connection
             .execute(
@@ -1474,7 +1483,8 @@ mod tests {
             .unwrap();
         connection
             .execute(
-                "INSERT INTO rollout_metadata_facts (
+                &format!(
+                    "INSERT INTO rollout_metadata_facts (
                     source_file_id, file_generation, metadata_parser_version,
                     resolved_through_offset, owning_thread_id, continuation_state,
                     cwd, cwd_provenance, cwd_record_offset,
@@ -1484,11 +1494,12 @@ mod tests {
                     ownership_confidence, fact_quality_status, updated_at_ms
                  ) VALUES (
                     ?1, 1, 1, 64, 'thread-offsets', 'owning_live',
-                    '/tmp/project', 'session_meta', 1,
+                    '{project_path}', 'session_meta', 1,
                     'parent', 'subagent_source', 2,
                     'worker', 'subagent_source', 3,
                     4, 5, 'confirmed', 'complete', 6
-                 )",
+                 )"
+                ),
                 [source_file_id],
             )
             .unwrap();
@@ -1532,7 +1543,7 @@ mod tests {
         let result = one_observation(
             &ledger,
             observation(
-                "/tmp/mu-sessions/no-usage.jsonl",
+                &fixture_path("mu-sessions/no-usage.jsonl"),
                 SourceArea::Sessions,
                 81,
                 91,
@@ -1570,7 +1581,7 @@ mod tests {
         ))
         .unwrap();
         let outcome = changed.record_source_observations(complete_batch(vec![observation(
-            "/tmp/mu-sessions/rejected.jsonl",
+            &fixture_path("mu-sessions/rejected.jsonl"),
             SourceArea::Sessions,
             101,
             111,
@@ -1596,7 +1607,7 @@ mod tests {
         let first = one_observation(
             &ledger,
             observation(
-                "/tmp/mu-sessions/unavailable.jsonl",
+                &fixture_path("mu-sessions/unavailable.jsonl"),
                 SourceArea::Sessions,
                 11,
                 12,
@@ -1636,7 +1647,7 @@ mod tests {
         let first = one_observation(
             &ledger,
             observation(
-                "/tmp/mu-sessions/complete-missing.jsonl",
+                &fixture_path("mu-sessions/complete-missing.jsonl"),
                 SourceArea::Sessions,
                 13,
                 14,
@@ -1676,7 +1687,7 @@ mod tests {
         let first = one_observation(
             &ledger,
             observation(
-                "/tmp/mu-sessions/spec04-a.jsonl",
+                &fixture_path("mu-sessions/spec04-a.jsonl"),
                 SourceArea::Sessions,
                 41,
                 51,
@@ -1726,7 +1737,7 @@ mod tests {
         // Same physical generation and raw size retains the completed proof.
         let unchanged = ledger
             .record_source_observations(complete_batch(vec![observation(
-                "/tmp/mu-sessions/spec04-a.jsonl",
+                &fixture_path("mu-sessions/spec04-a.jsonl"),
                 SourceArea::Sessions,
                 41,
                 51,
@@ -1744,7 +1755,7 @@ mod tests {
         // reader-proven required boundary remains 100 until a reader commit.
         let grown = ledger
             .record_source_observations(complete_batch(vec![observation(
-                "/tmp/mu-sessions/spec04-a.jsonl",
+                &fixture_path("mu-sessions/spec04-a.jsonl"),
                 SourceArea::Sessions,
                 41,
                 51,
@@ -1790,7 +1801,7 @@ mod tests {
         let added = ledger
             .record_source_observations(complete_batch(vec![
                 observation(
-                    "/tmp/mu-sessions/spec04-a.jsonl",
+                    &fixture_path("mu-sessions/spec04-a.jsonl"),
                     SourceArea::Sessions,
                     41,
                     51,
@@ -1799,7 +1810,7 @@ mod tests {
                     6,
                 ),
                 observation(
-                    "/tmp/mu-sessions/spec04-b.jsonl",
+                    &fixture_path("mu-sessions/spec04-b.jsonl"),
                     SourceArea::Sessions,
                     42,
                     52,
@@ -1865,7 +1876,7 @@ mod tests {
         let resumed = ledger
             .record_source_observations(complete_batch(vec![
                 observation(
-                    "/tmp/mu-sessions/spec04-a.jsonl",
+                    &fixture_path("mu-sessions/spec04-a.jsonl"),
                     SourceArea::Sessions,
                     41,
                     51,
@@ -1874,7 +1885,7 @@ mod tests {
                     7,
                 ),
                 observation(
-                    "/tmp/mu-sessions/spec04-b.jsonl",
+                    &fixture_path("mu-sessions/spec04-b.jsonl"),
                     SourceArea::Sessions,
                     42,
                     52,
@@ -1917,7 +1928,7 @@ mod tests {
         let replaced = ledger
             .record_source_observations(complete_batch(vec![
                 observation(
-                    "/tmp/mu-sessions/spec04-a.jsonl",
+                    &fixture_path("mu-sessions/spec04-a.jsonl"),
                     SourceArea::Sessions,
                     141,
                     151,
@@ -1926,7 +1937,7 @@ mod tests {
                     8,
                 ),
                 observation(
-                    "/tmp/mu-sessions/spec04-b.jsonl",
+                    &fixture_path("mu-sessions/spec04-b.jsonl"),
                     SourceArea::Sessions,
                     42,
                     52,
@@ -1975,7 +1986,7 @@ mod tests {
             let first = one_observation(
                 &ledger,
                 observation(
-                    "/tmp/mu-sessions/spec04-carry-guard.jsonl",
+                    &fixture_path("mu-sessions/spec04-carry-guard.jsonl"),
                     SourceArea::Sessions,
                     61,
                     71,
@@ -2060,7 +2071,7 @@ mod tests {
         let outcome = ledger
             .record_source_observations_with_usage_carry_proofs(
                 complete_batch(vec![observation(
-                    "/tmp/mu-sessions/spec04-carry-guard.jsonl",
+                    &fixture_path("mu-sessions/spec04-carry-guard.jsonl"),
                     SourceArea::Sessions,
                     61,
                     71,
@@ -2100,7 +2111,7 @@ mod tests {
         let outcome = ledger
             .record_source_observations_with_usage_carry_proofs(
                 complete_batch(vec![observation(
-                    "/tmp/mu-sessions/spec04-carry-guard.jsonl",
+                    &fixture_path("mu-sessions/spec04-carry-guard.jsonl"),
                     SourceArea::Sessions,
                     61,
                     71,
@@ -2142,7 +2153,7 @@ mod tests {
         let first = one_observation(
             &ledger,
             observation(
-                "/tmp/mu-sessions/spec04-atomic.jsonl",
+                &fixture_path("mu-sessions/spec04-atomic.jsonl"),
                 SourceArea::Sessions,
                 61,
                 71,
@@ -2189,7 +2200,7 @@ mod tests {
         }
 
         let failed = ledger.record_source_observations(complete_batch(vec![observation(
-            "/tmp/mu-sessions/spec04-atomic.jsonl",
+            &fixture_path("mu-sessions/spec04-atomic.jsonl"),
             SourceArea::Sessions,
             161,
             171,

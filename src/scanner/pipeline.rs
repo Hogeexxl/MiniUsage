@@ -879,6 +879,14 @@ mod tests {
         storage::LedgerOptions,
     };
 
+    fn fixture_path(name: &str) -> String {
+        std::env::temp_dir()
+            .join("miniusage-scanner-pipeline")
+            .join(name.trim_start_matches('/'))
+            .to_string_lossy()
+            .into_owned()
+    }
+
     static NEXT_TEMP: AtomicU64 = AtomicU64::new(0);
 
     struct TempLedger {
@@ -941,7 +949,7 @@ mod tests {
         SourceFileState::new(
             source_id,
             binding.map(str::to_owned),
-            format!("/sessions/rollout-{source_id}.jsonl"),
+            fixture_path(&format!("sessions/rollout-{source_id}.jsonl")),
             crate::domain::SourceArea::Sessions,
             1,
             source_id,
@@ -1023,7 +1031,7 @@ mod tests {
     fn plan_one(entry: MetadataScanStateEntry) -> FilePlan {
         let pipeline = MetadataPipeline::new(1, 10).unwrap();
         let snapshot = snapshot(vec![discovered(
-            "/sessions/rollout-1.jsonl",
+            &fixture_path("sessions/rollout-1.jsonl"),
             1,
             1,
             entry.source.observed_size,
@@ -1047,7 +1055,13 @@ mod tests {
     fn identity_lifecycle_matrix_preserves_moves_and_rebuilds_content_generations() {
         let fixture = TempLedger::new();
         let pipeline = MetadataPipeline::new(1, 10).unwrap();
-        let first_snapshot = snapshot(vec![discovered("/sessions/rollout-a.jsonl", 1, 2, 10, 1)]);
+        let first_snapshot = snapshot(vec![discovered(
+            &fixture_path("sessions/rollout-a.jsonl"),
+            1,
+            2,
+            10,
+            1,
+        )]);
         let (first, _) = pipeline
             .record_and_load(&fixture.ledger, &first_snapshot)
             .unwrap();
@@ -1079,7 +1093,7 @@ mod tests {
         drop(connection);
 
         let renamed = snapshot(vec![discovered(
-            "/archived_sessions/rollout-a.jsonl",
+            &fixture_path("archived_sessions/rollout-a.jsonl"),
             1,
             2,
             10,
@@ -1128,8 +1142,14 @@ mod tests {
         drop(connection);
 
         let copied = snapshot(vec![
-            discovered("/archived_sessions/rollout-a.jsonl", 1, 2, 10, 1),
-            discovered("/sessions/rollout-copy.jsonl", 1, 3, 10, 1),
+            discovered(
+                &fixture_path("archived_sessions/rollout-a.jsonl"),
+                1,
+                2,
+                10,
+                1,
+            ),
+            discovered(&fixture_path("sessions/rollout-copy.jsonl"), 1, 3, 10, 1),
         ]);
         let (copy_outcome, _) = pipeline.record_and_load(&fixture.ledger, &copied).unwrap();
         assert_eq!(copy_outcome.results[0].source_file_id, source_id);
@@ -1137,8 +1157,14 @@ mod tests {
         assert_ne!(copy_outcome.results[1].source_file_id, source_id);
 
         let replaced = snapshot(vec![
-            discovered("/archived_sessions/rollout-a.jsonl", 9, 9, 10, 2),
-            discovered("/sessions/rollout-copy.jsonl", 1, 3, 10, 1),
+            discovered(
+                &fixture_path("archived_sessions/rollout-a.jsonl"),
+                9,
+                9,
+                10,
+                2,
+            ),
+            discovered(&fixture_path("sessions/rollout-copy.jsonl"), 1, 3, 10, 1),
         ]);
         let (replacement, replacement_state) = pipeline
             .record_and_load(&fixture.ledger, &replaced)
@@ -1168,8 +1194,14 @@ mod tests {
         drop(connection);
 
         let truncated = snapshot(vec![
-            discovered("/archived_sessions/rollout-a.jsonl", 9, 9, 5, 3),
-            discovered("/sessions/rollout-copy.jsonl", 1, 3, 10, 1),
+            discovered(
+                &fixture_path("archived_sessions/rollout-a.jsonl"),
+                9,
+                9,
+                5,
+                3,
+            ),
+            discovered(&fixture_path("sessions/rollout-copy.jsonl"), 1, 3, 10, 1),
         ]);
         let (truncation, _) = pipeline
             .record_and_load(&fixture.ledger, &truncated)
@@ -1178,8 +1210,14 @@ mod tests {
         assert!(truncation.results[0].replaced);
 
         let rewritten = snapshot(vec![
-            discovered("/archived_sessions/rollout-a.jsonl", 9, 9, 5, 4),
-            discovered("/sessions/rollout-copy.jsonl", 1, 3, 10, 1),
+            discovered(
+                &fixture_path("archived_sessions/rollout-a.jsonl"),
+                9,
+                9,
+                5,
+                4,
+            ),
+            discovered(&fixture_path("sessions/rollout-copy.jsonl"), 1, 3, 10, 1),
         ]);
         let (rewrite, _) = pipeline
             .record_and_load(&fixture.ledger, &rewritten)
@@ -1197,7 +1235,7 @@ mod tests {
         assert_eq!(missing.entries[0].source.file_status, FileStatus::Missing);
 
         let restored = snapshot(vec![discovered(
-            "/sessions/rollout-restored.jsonl",
+            &fixture_path("sessions/rollout-restored.jsonl"),
             9,
             9,
             5,

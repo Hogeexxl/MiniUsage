@@ -1048,6 +1048,14 @@ mod tests {
         (root.join("mu.sqlite3"), root.join("codex"))
     }
 
+    fn fixture_path(name: &str) -> String {
+        std::env::temp_dir()
+            .join("miniusage-storage-metadata")
+            .join(name.trim_start_matches('/'))
+            .to_string_lossy()
+            .into_owned()
+    }
+
     fn source_fact_for(
         source_file_id: i64,
         file_generation: i64,
@@ -1121,8 +1129,8 @@ mod tests {
                     source_file_id, thread_id, current_path, source_area,
                     device_id, inode, file_generation, observed_size,
                     observed_mtime_ns, file_status, last_seen_at_ms
-                 ) VALUES (1, NULL, '/tmp/rollout.jsonl', 'sessions', 1, 2, 1, 10, 0, 'present', 10)",
-                [],
+                 ) VALUES (1, NULL, ?1, 'sessions', 1, 2, 1, 10, 0, 'present', 10)",
+                [fixture_path("rollout.jsonl")],
             )
             .unwrap();
     }
@@ -1419,7 +1427,7 @@ mod tests {
         let mut initial = ResolvedThreadPatch::new("thread", 10).unwrap();
         initial.agent_role = Patch::Set(AgentRole::Main);
         initial.project_name = Patch::Set("Existing name".to_owned());
-        initial.project_path = Patch::Set("/tmp/existing-project".to_owned());
+        initial.project_path = Patch::Set(fixture_path("existing-project"));
         initial.project_kind = Patch::Set(ProjectKind::Project);
         let group = MetadataThreadCommit::new("thread", Some(initial), Vec::new()).unwrap();
         let first = ledger
@@ -1457,7 +1465,7 @@ mod tests {
             row,
             (
                 "projectless".to_owned(),
-                "/tmp/existing-project".to_owned(),
+                fixture_path("existing-project"),
                 "Existing name".to_owned()
             )
         );
@@ -1679,7 +1687,7 @@ mod tests {
         assert!(wrong_owner.is_err());
 
         let mut bad_provenance = source_fact_for(1, 1, 10, "thread");
-        bad_provenance.cwd = Some("/tmp".to_owned());
+        bad_provenance.cwd = Some(fixture_path("tmp"));
         bad_provenance.cwd_provenance = Some(CwdProvenance::SessionMeta);
         bad_provenance.cwd_record_offset = None;
         let bad_provenance = MetadataSourceCommit::new(
@@ -1798,8 +1806,8 @@ mod tests {
                         source_file_id, thread_id, current_path, source_area,
                         device_id, inode, file_generation, observed_size,
                         observed_mtime_ns, file_status, last_seen_at_ms
-                     ) VALUES (1, NULL, '/tmp/rollout-a.jsonl', 'sessions', 1, 2, 1, 10, 0, 'present', 10)",
-                    [],
+                     ) VALUES (1, NULL, ?1, 'sessions', 1, 2, 1, 10, 0, 'present', 10)",
+                    [fixture_path("rollout-a.jsonl")],
                 )
                 .unwrap();
             connection
@@ -1808,8 +1816,8 @@ mod tests {
                         source_file_id, thread_id, current_path, source_area,
                         device_id, inode, file_generation, observed_size,
                         observed_mtime_ns, file_status, last_seen_at_ms
-                     ) VALUES (2, NULL, '/tmp/rollout-b.jsonl', 'archived_sessions', 1, 3, 1, 10, 0, 'present', 10)",
-                    [],
+                     ) VALUES (2, NULL, ?1, 'archived_sessions', 1, 3, 1, 10, 0, 'present', 10)",
+                    [fixture_path("rollout-b.jsonl")],
                 )
                 .unwrap();
         }
@@ -1849,8 +1857,8 @@ mod tests {
                         source_file_id, thread_id, current_path, source_area,
                         device_id, inode, file_generation, observed_size,
                         observed_mtime_ns, file_status, last_seen_at_ms
-                     ) VALUES (1, NULL, '/tmp/rollout-a.jsonl', 'sessions', 1, 2, 1, 10, 0, 'present', 10)",
-                    [],
+                     ) VALUES (1, NULL, ?1, 'sessions', 1, 2, 1, 10, 0, 'present', 10)",
+                    [fixture_path("rollout-a.jsonl")],
                 )
                 .unwrap();
             connection
@@ -1859,8 +1867,8 @@ mod tests {
                         source_file_id, thread_id, current_path, source_area,
                         device_id, inode, file_generation, observed_size,
                         observed_mtime_ns, file_status, last_seen_at_ms
-                     ) VALUES (2, 'other', '/tmp/rollout-b.jsonl', 'sessions', 1, 3, 1, 10, 0, 'present', 10)",
-                    [],
+                     ) VALUES (2, 'other', ?1, 'sessions', 1, 3, 1, 10, 0, 'present', 10)",
+                    [fixture_path("rollout-b.jsonl")],
                 )
                 .unwrap();
         }

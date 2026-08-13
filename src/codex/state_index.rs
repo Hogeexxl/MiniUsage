@@ -726,6 +726,14 @@ mod tests {
         domain::{AgentRole, MetadataQualityStatus, Patch, ProjectKind},
     };
 
+    fn fixture_path(name: &str) -> String {
+        std::env::temp_dir()
+            .join("miniusage-state-index")
+            .join(name.trim_start_matches('/'))
+            .to_string_lossy()
+            .into_owned()
+    }
+
     static NEXT_TEMP: AtomicU64 = AtomicU64::new(0);
 
     struct TempDb {
@@ -792,8 +800,10 @@ mod tests {
     fn complete_schema_reads_only_allowlisted_thread_and_edge_facts() {
         let database = TempDb::new();
         let connection = database.connection();
+        let rollout_path = fixture_path("sessions/rollout-child.jsonl");
+        let cwd_path = fixture_path("work/./project");
         connection
-            .execute_batch(
+            .execute_batch(&format!(
                 "CREATE TABLE threads (
                     id TEXT PRIMARY KEY, rollout_path TEXT, created_at INTEGER,
                     created_at_ms INTEGER, updated_at INTEGER, updated_at_ms INTEGER,
@@ -806,26 +816,26 @@ mod tests {
                     observed_at INTEGER, observed_at_ms INTEGER
                  );
                  INSERT INTO threads VALUES (
-                    'child', '/sessions/rollout-child.jsonl', 1, 2000, 3, 4000,
-                    1, '/work/./project', 'Title', 'Name', 'model-a', 'subagent',
+                    'child', '{rollout_path}', 1, 2000, 3, 4000,
+                    1, '{cwd_path}', 'Title', 'Name', 'model-a', 'subagent',
                     'SECRET_BODY', 'SECRET_PREVIEW', 'danger', 'never'
                  );
-                 INSERT INTO thread_spawn_edges VALUES ('parent', 'child', 'ready', 5, 6000);",
-            )
+                 INSERT INTO thread_spawn_edges VALUES ('parent', 'child', 'ready', 5, 6000);"
+            ))
             .unwrap();
         drop(connection);
 
         let snapshot = StateIndexReader::read_snapshot(&database.path).unwrap();
         assert!(snapshot.is_available());
         let fact = snapshot.thread("child").unwrap();
-        assert_eq!(
-            fact.rollout_path.as_deref(),
-            Some("/sessions/rollout-child.jsonl")
-        );
+        assert_eq!(fact.rollout_path.as_deref(), Some(rollout_path.as_str()));
         assert_eq!(fact.created_at_ms, Some(2000));
         assert_eq!(fact.updated_at_ms, Some(4000));
         assert_eq!(fact.archived, Some(true));
-        assert_eq!(fact.cwd.as_deref(), Some("/work/project"));
+        assert_eq!(
+            fact.cwd.as_deref(),
+            Some(fixture_path("work/project").as_str())
+        );
         assert_eq!(fact.title.as_deref(), Some("Title"));
         assert_eq!(fact.name.as_deref(), Some("Name"));
         assert_eq!(fact.metadata_model.as_deref(), Some("model-a"));
