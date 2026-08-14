@@ -773,4 +773,3 @@ jobs:
             --title "MiniUsage $GITHUB_REF_NAME" \
             --generate-notes \
             "${release_args[@]}"
-
