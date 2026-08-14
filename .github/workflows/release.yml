@@ -154,13 +154,13 @@ jobs:
           $installer = Join-Path $env:GITHUB_WORKSPACE "target/release/MiniUsage-v$env:TAG_VERSION-windows-x64-setup.exe"
           $installRoot = Join-Path $env:RUNNER_TEMP 'miniusage-installed'
           $runtimeRoot = Join-Path $env:RUNNER_TEMP 'miniusage-runtime'
-          $home = Join-Path $runtimeRoot 'home'
-          $codexHome = Join-Path $home '.codex'
+          $testHome = Join-Path $runtimeRoot 'home'
+          $codexHome = Join-Path $testHome '.codex'
           $localAppData = [Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)
           if ([string]::IsNullOrWhiteSpace($localAppData)) {
             throw 'Windows LocalApplicationData known folder could not be resolved'
           }
-          $appData = Join-Path $home 'AppData/Roaming'
+          $appData = Join-Path $testHome 'AppData/Roaming'
           $temp = Join-Path $runtimeRoot 'temp'
           $codexSessions = Join-Path $codexHome 'sessions'
           $codexArchived = Join-Path $codexHome 'archived_sessions'
@@ -173,14 +173,14 @@ jobs:
           if (Test-Path -LiteralPath $appDataRoot) {
             Remove-Item -LiteralPath $appDataRoot -Recurse -Force
           }
-          New-Item -ItemType Directory -Force -Path $installRoot, $runtimeRoot, $home, $temp, $appData, $codexSessions, $codexArchived | Out-Null
+          New-Item -ItemType Directory -Force -Path $installRoot, $runtimeRoot, $testHome, $temp, $appData, $codexSessions, $codexArchived | Out-Null
 
           try {
           function Invoke-InstalledRuntimeSmoke {
             param(
               [Parameter(Mandatory = $true)][string]$BinaryPath,
               [Parameter(Mandatory = $true)][string]$RuntimeRoot,
-              [Parameter(Mandatory = $true)][string]$Home,
+              [Parameter(Mandatory = $true)][string]$TestHome,
               [Parameter(Mandatory = $true)][string]$LocalAppData,
               [Parameter(Mandatory = $true)][string]$AppData,
               [Parameter(Mandatory = $true)][string]$CodexHome,
@@ -197,8 +197,8 @@ jobs:
             $startInfo.Environment['PATH'] = "$env:SystemRoot\System32;$env:SystemRoot"
             $startInfo.Environment['SystemRoot'] = $env:SystemRoot
             $startInfo.Environment['WINDIR'] = $env:SystemRoot
-            $startInfo.Environment['HOME'] = $Home
-            $startInfo.Environment['USERPROFILE'] = $Home
+            $startInfo.Environment['HOME'] = $TestHome
+            $startInfo.Environment['USERPROFILE'] = $TestHome
             $startInfo.Environment['LOCALAPPDATA'] = $LocalAppData
             $startInfo.Environment['APPDATA'] = $AppData
             $startInfo.Environment['TEMP'] = $Temp
@@ -305,7 +305,7 @@ jobs:
             throw "Expected exactly one NSIS uninstaller (uninstall*.exe, including packager uninstall.exe), found $($uninstallers.Count)"
           }
           $uninstallerPath = $uninstallers[0].FullName
-          Invoke-InstalledRuntimeSmoke -BinaryPath $installedBinary.FullName -RuntimeRoot $runtimeRoot -Home $home -LocalAppData $localAppData -AppData $appData -CodexHome $codexHome -Temp $temp
+          Invoke-InstalledRuntimeSmoke -BinaryPath $installedBinary.FullName -RuntimeRoot $runtimeRoot -TestHome $testHome -LocalAppData $localAppData -AppData $appData -CodexHome $codexHome -Temp $temp
 
           if (-not (Test-Path -LiteralPath $appDataRoot -PathType Container) -or -not (Test-Path -LiteralPath $databasePath -PathType Leaf)) {
             throw "Installed runtime did not create its user database: $databasePath"
@@ -324,7 +324,7 @@ jobs:
             throw 'NSIS reinstall changed the isolated MiniUsage database'
           }
           $installedBinary = Get-ChildItem -Path $installRoot -Recurse -Filter 'mini-usage.exe' -File | Select-Object -First 1
-          Invoke-InstalledRuntimeSmoke -BinaryPath $installedBinary.FullName -RuntimeRoot $runtimeRoot -Home $home -LocalAppData $localAppData -AppData $appData -CodexHome $codexHome -Temp $temp
+          Invoke-InstalledRuntimeSmoke -BinaryPath $installedBinary.FullName -RuntimeRoot $runtimeRoot -TestHome $testHome -LocalAppData $localAppData -AppData $appData -CodexHome $codexHome -Temp $temp
           if ((Get-Content -LiteralPath $sentinelPath -Raw) -ne 'preserve across reinstall') {
             throw 'Installed runtime relaunch did not preserve isolated MiniUsage user data'
           }
