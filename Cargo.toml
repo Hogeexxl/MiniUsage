@@ -7,6 +7,11 @@ edition = "2024"
 default = []
 embedded-frontend = ["dep:rust-embed"]
 
+[package.metadata.packager]
+product-name = "MiniUsage"
+identifier = "com.hogeexxl.miniusage"
+formats = ["nsis", "dmg"]
+
 [dependencies]
 axum = "0.8"
 directories = "6"

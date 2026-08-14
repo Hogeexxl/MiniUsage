@@ -1650,11 +1650,12 @@ pub(crate) fn normalize_agent_path(raw: &str) -> Option<String> {
 mod tests {
     use super::*;
 
-    fn physical_path(value: &str) -> String {
-        std::env::temp_dir()
-            .join(value.trim_start_matches('/'))
-            .to_string_lossy()
-            .into_owned()
+    fn physical_path(components: &[&str]) -> String {
+        let mut path = std::env::temp_dir();
+        for component in components {
+            path.push(component);
+        }
+        path.to_string_lossy().into_owned()
     }
 
     fn json_path(value: &str) -> String {
@@ -1710,8 +1711,8 @@ mod tests {
     fn parses_main_rollout_whitelist_and_envelopes() {
         let owning = uuid7(2_000, 1);
         let turn = uuid7(2_100, 2);
-        let session_cwd = json_path(&physical_path("rollout/work/./mini"));
-        let turn_cwd = json_path(&physical_path("rollout/fallback"));
+        let session_cwd = json_path(&physical_path(&["rollout", "work", ".", "mini"]));
+        let turn_cwd = json_path(&physical_path(&["rollout", "fallback"]));
         let records = vec![
             format!(
                 r#"{{"timestamp":"2026-08-08T00:00:00Z","type":"session_meta","payload":{{"id":"{owning}","timestamp":"2026-08-08T00:00:00Z","cwd":{session_cwd},"agent_role":"main","base_instructions":"never retain"}}}}"#
@@ -1749,7 +1750,10 @@ mod tests {
         );
         let fact = result.fact.unwrap();
         assert_eq!(fact.owning_thread_id, owning);
-        assert_eq!(fact.cwd.unwrap().value, physical_path("rollout/work/mini"));
+        assert_eq!(
+            fact.cwd.unwrap().value,
+            physical_path(&["rollout", "work", "mini"])
+        );
         assert_eq!(fact.latest_context_model.as_deref(), Some("gpt-main"));
         assert_eq!(fact.agent_role_hint.unwrap().value, "main");
         assert!(matches!(
@@ -1967,10 +1971,10 @@ mod tests {
         let child = uuid7(2_000, 2);
         let parent_turn = uuid7(1_500, 3);
         let child_turn = uuid7(2_100, 4);
-        let child_cwd = physical_path("rollout/child");
-        let parent_cwd = json_path(&physical_path("rollout/parent"));
-        let parent_turn_cwd = json_path(&physical_path("rollout/parent-turn"));
-        let child_turn_cwd = json_path(&physical_path("rollout/child-turn"));
+        let child_cwd = physical_path(&["rollout", "child"]);
+        let parent_cwd = json_path(&physical_path(&["rollout", "parent"]));
+        let parent_turn_cwd = json_path(&physical_path(&["rollout", "parent-turn"]));
+        let child_turn_cwd = json_path(&physical_path(&["rollout", "child-turn"]));
         let child_cwd_json = json_path(&child_cwd);
         let records = vec![
             format!(

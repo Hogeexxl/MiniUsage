@@ -135,8 +135,8 @@ impl Fixture {
         let ts_b = chrono::DateTime::from_timestamp_millis(now_ms - 1_000)
             .unwrap()
             .to_rfc3339();
-        let path_a = self.home.join("sessions/rollout-a.jsonl");
-        let path_b = self.home.join("sessions/rollout-b.jsonl");
+        let path_a = self.home.join("sessions").join("rollout-a.jsonl");
+        let path_b = self.home.join("sessions").join("rollout-b.jsonl");
         fs::write(
             &path_a,
             records(&root_records(ROOT_A, "turn-a", "model-a", 10, &ts_a)),
@@ -213,7 +213,8 @@ impl Fixture {
             .to_rfc3339();
             let path = self
                 .home
-                .join(format!("sessions/rollout-{number:02}.jsonl"));
+                .join("sessions")
+                .join(format!("rollout-{number:02}.jsonl"));
             fs::write(
                 &path,
                 records(&root_records(
@@ -247,12 +248,21 @@ impl Fixture {
     }
 
     fn seed_gate_a_tree(&self) {
-        let main_path = self.home.join("sessions/rollout-gate-main.jsonl");
-        let child_path = self.home.join("sessions/rollout-gate-child.jsonl");
-        let grandchild_path = self.home.join("sessions/rollout-gate-grandchild.jsonl");
-        let other_path = self.home.join("sessions/rollout-gate-other.jsonl");
-        let projectless_path = self.home.join("sessions/rollout-gate-projectless.jsonl");
-        let unknown_path = self.home.join("sessions/rollout-gate-unknown.jsonl");
+        let main_path = self.home.join("sessions").join("rollout-gate-main.jsonl");
+        let child_path = self.home.join("sessions").join("rollout-gate-child.jsonl");
+        let grandchild_path = self
+            .home
+            .join("sessions")
+            .join("rollout-gate-grandchild.jsonl");
+        let other_path = self.home.join("sessions").join("rollout-gate-other.jsonl");
+        let projectless_path = self
+            .home
+            .join("sessions")
+            .join("rollout-gate-projectless.jsonl");
+        let unknown_path = self
+            .home
+            .join("sessions")
+            .join("rollout-gate-unknown.jsonl");
         fs::write(
             &main_path,
             records(&[
@@ -1346,7 +1356,10 @@ async fn t_s03_001_gate_a_batch_detail_revision_and_cursor_replacement_matrix() 
     assert_eq!(too_many_response.status(), StatusCode::BAD_REQUEST);
     // The root fixture has its own file name; append directly to the gate root
     // rollout so the revision changes without changing the requested scope.
-    let gate_path = fixture.home.join("sessions/rollout-gate-main.jsonl");
+    let gate_path = fixture
+        .home
+        .join("sessions")
+        .join("rollout-gate-main.jsonl");
     let mut bytes = fs::read(&gate_path).unwrap();
     bytes.extend(records(&[token_record(140, "2026-08-08T01:01:00Z")]));
     fs::write(gate_path, bytes).unwrap();
@@ -1506,7 +1519,10 @@ async fn t_mu03_a03_metadata_v2_to_v3_rebuild_persists_canonical_title_for_detai
     // Emulate an old metadata checkpoint/fact, then provide the v3 rollout
     // agent_path.  The next scan must rebuild metadata only and persist the
     // derived title in threads; the Detail API reads that canonical title.
-    let child_path = fixture.home.join("sessions/rollout-gate-child.jsonl");
+    let child_path = fixture
+        .home
+        .join("sessions")
+        .join("rollout-gate-child.jsonl");
     fs::write(
         &child_path,
         records(&[
@@ -1587,8 +1603,11 @@ async fn t_mu03_f01_real_structure_cost_effort_closes_db_aggregate_detail_chain(
     let root_id = shared["root_session_id"].as_str().unwrap();
     let child_id = shared["child_session_id"].as_str().unwrap();
     let fixture = Fixture::new("mu03-f01-real-structure");
-    let main_path = fixture.home.join("sessions/rollout-f01-main.jsonl");
-    let child_path = fixture.home.join("sessions/rollout-f01-child.jsonl");
+    let main_path = fixture.home.join("sessions").join("rollout-f01-main.jsonl");
+    let child_path = fixture
+        .home
+        .join("sessions")
+        .join("rollout-f01-child.jsonl");
     fs::write(
         &main_path,
         records(shared["main_rollout"].as_array().unwrap()),
@@ -1951,7 +1970,7 @@ async fn t_s05_021_concurrent_usage_queries_and_real_scan_never_expose_partial_s
     let before_revision = before["data_revision"].as_i64().unwrap();
     assert_eq!(before["usage"]["total_tokens"], 30);
 
-    let path = fixture.home.join("sessions/rollout-a.jsonl");
+    let path = fixture.home.join("sessions").join("rollout-a.jsonl");
     let mut bytes = fs::read(&path).unwrap();
     let ignored = b"{\"type\":\"response_item\",\"payload\":{\"text\":\"concurrency-fixture\"}}\n";
     for _ in 0..50_000 {

@@ -5,7 +5,9 @@ fn workflow() -> String {
         .join(".github")
         .join("workflows")
         .join("ci.yml");
-    fs::read_to_string(path).expect("read GitHub CI workflow")
+    fs::read_to_string(path)
+        .expect("read GitHub CI workflow")
+        .replace("\r\n", "\n")
 }
 
 #[test]

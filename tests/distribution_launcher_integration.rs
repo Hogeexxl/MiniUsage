@@ -1,6 +1,6 @@
 use std::{
     fs, io,
-    net::{SocketAddr, TcpStream},
+    net::{SocketAddr, TcpListener},
     path::{Path, PathBuf},
     process::{Child, Command, Output, Stdio},
     time::{Duration, SystemTime, UNIX_EPOCH},
@@ -178,12 +178,11 @@ fn build_release_binary(manifest_dir: &Path) -> PathBuf {
 
 fn assert_port_is_free() {
     let address: SocketAddr = "127.0.0.1:3210".parse().unwrap();
-    match TcpStream::connect_timeout(&address, Duration::from_millis(100)) {
-        Ok(stream) => {
-            drop(stream);
-            panic!("T-DIST-006 requires 127.0.0.1:3210 to be free before smoke");
+    match TcpListener::bind(address) {
+        Ok(listener) => drop(listener),
+        Err(error) if error.kind() == io::ErrorKind::AddrInUse => {
+            panic!("T-DIST-006 requires 127.0.0.1:3210 to be free before smoke")
         }
-        Err(error) if error.kind() == io::ErrorKind::ConnectionRefused => {}
         Err(error) => panic!("could not confirm that 127.0.0.1:3210 is free: {error}"),
     }
 }

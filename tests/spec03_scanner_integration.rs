@@ -475,30 +475,46 @@ fn t_s03_016_real_scanner_preserves_child_fact_across_parent_replay_until_owning
     let child = uuid7(2_000, 2);
     let parent_turn = uuid7(1_500, 3);
     let child_turn = uuid7(2_100, 4);
+    let fixture = ScannerFixture::with_rollout("fork-replay", &child, &[]);
+    let child_cwd = fixture._root.path().join("child");
+    let parent_cwd = fixture._root.path().join("parent");
+    let parent_turn_cwd = fixture._root.path().join("parent-turn");
+    let child_turn_cwd = fixture._root.path().join("child-turn");
     let rollout = records_to_bytes(&[
         json!({
             "type": "session_meta",
             "payload": {
                 "id": child,
-                "cwd": "/child",
+                "cwd": child_cwd.to_str().unwrap(),
                 "source": {"subagent": {"thread_spawn": {
                     "parent_thread_id": parent,
                     "depth": 1
                 }}}
             }
         }),
-        json!({"type": "session_meta", "payload": {"id": parent, "cwd": "/parent"}}),
+        json!({
+            "type": "session_meta",
+            "payload": {"id": parent, "cwd": parent_cwd.to_str().unwrap()}
+        }),
         json!({
             "type": "turn_context",
-            "payload": {"turn_id": parent_turn, "cwd": "/parent-turn", "model": "parent-model"}
+            "payload": {
+                "turn_id": parent_turn,
+                "cwd": parent_turn_cwd.to_str().unwrap(),
+                "model": "parent-model"
+            }
         }),
         json!({"type": "event_msg", "payload": {"type": "token_count", "total": 111}}),
         json!({
             "type": "turn_context",
-            "payload": {"turn_id": child_turn, "cwd": "/child-turn", "model": "child-model"}
+            "payload": {
+                "turn_id": child_turn,
+                "cwd": child_turn_cwd.to_str().unwrap(),
+                "model": "child-model"
+            }
         }),
     ]);
-    let fixture = ScannerFixture::with_rollout("fork-replay", &child, &rollout);
+    fs::write(&fixture.rollout_path, rollout).expect("write rollout fixture");
 
     let state = create_state_schema(&fixture.home);
     state
@@ -506,8 +522,8 @@ fn t_s03_016_real_scanner_preserves_child_fact_across_parent_replay_until_owning
             "INSERT INTO threads (
                 id, rollout_path, created_at_ms, updated_at_ms, archived,
                 cwd, title, name, model, agent_role
-             ) VALUES (?1, NULL, 1000, 1500, 0, '/parent', 'Parent', NULL, 'parent-state', 'main')",
-            [&parent],
+             ) VALUES (?1, NULL, 1000, 1500, 0, ?2, 'Parent', NULL, 'parent-state', 'main')",
+            params![parent, parent_cwd.to_str().unwrap()],
         )
         .unwrap();
     state
@@ -515,8 +531,12 @@ fn t_s03_016_real_scanner_preserves_child_fact_across_parent_replay_until_owning
             "INSERT INTO threads (
                 id, rollout_path, created_at_ms, updated_at_ms, archived,
                 cwd, title, name, model, agent_role
-             ) VALUES (?1, ?2, 2000, 2100, 0, '/child', 'Child', NULL, 'child-state', 'subagent')",
-            params![child, fixture.rollout_path.to_str().unwrap()],
+             ) VALUES (?1, ?2, 2000, 2100, 0, ?3, 'Child', NULL, 'child-state', 'subagent')",
+            params![
+                child,
+                fixture.rollout_path.to_str().unwrap(),
+                child_cwd.to_str().unwrap()
+            ],
         )
         .unwrap();
     state
@@ -562,7 +582,7 @@ fn t_s03_016_real_scanner_preserves_child_fact_across_parent_replay_until_owning
         )
         .unwrap();
     assert_eq!(fact.0, child);
-    assert_eq!(fact.1.as_deref(), Some("/child"));
+    assert_eq!(fact.1.as_deref(), Some(child_cwd.to_str().unwrap()));
     assert_eq!(fact.2.as_deref(), Some("child-model"));
     assert_eq!(fact.3.as_deref(), Some(parent.as_str()));
     assert!(fact.4.is_some(), "parent replay start must be persisted");

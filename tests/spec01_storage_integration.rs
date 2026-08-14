@@ -59,6 +59,10 @@ impl TempRoot {
         self.0.join("codex-fixture")
     }
 
+    fn source_path(&self, file_name: &str) -> String {
+        self.0.join("sources").join(file_name).display().to_string()
+    }
+
     fn ledger(&self) -> Ledger {
         Ledger::open(LedgerOptions::new(self.db_path(), self.codex_home()))
             .expect("open temporary ledger")
@@ -283,6 +287,7 @@ fn t_s01_001_v1_schema_initial_state_pragmas_and_reopen_matrix() {
 
     let latest_root = TempRoot::new("latest-reopen");
     let ledger = latest_root.ledger();
+    let reopen_path = latest_root.source_path("reopen.jsonl");
     let pragmas = ledger.pragma_state().unwrap();
     assert!(pragmas.journal_mode_wal);
     assert!(pragmas.synchronous_normal);
@@ -296,17 +301,8 @@ fn t_s01_001_v1_schema_initial_state_pragmas_and_reopen_matrix() {
     assert!(app.scan.followup_scan_id.is_none());
     assert!(app.scan.followup_state.is_none());
 
-    let source_file_id = record_sources(
-        &ledger,
-        vec![observation(
-            "/tmp/miniusage/spec01/reopen.jsonl",
-            101,
-            201,
-            32,
-            1,
-            1,
-        )],
-    )[0];
+    let source_file_id =
+        record_sources(&ledger, vec![observation(&reopen_path, 101, 201, 32, 1, 1)])[0];
     let schema_version = ledger.schema_version().unwrap();
     drop(ledger);
 
@@ -314,10 +310,7 @@ fn t_s01_001_v1_schema_initial_state_pragmas_and_reopen_matrix() {
     assert_eq!(reopened.schema_version().unwrap(), schema_version);
     let state = reopened.load_metadata_scan_state([source_file_id]).unwrap();
     assert_eq!(state.entries.len(), 1);
-    assert_eq!(
-        state.entries[0].source.current_path,
-        "/tmp/miniusage/spec01/reopen.jsonl"
-    );
+    assert_eq!(state.entries[0].source.current_path, reopen_path);
     let connection = Connection::open(reopened.database_path()).unwrap();
     assert_eq!(
         connection
@@ -364,16 +357,10 @@ fn t_s01_002_source_identity_database_constraints_matrix() {
 fn t_s01_005_safe_fact_reuse_mismatch_matrix() {
     let root = TempRoot::new("safe-fact-matrix");
     let ledger = root.ledger();
+    let safe_fact_path = root.source_path("safe-fact.jsonl");
     let source_file_id = record_sources(
         &ledger,
-        vec![observation(
-            "/tmp/miniusage/spec01/safe-fact.jsonl",
-            301,
-            401,
-            64,
-            1,
-            1,
-        )],
+        vec![observation(&safe_fact_path, 301, 401, 64, 1, 1)],
     )[0];
     let connection = Connection::open(ledger.database_path()).unwrap();
     bootstrap_matching_fact(&connection, source_file_id, "thread-1", 7, 64);
@@ -470,16 +457,10 @@ fn t_s01_005_safe_fact_reuse_mismatch_matrix() {
 fn t_mu03_a01_agent_path_safe_fact_provenance_round_trip_and_offset_bound() {
     let root = TempRoot::new("fact-offsets");
     let ledger = root.ledger();
+    let offsets_path = root.source_path("offsets.jsonl");
     let source_file_id = record_sources(
         &ledger,
-        vec![observation(
-            "/tmp/miniusage/spec01/offsets.jsonl",
-            501,
-            601,
-            80,
-            1,
-            1,
-        )],
+        vec![observation(&offsets_path, 501, 601, 80, 1, 1)],
     )[0];
 
     let mut fact = simple_fact(source_file_id, 1, 3, 80, "thread-offsets");
@@ -558,11 +539,13 @@ fn t_mu03_a01_agent_path_safe_fact_provenance_round_trip_and_offset_bound() {
 fn t_s01_008_batch_metadata_state_is_one_sqlite_snapshot() {
     let root = TempRoot::new("snapshot");
     let ledger = Arc::new(root.ledger());
+    let snapshot_a_path = root.source_path("snapshot-a.jsonl");
+    let snapshot_b_path = root.source_path("snapshot-b.jsonl");
     let ids = record_sources(
         &ledger,
         vec![
-            observation("/tmp/miniusage/spec01/snapshot-a.jsonl", 701, 801, 64, 1, 1),
-            observation("/tmp/miniusage/spec01/snapshot-b.jsonl", 702, 802, 64, 1, 1),
+            observation(&snapshot_a_path, 701, 801, 64, 1, 1),
+            observation(&snapshot_b_path, 702, 802, 64, 1, 1),
         ],
     );
     let connection = Connection::open(ledger.database_path()).unwrap();
@@ -647,16 +630,10 @@ fn t_s01_009_metadata_transaction_rollback_survives_reopen() {
     // the transaction leaves no partial state after the database is reopened.
     let root = TempRoot::new("metadata-rollback-reopen");
     let ledger = root.ledger();
+    let rollback_path = root.source_path("rollback.jsonl");
     let source_file_id = record_sources(
         &ledger,
-        vec![observation(
-            "/tmp/miniusage/spec01/rollback.jsonl",
-            901,
-            1001,
-            80,
-            1,
-            1,
-        )],
+        vec![observation(&rollback_path, 901, 1001, 80, 1, 1)],
     )[0];
 
     let connection = Connection::open(ledger.database_path()).unwrap();
@@ -744,16 +721,10 @@ fn t_s01_009_metadata_transaction_rollback_survives_reopen() {
     // reopen, and verify that none survived.
     let crash_root = TempRoot::new("metadata-uncommitted-drop");
     let crash_ledger = crash_root.ledger();
+    let uncommitted_path = crash_root.source_path("uncommitted.jsonl");
     let crash_source = record_sources(
         &crash_ledger,
-        vec![observation(
-            "/tmp/miniusage/spec01/uncommitted.jsonl",
-            902,
-            1002,
-            80,
-            1,
-            1,
-        )],
+        vec![observation(&uncommitted_path, 902, 1002, 80, 1, 1)],
     )[0];
     let crash_db = crash_ledger.database_path().to_path_buf();
     let crash_home = crash_root.codex_home();
@@ -827,16 +798,10 @@ fn t_s01_009_metadata_transaction_rollback_survives_reopen() {
 fn t_s01_011_generation_change_deletes_persisted_safe_fact() {
     let root = TempRoot::new("generation-fact-delete");
     let ledger = root.ledger();
+    let generation_path = root.source_path("generation.jsonl");
     let source_file_id = record_sources(
         &ledger,
-        vec![observation(
-            "/tmp/miniusage/spec01/generation.jsonl",
-            1101,
-            1201,
-            100,
-            100,
-            1,
-        )],
+        vec![observation(&generation_path, 1101, 1201, 100, 100, 1)],
     )[0];
 
     let fact = simple_fact(source_file_id, 1, 1, 80, "thread-generation");
@@ -866,14 +831,7 @@ fn t_s01_011_generation_change_deletes_persisted_safe_fact() {
     let outcome = ledger
         .record_source_observations(
             SourceObservationBatch::new(
-                vec![observation(
-                    "/tmp/miniusage/spec01/generation.jsonl",
-                    1101,
-                    1201,
-                    100,
-                    101,
-                    2,
-                )],
+                vec![observation(&generation_path, 1101, 1201, 100, 101, 2)],
                 SourceRegionStatus::Complete,
                 SourceRegionStatus::Complete,
             )
@@ -901,16 +859,10 @@ fn t_s01_011_generation_change_deletes_persisted_safe_fact() {
 fn t_s01_013_deleting_source_cascades_all_consumer_checkpoints() {
     let root = TempRoot::new("checkpoint-cascade");
     let ledger = root.ledger();
+    let cascade_path = root.source_path("cascade.jsonl");
     let source_file_id = record_sources(
         &ledger,
-        vec![observation(
-            "/tmp/miniusage/spec01/cascade.jsonl",
-            1301,
-            1401,
-            100,
-            1,
-            1,
-        )],
+        vec![observation(&cascade_path, 1301, 1401, 100, 1, 1)],
     )[0];
 
     let connection = Connection::open(ledger.database_path()).unwrap();
