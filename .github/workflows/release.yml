@@ -122,7 +122,7 @@ jobs:
           if ($headers -notmatch '(?im)(machine\s+\(x64\)|IMAGE_FILE_MACHINE_AMD64|COFF-x86-64|\b866\b)') {
             throw "MiniUsage release binary must be an x64 PE image:`n$headers"
           }
-          if ($headers -notmatch '(?im)(PE32\+|IMAGE_NT_OPTIONAL_HDR64_MAGIC|\b20B\b)') {
+          if ($headers -notmatch '(?im)(PE32\+|IMAGE_NT_OPTIONAL_HDR64_MAGIC|Magic:\s*0x20B\b)') {
             throw "MiniUsage release binary must use the PE32+ optional header:`n$headers"
           }
 
