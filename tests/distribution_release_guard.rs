@@ -10,8 +10,7 @@ fn workflow() -> String {
 
 fn windows_smoke() -> String {
     fs::read_to_string(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join(".github/scripts/windows-release-smoke.ps1"),
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(".github/scripts/windows-release-smoke.ps1"),
     )
     .expect("read Windows release smoke")
     .replace("\r\n", "\n")
