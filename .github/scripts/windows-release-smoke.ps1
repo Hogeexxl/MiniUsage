@@ -75,13 +75,14 @@ function Wait-ForFile {
         if (Test-Path -LiteralPath $Path -PathType Leaf) {
             return
         }
-        $info = Get-ScheduledTaskInfo -TaskName $TaskName -ErrorAction SilentlyContinue
-        if ($null -ne $info -and $info.LastTaskResult -ne 0 -and $info.LastRunTime -gt [datetime]::MinValue) {
-            throw "Scheduled task $TaskName failed with result $($info.LastTaskResult) before producing $Path"
-        }
         Start-Sleep -Milliseconds 250
     }
-    throw "Timed out waiting for scheduled task $TaskName to produce $Path"
+
+    $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+    $info = Get-ScheduledTaskInfo -TaskName $TaskName -ErrorAction SilentlyContinue
+    $taskState = if ($null -eq $task) { '<missing>' } else { [string]$task.State }
+    $lastTaskResult = if ($null -eq $info) { '<unknown>' } else { [string]$info.LastTaskResult }
+    throw "Timed out waiting for scheduled task $TaskName to produce $Path (state=$taskState, last_result=$lastTaskResult)"
 }
 
 function Stop-InstalledRuntime {
