@@ -31,6 +31,7 @@ jobs:
         run: |
           set -euo pipefail
           bash -n .github/scripts/s13-public-release-e2e.sh
+          ruby -e "require 'yaml'; YAML.load_file('.github/workflows/s13-final-validation.yml')"
           grep -Fq 'workflows:' .github/workflows/s13-final-validation.yml
           grep -Fq -- '- Release' .github/workflows/s13-final-validation.yml
           grep -Fq "!contains(github.event.workflow_run.head_branch, '-rc.')" .github/workflows/s13-final-validation.yml
@@ -63,4 +64,3 @@ jobs:
           cargo build --release --features embedded-frontend
           test -x target/release/mini-usage
           file target/release/mini-usage | grep -Eq 'arm64|aarch64'
-          ./target/release/mini-usage --help >/dev/null 2>&1 || true
