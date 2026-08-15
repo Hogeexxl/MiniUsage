@@ -8,9 +8,18 @@ fn workflow() -> String {
     .replace("\r\n", "\n")
 }
 
+fn windows_smoke() -> String {
+    fs::read_to_string(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(".github/scripts/windows-release-smoke.ps1"),
+    )
+    .expect("read Windows release smoke")
+    .replace("\r\n", "\n")
+}
+
 #[test]
 fn t_dist_012_release_workflow_is_tag_only_and_version_gated() {
     let release = workflow();
+    let windows_smoke = windows_smoke();
     assert!(release.contains("on:\n  push:\n    tags:\n      - 'v*.*.*'"));
     assert!(!release.contains("workflow_dispatch:"));
     assert!(!release.contains("pull_request:"));
@@ -46,7 +55,7 @@ fn t_dist_012_release_workflow_is_tag_only_and_version_gated() {
     assert!(release.contains("macos_name=\"MiniUsage-v${version}-macos-arm64.dmg\""));
     assert!(release.contains("TAG_VERSION=$tagVersion"));
     assert!(release.contains("CARGO_VERSION=$cargoVersion"));
-    assert!(release.contains("expectedBinaryVersion = $env:CARGO_VERSION"));
+    assert!(windows_smoke.contains("expectedBinaryVersion = $env:CARGO_VERSION"));
     assert!(release.contains("X-MiniUsage-Version"));
 }
 
@@ -94,6 +103,8 @@ fn t_dist_012_release_jobs_build_only_supported_assets() {
 #[test]
 fn t_dist_013_windows_release_has_static_runtime_and_install_smoke() {
     let release = workflow();
+    let smoke = windows_smoke();
+
     for required in [
         "target-feature=+crt-static",
         "VCRUNTIME",
@@ -106,6 +117,15 @@ fn t_dist_013_windows_release_has_static_runtime_and_install_smoke() {
         "expectedPackagerName = \"mini-usage_$($env:CARGO_VERSION)_x64-setup.exe\"",
         "$generated[0].Name -cne $expectedPackagerName",
         "T-DIST-013 clean-runtime installer smoke",
+        ".github/scripts/windows-release-smoke.ps1",
+    ] {
+        assert!(
+            release.contains(required),
+            "Windows packaging workflow guard is missing: {required}"
+        );
+    }
+
+    for required in [
         "Start-Process -FilePath $installer",
         "'/S'",
         "MINIUSAGE_DISABLE_BROWSER",
@@ -126,23 +146,52 @@ fn t_dist_013_windows_release_has_static_runtime_and_install_smoke() {
         "NSIS uninstall left mini-usage.exe",
         "databaseHashBeforeUninstall",
         "sentinelHashBeforeUninstall",
+        "New-LocalUser",
+        "CreateProcessWithLogonW",
+        "LOGON_WITH_PROFILE",
+        "CREATE_NO_WINDOW",
+        "IntPtr.Zero",
+        "lpEnvironment",
+        "Start-IsolatedUserProcess",
+        "Stop-IsolatedProcessTree",
+        "Get-Service -Name 'seclogon'",
+        "[Security.Principal.WindowsIdentity]::GetCurrent().User.Value",
         "[Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)",
-        "LocalApplicationData known folder",
+        "CreateProcessWithLogonW did not run as the isolated Windows user",
+        "Installed runtime resolved the wrong Windows LocalApplicationData known folder",
         "$appDataRoot = Join-Path $localAppData 'MiniUsage'",
-        "Remove-Item -LiteralPath $appDataRoot -Recurse -Force",
-        "finally {",
-        "Remove-Item -LiteralPath $installRoot -Recurse -Force",
-        "Join-Path $localAppData 'MiniUsage'",
+        "Windows LocalApplicationData escaped the isolated user profile",
+        "Get-CimInstance -ClassName Win32_UserProfile",
+        "Remove-CimInstance",
+        "Remove-LocalUser",
+        "`$env:PATH = \"`$env:SystemRoot\\System32;`$env:SystemRoot\"",
         "Installed runtime unexpectedly contains a frontend directory",
     ] {
         assert!(
-            release.contains(required),
-            "Windows packaging guard is missing: {required}"
+            smoke.contains(required),
+            "Windows clean-runtime smoke guard is missing: {required}"
         );
     }
-    assert!(!release.contains("if ($null -ne $uninstaller)"));
-    assert!(!release.contains("Join-Path $home 'AppData/Local'"));
-    assert!(!release.contains("$dataRoot"));
+
+    for forbidden in [
+        "if ($null -ne $uninstaller)",
+        "Join-Path $home 'AppData/Local'",
+        "$dataRoot",
+        "Environment['HOME']",
+        "Environment['USERPROFILE']",
+        "Environment['LOCALAPPDATA']",
+        "-Credential $credential",
+        "-LoadUserProfile",
+        "Register-ScheduledTask",
+        "Start-ScheduledTask",
+        "Stop-ScheduledTask",
+        "Unregister-ScheduledTask",
+    ] {
+        assert!(
+            !smoke.contains(forbidden),
+            "Windows clean-runtime smoke must not use obsolete isolation mechanism: {forbidden}"
+        );
+    }
 }
 
 #[test]
