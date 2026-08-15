@@ -147,16 +147,25 @@ fn t_dist_013_windows_release_has_static_runtime_and_install_smoke() {
         "databaseHashBeforeUninstall",
         "sentinelHashBeforeUninstall",
         "New-LocalUser",
+        "Register-ScheduledTask",
+        "New-ScheduledTaskAction",
+        "-User $testAccount",
+        "-Password $plainPassword",
+        "-RunLevel Limited",
+        "Start-ScheduledTask",
+        "Get-ScheduledTaskInfo",
+        "Stop-ScheduledTask",
+        "Unregister-ScheduledTask",
         "Get-CimInstance -ClassName Win32_UserProfile",
-        "-Credential $credential",
-        "-LoadUserProfile",
+        "[Security.Principal.WindowsIdentity]::GetCurrent().User.Value",
         "[Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)",
-        "LocalApplicationData known folder",
+        "Windows password-logon task did not run as the isolated user",
+        "Installed runtime resolved the wrong Windows LocalApplicationData known folder",
         "$appDataRoot = Join-Path $localAppData 'MiniUsage'",
         "Windows LocalApplicationData escaped the isolated user profile",
         "Remove-CimInstance",
         "Remove-LocalUser",
-        "set \"PATH=%SystemRoot%\\System32;%SystemRoot%\"",
+        "`$env:PATH = \"`$env:SystemRoot\\System32;`$env:SystemRoot\"",
         "Installed runtime unexpectedly contains a frontend directory",
     ] {
         assert!(
@@ -171,6 +180,8 @@ fn t_dist_013_windows_release_has_static_runtime_and_install_smoke() {
     assert!(!smoke.contains("Environment['HOME']"));
     assert!(!smoke.contains("Environment['USERPROFILE']"));
     assert!(!smoke.contains("Environment['LOCALAPPDATA']"));
+    assert!(!smoke.contains("-Credential $credential"));
+    assert!(!smoke.contains("-LoadUserProfile"));
 }
 
 #[test]
