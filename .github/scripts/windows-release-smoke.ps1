@@ -235,10 +235,10 @@ exit `$LASTEXITCODE
 }
 
 try {
-    Grant-TestUserModify -Path $workRoot
     New-LocalUser -Name $testUser -Password $securePassword -PasswordNeverExpires -UserMayNotChangePassword | Out-Null
     $testUserCreated = $true
     $testUserSid = (Get-LocalUser -Name $testUser).SID.Value
+    Grant-TestUserModify -Path $workRoot
 
     $probeTaskName = "MiniUsage-S12-Probe-$([Guid]::NewGuid().ToString('N'))"
     $probeScript = Join-Path $workRoot 'probe-profile.ps1'
