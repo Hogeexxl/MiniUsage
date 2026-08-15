@@ -6,67 +6,209 @@ if (-not (Test-Path -LiteralPath $installer -PathType Leaf)) {
     throw "Windows installer was not found: $installer"
 }
 
+Add-Type -TypeDefinition @'
+using System;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+using System.Text;
+
+namespace MiniUsage.Acceptance
+{
+    public sealed class AlternateUserProcess : IDisposable
+    {
+        private IntPtr processHandle;
+        private IntPtr threadHandle;
+
+        internal AlternateUserProcess(IntPtr processHandle, IntPtr threadHandle, uint processId)
+        {
+            this.processHandle = processHandle;
+            this.threadHandle = threadHandle;
+            ProcessId = processId;
+        }
+
+        public uint ProcessId { get; private set; }
+
+        public int WaitForExit(int milliseconds)
+        {
+            if (processHandle == IntPtr.Zero)
+                throw new ObjectDisposedException(nameof(AlternateUserProcess));
+
+            uint wait = NativeMethods.WaitForSingleObject(processHandle, (uint)milliseconds);
+            if (wait == NativeMethods.WAIT_TIMEOUT)
+                return int.MinValue;
+            if (wait != NativeMethods.WAIT_OBJECT_0)
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "WaitForSingleObject failed");
+
+            if (!NativeMethods.GetExitCodeProcess(processHandle, out uint exitCode))
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "GetExitCodeProcess failed");
+            return unchecked((int)exitCode);
+        }
+
+        public void Dispose()
+        {
+            if (threadHandle != IntPtr.Zero)
+            {
+                NativeMethods.CloseHandle(threadHandle);
+                threadHandle = IntPtr.Zero;
+            }
+            if (processHandle != IntPtr.Zero)
+            {
+                NativeMethods.CloseHandle(processHandle);
+                processHandle = IntPtr.Zero;
+            }
+            GC.SuppressFinalize(this);
+        }
+    }
+
+    public static class NativeLogon
+    {
+        private const int LOGON_WITH_PROFILE = 0x00000001;
+        private const uint CREATE_NO_WINDOW = 0x08000000;
+
+        public static AlternateUserProcess Start(
+            string userName,
+            string domain,
+            string password,
+            string applicationName,
+            string arguments,
+            string currentDirectory)
+        {
+            var startupInfo = new NativeMethods.STARTUPINFO();
+            startupInfo.cb = Marshal.SizeOf(typeof(NativeMethods.STARTUPINFO));
+
+            string command = "\"" + applicationName + "\"";
+            if (!String.IsNullOrWhiteSpace(arguments))
+                command += " " + arguments;
+            var commandLine = new StringBuilder(command, Math.Max(1024, command.Length + 1));
+
+            if (!NativeMethods.CreateProcessWithLogonW(
+                    userName,
+                    domain,
+                    password,
+                    LOGON_WITH_PROFILE,
+                    applicationName,
+                    commandLine,
+                    CREATE_NO_WINDOW,
+                    IntPtr.Zero,
+                    currentDirectory,
+                    ref startupInfo,
+                    out NativeMethods.PROCESS_INFORMATION processInfo))
+            {
+                int error = Marshal.GetLastWin32Error();
+                throw new Win32Exception(error, "CreateProcessWithLogonW(LOGON_WITH_PROFILE) failed");
+            }
+
+            return new AlternateUserProcess(
+                processInfo.hProcess,
+                processInfo.hThread,
+                processInfo.dwProcessId);
+        }
+    }
+
+    internal static class NativeMethods
+    {
+        internal const uint WAIT_OBJECT_0 = 0x00000000;
+        internal const uint WAIT_TIMEOUT = 0x00000102;
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        internal struct STARTUPINFO
+        {
+            internal int cb;
+            internal string lpReserved;
+            internal string lpDesktop;
+            internal string lpTitle;
+            internal int dwX;
+            internal int dwY;
+            internal int dwXSize;
+            internal int dwYSize;
+            internal int dwXCountChars;
+            internal int dwYCountChars;
+            internal int dwFillAttribute;
+            internal int dwFlags;
+            internal short wShowWindow;
+            internal short cbReserved2;
+            internal IntPtr lpReserved2;
+            internal IntPtr hStdInput;
+            internal IntPtr hStdOutput;
+            internal IntPtr hStdError;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct PROCESS_INFORMATION
+        {
+            internal IntPtr hProcess;
+            internal IntPtr hThread;
+            internal uint dwProcessId;
+            internal uint dwThreadId;
+        }
+
+        [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool CreateProcessWithLogonW(
+            string lpUsername,
+            string lpDomain,
+            string lpPassword,
+            int dwLogonFlags,
+            string lpApplicationName,
+            StringBuilder lpCommandLine,
+            uint dwCreationFlags,
+            IntPtr lpEnvironment,
+            string lpCurrentDirectory,
+            ref STARTUPINFO lpStartupInfo,
+            out PROCESS_INFORMATION lpProcessInformation);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool CloseHandle(IntPtr hObject);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        internal static extern uint WaitForSingleObject(IntPtr hHandle, uint dwMilliseconds);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool GetExitCodeProcess(IntPtr hProcess, out uint lpExitCode);
+    }
+}
+'@
+
 $testUser = "mu-ci-$([Guid]::NewGuid().ToString('N').Substring(0, 8))"
-$testAccount = "$env:COMPUTERNAME\$testUser"
 $plainPassword = "Mu!9aA$([Guid]::NewGuid().ToString('N'))"
 $securePassword = ConvertTo-SecureString $plainPassword -AsPlainText -Force
 $testUserCreated = $false
 $testUserSid = $null
 $profilePath = $null
 $workRoot = Join-Path $env:ProgramData "MiniUsage-S12-$([Guid]::NewGuid().ToString('N'))"
-$registeredTasks = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
 
 function Grant-TestUserModify {
     param([Parameter(Mandatory = $true)][string]$Path)
 
     New-Item -ItemType Directory -Force -Path $Path | Out-Null
-    & (Join-Path $env:SystemRoot 'System32\icacls.exe') $Path /grant "${testAccount}:(OI)(CI)M" /T /C | Out-Null
+    & (Join-Path $env:SystemRoot 'System32\icacls.exe') $Path /grant "${testUser}:(OI)(CI)M" /T /C | Out-Null
     if ($LASTEXITCODE -ne 0) {
         throw "Failed to grant isolated Windows user modify access to $Path"
     }
 }
 
-function Register-PasswordTask {
+function Start-IsolatedUserProcess {
     param(
-        [Parameter(Mandatory = $true)][string]$TaskName,
-        [Parameter(Mandatory = $true)][string]$Execute,
+        [Parameter(Mandatory = $true)][string]$ApplicationName,
         [Parameter(Mandatory = $true)][string]$Arguments,
         [Parameter(Mandatory = $true)][string]$WorkingDirectory
     )
 
-    $action = New-ScheduledTaskAction -Execute $Execute -Argument $Arguments -WorkingDirectory $WorkingDirectory
-    Register-ScheduledTask `
-        -TaskName $TaskName `
-        -Action $action `
-        -User $testAccount `
-        -Password $plainPassword `
-        -RunLevel Limited `
-        -Force | Out-Null
-    [void]$registeredTasks.Add($TaskName)
-}
-
-function Remove-TestTask {
-    param(
-        [Parameter(Mandatory = $true)][string]$TaskName,
-        [switch]$Stop
-    )
-
-    $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
-    if ($null -eq $task) {
-        [void]$registeredTasks.Remove($TaskName)
-        return
-    }
-    if ($Stop) {
-        Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue | Out-Null
-    }
-    Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
-    [void]$registeredTasks.Remove($TaskName)
+    return [MiniUsage.Acceptance.NativeLogon]::Start(
+        $testUser,
+        '.',
+        $plainPassword,
+        $ApplicationName,
+        $Arguments,
+        $WorkingDirectory)
 }
 
 function Wait-ForFile {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
-        [Parameter(Mandatory = $true)][string]$TaskName,
+        [Parameter(Mandatory = $true)][MiniUsage.Acceptance.AlternateUserProcess]$Process,
         [int]$TimeoutSeconds = 30
     )
 
@@ -75,36 +217,27 @@ function Wait-ForFile {
         if (Test-Path -LiteralPath $Path -PathType Leaf) {
             return
         }
+        $exit = $Process.WaitForExit(0)
+        if ($exit -ne [int]::MinValue) {
+            throw "Isolated Windows process $($Process.ProcessId) exited with $exit before producing $Path"
+        }
         Start-Sleep -Milliseconds 250
     }
-
-    $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
-    $info = Get-ScheduledTaskInfo -TaskName $TaskName -ErrorAction SilentlyContinue
-    $taskState = if ($null -eq $task) { '<missing>' } else { [string]$task.State }
-    $lastTaskResult = if ($null -eq $info) { '<unknown>' } else { [string]$info.LastTaskResult }
-    throw "Timed out waiting for scheduled task $TaskName to produce $Path (state=$taskState, last_result=$lastTaskResult)"
+    throw "Timed out waiting for isolated Windows process $($Process.ProcessId) to produce $Path"
 }
 
-function Stop-InstalledRuntime {
-    param(
-        [Parameter(Mandatory = $true)][string]$TaskName,
-        [Parameter(Mandatory = $true)][string]$BinaryPath
-    )
+function Stop-IsolatedProcessTree {
+    param([Parameter(Mandatory = $true)][MiniUsage.Acceptance.AlternateUserProcess]$Process)
 
-    Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue | Out-Null
-    $deadline = (Get-Date).AddSeconds(10)
-    while ((Get-Date) -lt $deadline) {
-        $processes = @(Get-CimInstance Win32_Process -Filter "Name = 'mini-usage.exe'" -ErrorAction SilentlyContinue |
-            Where-Object { [string]$_.ExecutablePath -and [string]$_.ExecutablePath -ieq $BinaryPath })
-        if ($processes.Count -eq 0) {
-            break
+    if ($Process.WaitForExit(0) -eq [int]::MinValue) {
+        & (Join-Path $env:SystemRoot 'System32\taskkill.exe') /PID $Process.ProcessId /T /F | Out-Null
+        $deadline = (Get-Date).AddSeconds(10)
+        while ((Get-Date) -lt $deadline) {
+            if ($Process.WaitForExit(250) -ne [int]::MinValue) {
+                break
+            }
         }
-        foreach ($process in $processes) {
-            Stop-Process -Id ([int]$process.ProcessId) -Force -ErrorAction SilentlyContinue
-        }
-        Start-Sleep -Milliseconds 250
     }
-    Remove-TestTask -TaskName $TaskName
 }
 
 function Invoke-InstalledRuntimeSmoke {
@@ -121,11 +254,12 @@ function Invoke-InstalledRuntimeSmoke {
     Grant-TestUserModify -Path $CodexHome
     New-Item -ItemType Directory -Force -Path (Join-Path $CodexHome 'sessions'), (Join-Path $CodexHome 'archived_sessions') | Out-Null
 
-    $taskName = "MiniUsage-S12-Runtime-$([Guid]::NewGuid().ToString('N'))"
     $launcher = Join-Path $RuntimeRoot 'launch-mini-usage.ps1'
     $runtimeIdentityPath = Join-Path $RuntimeRoot 'runtime-identity.json'
     $stdoutPath = Join-Path $RuntimeRoot 'stdout.log'
     $stderrPath = Join-Path $RuntimeRoot 'stderr.log'
+    Remove-Item -LiteralPath $runtimeIdentityPath, $stdoutPath, $stderrPath -Force -ErrorAction SilentlyContinue
+
     $escapedBinary = $BinaryPath.Replace("'", "''")
     $escapedRuntimeRoot = $RuntimeRoot.Replace("'", "''")
     $escapedCodexHome = $CodexHome.Replace("'", "''")
@@ -155,11 +289,10 @@ exit `$LASTEXITCODE
 
     $pwsh = Join-Path $PSHOME 'pwsh.exe'
     $arguments = "-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$launcher`""
-    Register-PasswordTask -TaskName $taskName -Execute $pwsh -Arguments $arguments -WorkingDirectory $RuntimeRoot
+    $process = Start-IsolatedUserProcess -ApplicationName $pwsh -Arguments $arguments -WorkingDirectory $RuntimeRoot
 
     try {
-        Start-ScheduledTask -TaskName $taskName
-        Wait-ForFile -Path $runtimeIdentityPath -TaskName $taskName
+        Wait-ForFile -Path $runtimeIdentityPath -Process $process
         $runtimeIdentity = Get-Content -LiteralPath $runtimeIdentityPath -Raw | ConvertFrom-Json
         if ([string]$runtimeIdentity.UserSid -ne [string]$testUserSid) {
             throw "Installed runtime did not run as isolated Windows user: $($runtimeIdentity.UserName) / $($runtimeIdentity.UserSid)"
@@ -171,6 +304,9 @@ exit `$LASTEXITCODE
         $healthy = $false
         $deadline = (Get-Date).AddSeconds(30)
         while ((Get-Date) -lt $deadline) {
+            if ($process.WaitForExit(0) -ne [int]::MinValue) {
+                break
+            }
             try {
                 $response = Invoke-WebRequest -UseBasicParsing -SkipHttpErrorCheck -Uri 'http://127.0.0.1:3210/api/health' -TimeoutSec 2
                 $expectedBinaryVersion = $env:CARGO_VERSION
@@ -189,7 +325,8 @@ exit `$LASTEXITCODE
             if (Test-Path -LiteralPath $stderrPath) {
                 Get-Content -LiteralPath $stderrPath -ErrorAction SilentlyContinue | Write-Host
             }
-            throw 'Installed Windows runtime did not pass the health marker/version smoke'
+            $runtimeExit = $process.WaitForExit(0)
+            throw "Installed Windows runtime did not pass the health marker/version smoke (launcher_exit=$runtimeExit)"
         }
 
         $root = Invoke-WebRequest -UseBasicParsing -SkipHttpErrorCheck -Uri 'http://127.0.0.1:3210/' -TimeoutSec 5
@@ -231,17 +368,22 @@ exit `$LASTEXITCODE
             throw 'Installed Windows runtime unknown API returned the wrong error code'
         }
     } finally {
-        Stop-InstalledRuntime -TaskName $taskName -BinaryPath $BinaryPath
+        Stop-IsolatedProcessTree -Process $process
+        $process.Dispose()
     }
 }
 
 try {
+    $secondaryLogon = Get-Service -Name 'seclogon' -ErrorAction Stop
+    if ($secondaryLogon.Status -ne 'Running') {
+        Start-Service -Name 'seclogon'
+    }
+
     New-LocalUser -Name $testUser -Password $securePassword -PasswordNeverExpires -UserMayNotChangePassword | Out-Null
     $testUserCreated = $true
     $testUserSid = (Get-LocalUser -Name $testUser).SID.Value
     Grant-TestUserModify -Path $workRoot
 
-    $probeTaskName = "MiniUsage-S12-Probe-$([Guid]::NewGuid().ToString('N'))"
     $probeScript = Join-Path $workRoot 'probe-profile.ps1'
     $probeResult = Join-Path $workRoot 'probe-profile.json'
     $escapedProbeResult = $probeResult.Replace("'", "''")
@@ -255,23 +397,31 @@ try {
 } | ConvertTo-Json -Compress | Set-Content -LiteralPath '$escapedProbeResult' -Encoding utf8 -NoNewline
 "@ | Set-Content -LiteralPath $probeScript -Encoding utf8
 
+    $pwsh = Join-Path $PSHOME 'pwsh.exe'
     $probeArguments = "-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$probeScript`""
-    Register-PasswordTask -TaskName $probeTaskName -Execute (Join-Path $PSHOME 'pwsh.exe') -Arguments $probeArguments -WorkingDirectory $workRoot
+    $probeProcess = Start-IsolatedUserProcess -ApplicationName $pwsh -Arguments $probeArguments -WorkingDirectory $workRoot
     try {
-        Start-ScheduledTask -TaskName $probeTaskName
-        Wait-ForFile -Path $probeResult -TaskName $probeTaskName
+        Wait-ForFile -Path $probeResult -Process $probeProcess
+        $probeExit = $probeProcess.WaitForExit(30000)
+        if ($probeExit -eq [int]::MinValue) {
+            throw "Isolated Windows profile probe did not exit after writing $probeResult"
+        }
+        if ($probeExit -ne 0) {
+            throw "Isolated Windows profile probe exited with $probeExit"
+        }
         $probe = Get-Content -LiteralPath $probeResult -Raw | ConvertFrom-Json
     } finally {
-        Remove-TestTask -TaskName $probeTaskName -Stop
+        Stop-IsolatedProcessTree -Process $probeProcess
+        $probeProcess.Dispose()
     }
 
     if ([string]$probe.UserSid -ne [string]$testUserSid) {
-        throw "Windows password-logon task did not run as the isolated user: $($probe.UserName) / $($probe.UserSid)"
+        throw "CreateProcessWithLogonW did not run as the isolated Windows user: $($probe.UserName) / $($probe.UserSid)"
     }
     $profilePath = [string]$probe.UserProfile
     $localAppData = [string]$probe.LocalAppData
     if ([string]::IsNullOrWhiteSpace($profilePath) -or [string]::IsNullOrWhiteSpace($localAppData)) {
-        throw 'Windows password-logon task did not resolve an isolated user profile and LocalApplicationData known folder'
+        throw 'CreateProcessWithLogonW did not resolve an isolated user profile and LocalApplicationData known folder'
     }
     if (-not $localAppData.StartsWith($profilePath, [System.StringComparison]::OrdinalIgnoreCase)) {
         throw "Windows LocalApplicationData escaped the isolated user profile: $localAppData"
@@ -282,7 +432,7 @@ try {
         throw "Isolated Windows user profile was not created for SID $testUserSid"
     }
     if ([string]$profile.LocalPath -ine $profilePath) {
-        throw "Windows profile registry path does not match password-logon task profile: $($profile.LocalPath) vs $profilePath"
+        throw "Windows profile registry path does not match native logon profile: $($profile.LocalPath) vs $profilePath"
     }
 
     $installRoot = Join-Path $workRoot 'install'
@@ -396,9 +546,6 @@ try {
         throw 'NSIS uninstall changed isolated MiniUsage user data'
     }
 } finally {
-    foreach ($taskName in @($registeredTasks)) {
-        Remove-TestTask -TaskName $taskName -Stop
-    }
     if ($testUserCreated) {
         if ($null -ne $testUserSid) {
             try {
