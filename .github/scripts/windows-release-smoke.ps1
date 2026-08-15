@@ -7,76 +7,165 @@ if (-not (Test-Path -LiteralPath $installer -PathType Leaf)) {
 }
 
 $testUser = "mu-ci-$([Guid]::NewGuid().ToString('N').Substring(0, 8))"
+$testAccount = "$env:COMPUTERNAME\$testUser"
 $plainPassword = "Mu!9aA$([Guid]::NewGuid().ToString('N'))"
 $securePassword = ConvertTo-SecureString $plainPassword -AsPlainText -Force
-$credential = [System.Management.Automation.PSCredential]::new("$env:COMPUTERNAME\$testUser", $securePassword)
 $testUserCreated = $false
 $testUserSid = $null
 $profilePath = $null
+$workRoot = Join-Path $env:ProgramData "MiniUsage-S12-$([Guid]::NewGuid().ToString('N'))"
+$registeredTasks = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
 
-function Stop-TestProcessTree {
-    param([Parameter(Mandatory = $true)][System.Diagnostics.Process]$Process)
+function Grant-TestUserModify {
+    param([Parameter(Mandatory = $true)][string]$Path)
 
-    if ($Process.HasExited) {
+    New-Item -ItemType Directory -Force -Path $Path | Out-Null
+    & (Join-Path $env:SystemRoot 'System32\icacls.exe') $Path /grant "${testAccount}:(OI)(CI)M" /T /C | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to grant isolated Windows user modify access to $Path"
+    }
+}
+
+function Register-PasswordTask {
+    param(
+        [Parameter(Mandatory = $true)][string]$TaskName,
+        [Parameter(Mandatory = $true)][string]$Execute,
+        [Parameter(Mandatory = $true)][string]$Arguments,
+        [Parameter(Mandatory = $true)][string]$WorkingDirectory
+    )
+
+    $action = New-ScheduledTaskAction -Execute $Execute -Argument $Arguments -WorkingDirectory $WorkingDirectory
+    Register-ScheduledTask `
+        -TaskName $TaskName `
+        -Action $action `
+        -User $testAccount `
+        -Password $plainPassword `
+        -RunLevel Limited `
+        -Force | Out-Null
+    [void]$registeredTasks.Add($TaskName)
+}
+
+function Remove-TestTask {
+    param(
+        [Parameter(Mandatory = $true)][string]$TaskName,
+        [switch]$Stop
+    )
+
+    $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+    if ($null -eq $task) {
+        [void]$registeredTasks.Remove($TaskName)
         return
     }
-
-    try {
-        & (Join-Path $env:SystemRoot 'System32\taskkill.exe') /PID $Process.Id /T /F | Out-Null
-    } catch {
-        try {
-            $Process.Kill()
-        } catch {
-            # Preserve the smoke failure while still attempting cleanup.
-        }
+    if ($Stop) {
+        Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue | Out-Null
     }
+    Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
+    [void]$registeredTasks.Remove($TaskName)
+}
 
-    try {
-        if (-not $Process.WaitForExit(10000)) {
-            throw "Timed out waiting for test process tree $($Process.Id) to stop"
+function Wait-ForFile {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$TaskName,
+        [int]$TimeoutSeconds = 30
+    )
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $deadline) {
+        if (Test-Path -LiteralPath $Path -PathType Leaf) {
+            return
         }
-    } catch {
-        # Preserve the original smoke failure when cleanup races process exit.
+        $info = Get-ScheduledTaskInfo -TaskName $TaskName -ErrorAction SilentlyContinue
+        if ($null -ne $info -and $info.LastTaskResult -ne 0 -and $info.LastRunTime -gt [datetime]::MinValue) {
+            throw "Scheduled task $TaskName failed with result $($info.LastTaskResult) before producing $Path"
+        }
+        Start-Sleep -Milliseconds 250
     }
+    throw "Timed out waiting for scheduled task $TaskName to produce $Path"
+}
+
+function Stop-InstalledRuntime {
+    param(
+        [Parameter(Mandatory = $true)][string]$TaskName,
+        [Parameter(Mandatory = $true)][string]$BinaryPath
+    )
+
+    Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue | Out-Null
+    $deadline = (Get-Date).AddSeconds(10)
+    while ((Get-Date) -lt $deadline) {
+        $processes = @(Get-CimInstance Win32_Process -Filter "Name = 'mini-usage.exe'" -ErrorAction SilentlyContinue |
+            Where-Object { [string]$_.ExecutablePath -and [string]$_.ExecutablePath -ieq $BinaryPath })
+        if ($processes.Count -eq 0) {
+            break
+        }
+        foreach ($process in $processes) {
+            Stop-Process -Id ([int]$process.ProcessId) -Force -ErrorAction SilentlyContinue
+        }
+        Start-Sleep -Milliseconds 250
+    }
+    Remove-TestTask -TaskName $TaskName
 }
 
 function Invoke-InstalledRuntimeSmoke {
     param(
         [Parameter(Mandatory = $true)][string]$BinaryPath,
         [Parameter(Mandatory = $true)][string]$RuntimeRoot,
-        [Parameter(Mandatory = $true)][System.Management.Automation.PSCredential]$Credential,
         [Parameter(Mandatory = $true)][string]$CodexHome,
-        [Parameter(Mandatory = $true)][string]$Temp
+        [Parameter(Mandatory = $true)][string]$Temp,
+        [Parameter(Mandatory = $true)][string]$ExpectedLocalAppData
     )
 
-    $launcher = Join-Path $RuntimeRoot 'launch-mini-usage.cmd'
+    Grant-TestUserModify -Path $RuntimeRoot
+    Grant-TestUserModify -Path $Temp
+    Grant-TestUserModify -Path $CodexHome
+    New-Item -ItemType Directory -Force -Path (Join-Path $CodexHome 'sessions'), (Join-Path $CodexHome 'archived_sessions') | Out-Null
+
+    $taskName = "MiniUsage-S12-Runtime-$([Guid]::NewGuid().ToString('N'))"
+    $launcher = Join-Path $RuntimeRoot 'launch-mini-usage.ps1'
+    $runtimeIdentityPath = Join-Path $RuntimeRoot 'runtime-identity.json'
     $stdoutPath = Join-Path $RuntimeRoot 'stdout.log'
     $stderrPath = Join-Path $RuntimeRoot 'stderr.log'
-    @"
-@echo off
-set "PATH=%SystemRoot%\System32;%SystemRoot%"
-set "CARGO_HOME="
-set "RUSTUP_HOME="
-set "NODE_PATH="
-set "npm_config_prefix="
-set "TEMP=$Temp"
-set "TMP=$Temp"
-set "CODEX_HOME=$CodexHome"
-set "MINIUSAGE_DISABLE_BROWSER=1"
-cd /d "$RuntimeRoot"
-"$BinaryPath" >"$stdoutPath" 2>"$stderrPath"
-"@ | Set-Content -LiteralPath $launcher -Encoding ascii
+    $escapedBinary = $BinaryPath.Replace("'", "''")
+    $escapedRuntimeRoot = $RuntimeRoot.Replace("'", "''")
+    $escapedCodexHome = $CodexHome.Replace("'", "''")
+    $escapedTemp = $Temp.Replace("'", "''")
+    $escapedIdentityPath = $runtimeIdentityPath.Replace("'", "''")
+    $escapedStdout = $stdoutPath.Replace("'", "''")
+    $escapedStderr = $stderrPath.Replace("'", "''")
 
-    $cmd = Join-Path $env:SystemRoot 'System32\cmd.exe'
-    $process = $null
+    @"
+`$ErrorActionPreference = 'Stop'
+`$env:PATH = "`$env:SystemRoot\System32;`$env:SystemRoot"
+Remove-Item Env:CARGO_HOME, Env:RUSTUP_HOME, Env:NODE_PATH, Env:npm_config_prefix -ErrorAction SilentlyContinue
+`$env:TEMP = '$escapedTemp'
+`$env:TMP = '$escapedTemp'
+`$env:CODEX_HOME = '$escapedCodexHome'
+`$env:MINIUSAGE_DISABLE_BROWSER = '1'
+Set-Location -LiteralPath '$escapedRuntimeRoot'
+[pscustomobject]@{
+    UserName = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+    UserSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+    UserProfile = `$env:USERPROFILE
+    LocalAppData = [Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)
+} | ConvertTo-Json -Compress | Set-Content -LiteralPath '$escapedIdentityPath' -Encoding utf8 -NoNewline
+& '$escapedBinary' 1>'$escapedStdout' 2>'$escapedStderr'
+exit `$LASTEXITCODE
+"@ | Set-Content -LiteralPath $launcher -Encoding utf8
+
+    $pwsh = Join-Path $PSHOME 'pwsh.exe'
+    $arguments = "-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$launcher`""
+    Register-PasswordTask -TaskName $taskName -Execute $pwsh -Arguments $arguments -WorkingDirectory $RuntimeRoot
+
     try {
-        $process = Start-Process -FilePath $cmd `
-            -ArgumentList @('/d', '/c', "`"$launcher`"") `
-            -Credential $Credential `
-            -LoadUserProfile `
-            -WorkingDirectory $RuntimeRoot `
-            -WindowStyle Hidden `
-            -PassThru
+        Start-ScheduledTask -TaskName $taskName
+        Wait-ForFile -Path $runtimeIdentityPath -TaskName $taskName
+        $runtimeIdentity = Get-Content -LiteralPath $runtimeIdentityPath -Raw | ConvertFrom-Json
+        if ([string]$runtimeIdentity.UserSid -ne [string]$testUserSid) {
+            throw "Installed runtime did not run as isolated Windows user: $($runtimeIdentity.UserName) / $($runtimeIdentity.UserSid)"
+        }
+        if ([string]$runtimeIdentity.LocalAppData -ine $ExpectedLocalAppData) {
+            throw "Installed runtime resolved the wrong Windows LocalApplicationData known folder: $($runtimeIdentity.LocalAppData)"
+        }
 
         $healthy = $false
         $deadline = (Get-Date).AddSeconds(30)
@@ -141,75 +230,73 @@ cd /d "$RuntimeRoot"
             throw 'Installed Windows runtime unknown API returned the wrong error code'
         }
     } finally {
-        if ($null -ne $process) {
-            Stop-TestProcessTree -Process $process
-            $process.Dispose()
-        }
+        Stop-InstalledRuntime -TaskName $taskName -BinaryPath $BinaryPath
     }
 }
 
 try {
-    $secondaryLogon = Get-Service -Name 'seclogon' -ErrorAction Stop
-    if ($secondaryLogon.Status -ne 'Running') {
-        Start-Service -Name 'seclogon'
-    }
-
+    Grant-TestUserModify -Path $workRoot
     New-LocalUser -Name $testUser -Password $securePassword -PasswordNeverExpires -UserMayNotChangePassword | Out-Null
     $testUserCreated = $true
     $testUserSid = (Get-LocalUser -Name $testUser).SID.Value
 
-    $bootstrap = Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\cmd.exe') `
-        -ArgumentList @('/d', '/c', 'exit 0') `
-        -Credential $credential `
-        -LoadUserProfile `
-        -WindowStyle Hidden `
-        -Wait `
-        -PassThru
-    if ($bootstrap.ExitCode -ne 0) {
-        throw "Isolated Windows profile bootstrap exited with $($bootstrap.ExitCode)"
-    }
-    $bootstrap.Dispose()
+    $probeTaskName = "MiniUsage-S12-Probe-$([Guid]::NewGuid().ToString('N'))"
+    $probeScript = Join-Path $workRoot 'probe-profile.ps1'
+    $probeResult = Join-Path $workRoot 'probe-profile.json'
+    $escapedProbeResult = $probeResult.Replace("'", "''")
+    @"
+`$ErrorActionPreference = 'Stop'
+[pscustomobject]@{
+    UserName = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+    UserSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+    UserProfile = `$env:USERPROFILE
+    LocalAppData = [Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)
+} | ConvertTo-Json -Compress | Set-Content -LiteralPath '$escapedProbeResult' -Encoding utf8 -NoNewline
+"@ | Set-Content -LiteralPath $probeScript -Encoding utf8
 
-    $profile = Get-CimInstance -ClassName Win32_UserProfile | Where-Object { [string]$_.SID -eq $testUserSid } | Select-Object -First 1
-    if ($null -eq $profile -or [string]::IsNullOrWhiteSpace([string]$profile.LocalPath)) {
-        throw "Isolated Windows user profile was not created for SID $testUserSid"
+    $probeArguments = "-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$probeScript`""
+    Register-PasswordTask -TaskName $probeTaskName -Execute (Join-Path $PSHOME 'pwsh.exe') -Arguments $probeArguments -WorkingDirectory $workRoot
+    try {
+        Start-ScheduledTask -TaskName $probeTaskName
+        Wait-ForFile -Path $probeResult -TaskName $probeTaskName
+        $probe = Get-Content -LiteralPath $probeResult -Raw | ConvertFrom-Json
+    } finally {
+        Remove-TestTask -TaskName $probeTaskName -Stop
     }
-    $profilePath = [string]$profile.LocalPath
 
-    $knownFolderProbe = Join-Path $profilePath 'miniusage-known-folder.txt'
-    $probeScript = "[Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData) | Set-Content -LiteralPath '$knownFolderProbe' -NoNewline"
-    $probeEncoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($probeScript))
-    $probe = Start-Process -FilePath (Join-Path $PSHOME 'pwsh.exe') `
-        -ArgumentList @('-NoProfile', '-NonInteractive', '-EncodedCommand', $probeEncoded) `
-        -Credential $credential `
-        -LoadUserProfile `
-        -WindowStyle Hidden `
-        -Wait `
-        -PassThru
-    if ($probe.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $knownFolderProbe -PathType Leaf)) {
-        throw 'Windows LocalApplicationData known folder probe failed inside the isolated user profile'
+    if ([string]$probe.UserSid -ne [string]$testUserSid) {
+        throw "Windows password-logon task did not run as the isolated user: $($probe.UserName) / $($probe.UserSid)"
     }
-    $probe.Dispose()
-
-    $localAppData = (Get-Content -LiteralPath $knownFolderProbe -Raw).Trim()
-    if ([string]::IsNullOrWhiteSpace($localAppData)) {
-        throw 'Windows LocalApplicationData known folder could not be resolved inside the isolated user profile'
+    $profilePath = [string]$probe.UserProfile
+    $localAppData = [string]$probe.LocalAppData
+    if ([string]::IsNullOrWhiteSpace($profilePath) -or [string]::IsNullOrWhiteSpace($localAppData)) {
+        throw 'Windows password-logon task did not resolve an isolated user profile and LocalApplicationData known folder'
     }
     if (-not $localAppData.StartsWith($profilePath, [System.StringComparison]::OrdinalIgnoreCase)) {
         throw "Windows LocalApplicationData escaped the isolated user profile: $localAppData"
     }
 
-    $installRoot = Join-Path $profilePath 'MiniUsage-Acceptance-Install'
-    $runtimeRoot = Join-Path $profilePath 'MiniUsage-Acceptance-Runtime'
+    $profile = Get-CimInstance -ClassName Win32_UserProfile | Where-Object { [string]$_.SID -eq $testUserSid } | Select-Object -First 1
+    if ($null -eq $profile -or [string]::IsNullOrWhiteSpace([string]$profile.LocalPath)) {
+        throw "Isolated Windows user profile was not created for SID $testUserSid"
+    }
+    if ([string]$profile.LocalPath -ine $profilePath) {
+        throw "Windows profile registry path does not match password-logon task profile: $($profile.LocalPath) vs $profilePath"
+    }
+
+    $installRoot = Join-Path $workRoot 'install'
+    $runtimeRoot = Join-Path $workRoot 'runtime'
     $codexHome = Join-Path $profilePath '.codex'
-    $temp = Join-Path $profilePath 'AppData\Local\Temp'
-    $codexSessions = Join-Path $codexHome 'sessions'
-    $codexArchived = Join-Path $codexHome 'archived_sessions'
+    $temp = Join-Path $workRoot 'temp'
     $appDataRoot = Join-Path $localAppData 'MiniUsage'
     $databasePath = Join-Path $appDataRoot 'mu.sqlite3'
     $sentinelPath = Join-Path $appDataRoot 'acceptance-user-data.txt'
 
-    New-Item -ItemType Directory -Force -Path $installRoot, $runtimeRoot, $temp, $codexSessions, $codexArchived | Out-Null
+    Grant-TestUserModify -Path $installRoot
+    Grant-TestUserModify -Path $runtimeRoot
+    Grant-TestUserModify -Path $temp
+    Grant-TestUserModify -Path $codexHome
+    New-Item -ItemType Directory -Force -Path (Join-Path $codexHome 'sessions'), (Join-Path $codexHome 'archived_sessions') | Out-Null
     if (Test-Path -LiteralPath $appDataRoot) {
         throw "Fresh isolated Windows user unexpectedly already has MiniUsage data: $appDataRoot"
     }
@@ -236,7 +323,7 @@ try {
     }
     $uninstallerPath = $uninstallers[0].FullName
 
-    Invoke-InstalledRuntimeSmoke -BinaryPath $installedBinary.FullName -RuntimeRoot $runtimeRoot -Credential $credential -CodexHome $codexHome -Temp $temp
+    Invoke-InstalledRuntimeSmoke -BinaryPath $installedBinary.FullName -RuntimeRoot $runtimeRoot -CodexHome $codexHome -Temp $temp -ExpectedLocalAppData $localAppData
 
     if (-not (Test-Path -LiteralPath $appDataRoot -PathType Container) -or -not (Test-Path -LiteralPath $databasePath -PathType Leaf)) {
         throw "Installed runtime did not create its user database in the isolated Windows known folder: $databasePath"
@@ -267,7 +354,7 @@ try {
     if ($null -eq $installedBinary) {
         throw 'Reinstalled mini-usage.exe was not found'
     }
-    Invoke-InstalledRuntimeSmoke -BinaryPath $installedBinary.FullName -RuntimeRoot $runtimeRoot -Credential $credential -CodexHome $codexHome -Temp $temp
+    Invoke-InstalledRuntimeSmoke -BinaryPath $installedBinary.FullName -RuntimeRoot $runtimeRoot -CodexHome $codexHome -Temp $temp -ExpectedLocalAppData $localAppData
     if ((Get-Content -LiteralPath $sentinelPath -Raw) -ne 'preserve across reinstall') {
         throw 'Installed runtime relaunch did not preserve isolated MiniUsage user data'
     }
@@ -308,6 +395,9 @@ try {
         throw 'NSIS uninstall changed isolated MiniUsage user data'
     }
 } finally {
+    foreach ($taskName in @($registeredTasks)) {
+        Remove-TestTask -TaskName $taskName -Stop
+    }
     if ($testUserCreated) {
         if ($null -ne $testUserSid) {
             try {
@@ -323,5 +413,8 @@ try {
         } catch {
             Write-Warning "Unable to remove isolated Windows test user $testUser`: $($_.Exception.Message)"
         }
+    }
+    if (Test-Path -LiteralPath $workRoot) {
+        Remove-Item -LiteralPath $workRoot -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
