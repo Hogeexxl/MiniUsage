@@ -147,22 +147,21 @@ fn t_dist_013_windows_release_has_static_runtime_and_install_smoke() {
         "databaseHashBeforeUninstall",
         "sentinelHashBeforeUninstall",
         "New-LocalUser",
-        "Register-ScheduledTask",
-        "New-ScheduledTaskAction",
-        "-User $testAccount",
-        "-Password $plainPassword",
-        "-RunLevel Limited",
-        "Start-ScheduledTask",
-        "Get-ScheduledTaskInfo",
-        "Stop-ScheduledTask",
-        "Unregister-ScheduledTask",
-        "Get-CimInstance -ClassName Win32_UserProfile",
+        "CreateProcessWithLogonW",
+        "LOGON_WITH_PROFILE",
+        "CREATE_NO_WINDOW",
+        "IntPtr.Zero",
+        "lpEnvironment",
+        "Start-IsolatedUserProcess",
+        "Stop-IsolatedProcessTree",
+        "Get-Service -Name 'seclogon'",
         "[Security.Principal.WindowsIdentity]::GetCurrent().User.Value",
         "[Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)",
-        "Windows password-logon task did not run as the isolated user",
+        "CreateProcessWithLogonW did not run as the isolated Windows user",
         "Installed runtime resolved the wrong Windows LocalApplicationData known folder",
         "$appDataRoot = Join-Path $localAppData 'MiniUsage'",
         "Windows LocalApplicationData escaped the isolated user profile",
+        "Get-CimInstance -ClassName Win32_UserProfile",
         "Remove-CimInstance",
         "Remove-LocalUser",
         "`$env:PATH = \"`$env:SystemRoot\\System32;`$env:SystemRoot\"",
@@ -174,14 +173,25 @@ fn t_dist_013_windows_release_has_static_runtime_and_install_smoke() {
         );
     }
 
-    assert!(!smoke.contains("if ($null -ne $uninstaller)"));
-    assert!(!smoke.contains("Join-Path $home 'AppData/Local'"));
-    assert!(!smoke.contains("$dataRoot"));
-    assert!(!smoke.contains("Environment['HOME']"));
-    assert!(!smoke.contains("Environment['USERPROFILE']"));
-    assert!(!smoke.contains("Environment['LOCALAPPDATA']"));
-    assert!(!smoke.contains("-Credential $credential"));
-    assert!(!smoke.contains("-LoadUserProfile"));
+    for forbidden in [
+        "if ($null -ne $uninstaller)",
+        "Join-Path $home 'AppData/Local'",
+        "$dataRoot",
+        "Environment['HOME']",
+        "Environment['USERPROFILE']",
+        "Environment['LOCALAPPDATA']",
+        "-Credential $credential",
+        "-LoadUserProfile",
+        "Register-ScheduledTask",
+        "Start-ScheduledTask",
+        "Stop-ScheduledTask",
+        "Unregister-ScheduledTask",
+    ] {
+        assert!(
+            !smoke.contains(forbidden),
+            "Windows clean-runtime smoke must not use obsolete isolation mechanism: {forbidden}"
+        );
+    }
 }
 
 #[test]
