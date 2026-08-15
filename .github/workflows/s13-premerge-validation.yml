@@ -11,7 +11,7 @@ permissions:
 jobs:
   validate:
     name: Validate S13 gate wiring
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -63,4 +63,4 @@ jobs:
           PY
           cargo build --release --features embedded-frontend
           test -x target/release/mini-usage
-          file target/release/mini-usage | grep -Eq 'arm64|aarch64'
+          file target/release/mini-usage | grep -Eq 'ELF.*x86-64|ELF.*x86_64'
