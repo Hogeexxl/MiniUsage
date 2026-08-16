@@ -3,7 +3,8 @@ set -euo pipefail
 
 release_dmg="${MINIUSAGE_RELEASE_DMG:?MINIUSAGE_RELEASE_DMG is required}"
 repository="${GITHUB_REPOSITORY:?GITHUB_REPOSITORY is required}"
-tag="${GITHUB_REF_NAME:?GITHUB_REF_NAME is required}"
+tag="${MINIUSAGE_RELEASE_TAG:-${GITHUB_REF_NAME:?GITHUB_REF_NAME is required}}"
+source_root="${MINIUSAGE_SOURCE_ROOT:-${GITHUB_WORKSPACE:?GITHUB_WORKSPACE is required}}"
 
 if [[ ! "$tag" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
   echo "S13 E2E only accepts a stable vX.Y.Z tag, got: $tag" >&2
@@ -13,6 +14,12 @@ expected_version="${BASH_REMATCH[1]}"
 expected_release_url="https://github.com/${repository}/releases/tag/${tag}"
 latest_api="https://api.github.com/repos/${repository}/releases/latest"
 low_version="0.0.9"
+
+[[ -d "$source_root" ]] || { echo "S13 source root not found: $source_root" >&2; exit 1; }
+source_root="$(cd "$source_root" && pwd)"
+if [[ "$release_dmg" != /* ]]; then
+  release_dmg="${GITHUB_WORKSPACE:?GITHUB_WORKSPACE is required}/$release_dmg"
+fi
 
 # T-DIST-015 requires a real anonymous public request. Never let an Actions
 # token make this check pass when the public endpoint is unavailable.
@@ -106,12 +113,14 @@ start_binary() {
   local home="$root/home"
   local codex_home="$root/codex-home"
   local tmpdir="$root/tmp"
+  local previous_dir="$PWD"
   rm -rf "$root"
   mkdir -p "$home" "$codex_home" "$tmpdir"
   cd "$root"
   HOME="$home" CODEX_HOME="$codex_home" TMPDIR="$tmpdir" MINIUSAGE_DISABLE_BROWSER=1 PATH="/usr/bin:/bin" \
     "$binary" >"$root/stdout.log" 2>"$root/stderr.log" &
   app_pid=$!
+  cd "$previous_dir"
   if ! wait_for_health "$expected" "$root"; then
     cat "$root/stderr.log" >&2 || true
     echo "MiniUsage $expected did not become healthy" >&2
@@ -165,7 +174,7 @@ PY
     fi
     echo "MiniUsage update check not ready (current=$expected_current attempt=$attempt HTTP=$status)"
     sleep 2
-  done
+done
   if [[ "$ok" != 1 ]]; then
     cat "$out" >&2 || true
     echo "T-DIST-015 failed for current version $expected_current" >&2
@@ -204,10 +213,12 @@ stop_binary
 
 echo "Released MiniUsage $expected_version correctly reports current/latest equality"
 
-# Build an internal lower-version binary from the same source checkout. This is
-# runner-local only: no commit/tag/Release is created, so the public history is
-# not polluted by the T-DIST-015 probe.
-/usr/bin/python3 - Cargo.toml "$low_version" <<'PY'
+# Build an internal lower-version binary from the selected source root. This is
+# runner-local only: no commit/tag/Release is created, so public history is not
+# polluted by the T-DIST-015 probe.
+manifest="$source_root/Cargo.toml"
+[[ -f "$manifest" ]] || { echo "Cargo manifest not found: $manifest" >&2; exit 1; }
+/usr/bin/python3 - "$manifest" "$low_version" <<'PY'
 import re
 import sys
 path, version = sys.argv[1:]
@@ -218,8 +229,8 @@ if count != 1:
     raise SystemExit("failed to rewrite package version for internal S13 build")
 open(path, "w", encoding="utf-8").write(updated)
 PY
-cargo build --release --features embedded-frontend
-low_binary="$GITHUB_WORKSPACE/target/release/mini-usage"
+cargo build --manifest-path "$manifest" --release --features embedded-frontend
+low_binary="$source_root/target/release/mini-usage"
 file "$low_binary" | grep -Eiq 'arm64|aarch64' || { echo 'Internal low-version build is not arm64' >&2; exit 1; }
 low_root="$runtime_base/internal-$low_version"
 start_binary "$low_binary" "$low_version" "$low_root"
