@@ -1,87 +1,125 @@
-# MiniUsage
+# 📊 MiniUsage
 
-MiniUsage 是一个只在本机运行的 Rust 服务和 React Dashboard，用来读取 Codex 的本地会话记录，整理 usage、Session 与费用信息。数据处理、SQLite 数据库和 Dashboard 请求都留在用户的电脑上；服务只监听 `127.0.0.1:3210`，不会把 Codex/OpenAI 会话内容上传到网络。
+> 完全运行在本机的 Codex 用量仪表盘：Token、会话与预估费用，一屏看清。
 
-本仓库正在准备 v0.1.0 的公开分发。下面的安装包名称是计划发布的 artifact 名称；请以 GitHub Releases 中实际可下载的文件为准。本 README 不代表某个 Release 或 CI 已经发布、通过。
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-blue)
+![Backend](https://img.shields.io/badge/%E5%90%8E%E7%AB%AF-Rust-orange)
+![Frontend](https://img.shields.io/badge/%E5%89%8D%E7%AB%AF-React-61dafb)
+![License](https://img.shields.io/badge/license-MIT-green)
 
-## 支持平台与安装
+## 什么是 MiniUsage
 
-v0.1.0 的正式目标是：
+MiniUsage 是一个纯本机运行的 Rust 服务 + React Dashboard，用来读取 OpenAI Codex CLI / Codex Desktop 留在本机的会话记录（rollout JSONL），整理出 Token 用量、预估费用与Session详细数据。
 
-- Windows 10/11 x64：`MiniUsage-v0.1.0-windows-x64-setup.exe`
-- macOS Apple Silicon arm64：`MiniUsage-v0.1.0-macos-arm64.dmg`
+它有三个原则：
 
-发布后，Windows 用户运行 x64 安装程序，再从开始菜单或快捷方式启动 MiniUsage；macOS 用户打开对应架构的 DMG 并运行应用。v0.1.0 的 macOS 应用未做 Developer ID 签名或 notarization，首次启动若被系统拦截，请在 Finder 中按住 Control 点按应用并选择“打开”，或在“系统设置 → 隐私与安全性”中选择“仍要打开”。
+- **只读**：只读取 Codex 数据目录，绝不修改、绝不删除 Codex 的任何文件；
+- **本地**：数据处理、SQLite 数据库、Dashboard 页面全部留在你的电脑上，服务只监听 `127.0.0.1:3210`，不监听外网；
+- **无上传**：不会把会话内容、用量数据或 OpenAI 凭据发送到任何服务器。唯一的网络请求是向 GitHub 公开接口查询新版本，且不携带任何本地数据。
 
-启动后 MiniUsage 会启动本地服务并打开默认浏览器：
+## 功能一览
+
+### 🖥 数据面板
+
+启动后自动打开浏览器进入 Dashboard，提供 8 张 KPI 卡：
+
+| 指标 | 说明 |
+| --- | --- |
+| 预估费用 | 按内置价格表估算的美元费用，附数据完整性提示 |
+| 总 Token | 范围内所有会话的 Token 总量 |
+| 输入 / 输出 Token | 输入与输出分开统计，输出含推理（reasoning）部分 |
+| 会话数量 | 范围内的 Session 数 |
+| 缓存命中率 | 命中缓存的部分占输入的比例 |
+| 缓存读取 Token | 命中缓存的输入量 |
+| 推理 Token | 输出中用于推理的部分 |
+
+### 📋 Session 列表与详情
+
+- 会话表格支持按最后活动时间、项目、模型、Token 量、费用排序，分页浏览；
+- 点开任一会话进入详情抽屉：主会话用量按「模型 + reasoning effort」分块展示，包含输入、输出、缓存读写、命中率、费用等 8 项明细；
+- 自动识别 Subagent 会话，列表中可逐个展开其独立用量；表格中的「合计」列（Token、费用）为包含 Subagent 的口径，与主会话自身的「总计」列分开呈现。
+
+### 🔍 筛选与时间范围
+
+- 时间范围：今天 / 昨天 / 本周（周一起始）/ 本月 / 今年，按本机时区计算；
+- 模型筛选：多选，GPT 系模型自动分组；
+- 项目筛选：按项目多选，可单独包含或排除「无项目会话」「未识别项目」。
+
+### 💰 费用估算
+
+- 内置各模型单价表（输入 / 缓存读取 / 缓存写入 / 输出，含长上下文阶梯价），逐事件计算后汇总；
+- 未知模型不会套用其他模型的价格，明确标记为「未知」；
+- 费用为估算值，仅供参考，不代表 OpenAI 账单。详见[数据口径与费用估算](#数据口径与费用估算)。
+
+### ⚡ 增量扫描与实时更新
+
+- 启动时立即扫描一次，之后每 5 分钟增量扫描；也可以随时点「同步数据」手动触发；
+- 增量扫描只读取文件新增部分（按上次读取的断点续读），文件被改写时自动校验并重建，无需人工干预；
+- 服务端数据有变化时通过 SSE 推送修订号，Dashboard 自动刷新，不用手动刷新页面。
+
+## 快速开始
+
+### 前置条件
+
+- 本机已安装并在使用 Codex CLI 或 Codex Desktop（MiniUsage 读取它们写下的 `~/.codex` 会话记录，自身不产生数据）；
+- 操作系统：Windows 10/11（x64）或 macOS（Apple Silicon）。
+
+### 安装
+
+从 [GitHub Releases](https://github.com/Hogeexxl/MiniUsage/releases) 下载对应平台的安装包（以 Releases 页面实际提供的文件为准）：
+
+- Windows x64：`MiniUsage-v0.1.0-windows-x64-setup.exe`
+- macOS Apple Silicon：`MiniUsage-v0.1.0-macos-arm64.dmg`
+
+启动后 MiniUsage 会在本机启动服务并自动打开默认浏览器；如果浏览器没有自动打开，手动访问：
 
 ```text
 http://127.0.0.1:3210
 ```
 
-如果浏览器没有自动打开，可以手动访问这个地址。重复启动只会打开已经运行的实例；`3210` 被其他程序占用时会报告端口错误，不会结束或替换其他程序。
+### 常见问题
 
-## 本地数据位置
+- **macOS 首次启动被拦截**：v0.1.0 的 macOS 应用未做 Developer ID 签名与 notarization。在 Finder 中按住 Control 点按应用并选择「打开」，或在「系统设置 → 隐私与安全性」中选择「仍要打开」。
+- **重复启动**：再次启动只会打开已在运行的实例，不会启动第二个。
+- **提示端口被占用**：如果 `3210` 被其他程序占用，MiniUsage 会明确报错退出，不会结束或替换占用端口的程序。
+- **看不到数据**：确认本机 `~/.codex/sessions` 下存在 `rollout-*.jsonl` 文件；如果设置过 `CODEX_HOME` 环境变量，确认它指向 Codex 实际使用的数据目录。数据每 5 分钟自动扫描一次，也可以点「同步数据」立即扫描。
 
-`CODEX_HOME` 环境变量优先；未设置时使用当前用户 Home 下的 `.codex`：
+## 数据来源
 
-- macOS：`~/.codex`
-- Windows：`C:\Users\<user>\.codex`
+MiniUsage 只读取 Codex 的本地数据目录，不访问网络获取用量。目录按以下优先级解析：显式配置 > 环境变量 `CODEX_HOME`（非空时生效）> 默认 `~/.codex`。
 
-默认数据库位置为：
+| 文件 | 读取方式 | 用途 |
+| --- | --- | --- |
+| `$CODEX_HOME/sessions/**/rollout-*.jsonl` | 逐行流式读取 | Token 用量、turn、模型、reasoning effort |
+| `$CODEX_HOME/archived_sessions/**/rollout-*.jsonl` | 同上 | 已归档会话的用量 |
+| `$CODEX_HOME/state_5.sqlite` | 只读打开 | 会话元数据：标题、项目、模型、Subagent 派生关系 |
+| `$CODEX_HOME/session_index.jsonl` | 逐行流式读取 | 会话标题等索引信息 |
+| `$CODEX_HOME/.codex-global-state.json` | 只读 | Codex Desktop 的项目归属信息 |
 
-- macOS：`~/Library/Application Support/MiniUsage/mu.sqlite3`
-- Windows：`C:\Users\<user>\AppData\Local\MiniUsage\mu.sqlite3`（Local AppData）
+扫描时的安全约束：
 
-rollout、Session、SQLite 和扫描状态均保存在本机。MiniUsage 的更新服务只向固定公开仓库查询 latest Release，不发送 Codex Home、会话正文或 OpenAI 凭据。
+- 跳过所有符号链接，只接受常规文件；
+- 以文件的物理身份（设备 + inode）跟踪文件，改名、移动不触发重扫，截断或改写自动重建；
+- 只消费以换行符结尾的完整行，写入一半的行留待下一轮扫描，不会解析到脏数据。
 
-## 更新行为
+## 本地数据与配置
 
-核心服务准备好后，后台会立即异步检查一次更新，之后每 4 小时检查一次。Dashboard 提供“检查更新”按钮；主动检查时按钮显示“检查中…”，发现新版本后显示“版本升级”。检查失败不会阻塞启动、扫描或 Dashboard；自动检查失败保持静默。
+MiniUsage 自身的数据全部落在本机：
 
-MiniUsage 不会自动下载、执行或覆盖安装新版。“版本升级”只打开对应的 GitHub Release 页面，由用户自行下载和安装。
+| 数据 | 位置 |
+| --- | --- |
+| SQLite 数据库 | macOS：`~/Library/Application Support/MiniUsage/mu.sqlite3`<br>Windows：`%LOCALAPPDATA%\MiniUsage\mu.sqlite3` |
+| Codex 数据目录（只读） | `$CODEX_HOME`，默认 `~/.codex`（Windows：`C:\Users\<user>\.codex`） |
 
-## 从源码构建
+可用的环境变量：
 
-源码构建需要 Rust stable/Cargo、Node.js/npm。最终用户使用发布的安装包时不需要安装 Rust、Cargo、Node.js、npm、SQLite、Visual Studio 或 Windows SDK；SQLite 已由应用使用的 bundled runtime 提供。
+| 变量 | 作用 | 默认 |
+| --- | --- | --- |
+| `CODEX_HOME` | Codex 数据目录（非空时生效） | `~/.codex` |
+| `TZ` | 时间范围计算使用的时区 | 系统时区 |
 
-安装前端依赖并运行正式构建：
+监听地址与端口固定为 `127.0.0.1:3210`，不可配置，以保证服务不会暴露到网络。
 
-```sh
-cd <repo>/frontend
-npm ci
-npm run build
-cd <repo>
+## License
 
-cargo fmt --check
-cargo check --locked
-cargo test --locked
-cargo build --release --locked --features embedded-frontend
-```
-
-开发时可以在一个终端运行 `cargo run`，在另一个终端运行：
-
-```sh
-cd <repo>/frontend
-npm run dev
-```
-
-然后打开 Vite 显示的本机地址。正式 release binary 会把 `frontend/dist` 中的 HTML、JavaScript、CSS 和字体嵌入可执行文件，运行时不需要仓库目录或 `frontend/dist`。
-
-## 正式测试命令
-
-Rust 与前端的分发测试至少执行：
-
-```sh
-cargo fmt --check
-cargo check --locked
-cargo test --locked
-
-cd <repo>/frontend
-npm ci
-npm run test
-npm run check
-npm run build
-```
-
-CI、Release artifact 和安装包 smoke 的状态以对应 GitHub Actions 运行记录及 Release 页面为准。
+[MIT](LICENSE)
