@@ -824,7 +824,7 @@ mod tests {
     }
 
     #[test]
-    fn v1_upgrade_preserves_metadata_and_installs_v7_usage_schema() {
+    fn v1_upgrade_preserves_metadata_and_installs_v8_resilience_schema() {
         let mut connection = Connection::open_in_memory().unwrap();
         install_v1(&mut connection);
         connection
@@ -836,11 +836,11 @@ mod tests {
             .unwrap();
         insert_v1_thread_and_source(&connection);
 
-        assert_eq!(migrate(&mut connection, 1).unwrap(), 7);
+        assert_eq!(migrate(&mut connection, 1).unwrap(), 8);
         let version: u32 = connection
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 7);
+        assert_eq!(version, 8);
         let metadata: (i64, i64, i64, Option<i64>, i64, Option<i64>) = connection
             .query_row(
                 "SELECT data_revision,status_revision,usage_active_epoch,usage_build_epoch,
@@ -931,7 +931,7 @@ mod tests {
             .query_row("SELECT count(*) FROM usage_events", [], |row| row.get(0))
             .unwrap();
 
-        assert_eq!(migrate(&mut connection, 3).unwrap(), 7);
+        assert_eq!(migrate(&mut connection, 3).unwrap(), 8);
         let kinds: Vec<(String, String, String)> = connection
             .prepare(
                 "SELECT project_kind,project_path,project_name FROM threads
@@ -977,7 +977,7 @@ mod tests {
                 )
                 .is_err()
         );
-        assert_eq!(migrate(&mut connection, 7).unwrap(), 7);
+        assert_eq!(migrate(&mut connection, 8).unwrap(), 8);
     }
 
     #[test]
@@ -1109,16 +1109,16 @@ mod tests {
     }
 
     #[test]
-    fn t_dc_026_fresh_schema_is_v7_and_has_only_canonical_columns() {
+    fn t_dc_026_fresh_schema_is_v8_and_has_only_canonical_columns() {
         let mut connection = Connection::open_in_memory().unwrap();
         connection
             .pragma_update(None, "foreign_keys", true)
             .unwrap();
-        assert_eq!(migrate(&mut connection, 0).unwrap(), 7);
+        assert_eq!(migrate(&mut connection, 0).unwrap(), 8);
         let version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 7);
+        assert_eq!(version, 8);
         for (table, required, forbidden) in [
             (
                 "usage_events",
@@ -1213,6 +1213,44 @@ mod tests {
             )
             .unwrap();
         assert_eq!(parent_provenance, "session_meta_parent");
+        connection
+            .execute(
+                "UPDATE rollout_metadata_facts
+                 SET continuation_state='replayed_ancestor', ownership_confidence='confirmed'
+                 WHERE source_file_id=1",
+                [],
+            )
+            .unwrap();
+        assert_eq!(
+            connection
+                .query_row(
+                    "SELECT continuation_state FROM rollout_metadata_facts WHERE source_file_id=1",
+                    [],
+                    |row| row.get::<_, String>(0),
+                )
+                .unwrap(),
+            "replayed_ancestor"
+        );
+        assert!(
+            connection
+                .execute(
+                    "UPDATE rollout_metadata_facts SET ownership_confidence='unresolved'
+                     WHERE source_file_id=1",
+                    [],
+                )
+                .is_err()
+        );
+        assert_eq!(
+            connection
+                .query_row(
+                    "SELECT count(*) FROM sqlite_master
+                     WHERE type='table' AND name='usage_session_quarantine'",
+                    [],
+                    |row| row.get::<_, i64>(0),
+                )
+                .unwrap(),
+            1
+        );
         assert_eq!(
             connection
                 .query_row(
@@ -1252,12 +1290,12 @@ mod tests {
                 .unwrap(),
             2
         );
-        assert_eq!(migrate(&mut connection, 3).unwrap(), 7);
+        assert_eq!(migrate(&mut connection, 3).unwrap(), 8);
         assert_eq!(
             connection
                 .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
                 .unwrap(),
-            7
+            8
         );
 
         let revisions: (i64, i64) = connection
@@ -1567,7 +1605,7 @@ mod tests {
             &codex_home,
         ))
         .unwrap();
-        assert_eq!(ledger.schema_version().unwrap(), 7);
+        assert_eq!(ledger.schema_version().unwrap(), 8);
         let app_state = ledger.app_state().unwrap();
         assert_eq!(app_state.data_revision, 9);
         assert_eq!(app_state.scan.status_revision, 10);
@@ -1593,7 +1631,7 @@ mod tests {
     fn t_dc_027_v2_rows_migrate_without_losing_canonical_values_or_occurrences() {
         let mut connection = v2_connection();
         add_v2_rows(&connection);
-        assert_eq!(migrate(&mut connection, 2).unwrap(), 7);
+        assert_eq!(migrate(&mut connection, 2).unwrap(), 8);
         let known: (i64, i64, Option<i64>, i64, i64, i64) = connection
             .query_row(
                 "SELECT input_tokens,cached_tokens,cache_write_tokens,output_tokens,reasoning_tokens,total_tokens FROM usage_events WHERE event_id='known'",
@@ -1697,22 +1735,22 @@ mod tests {
                 [],
             )
             .unwrap();
-        assert_eq!(migrate(&mut connection, 2).unwrap(), 7);
+        assert_eq!(migrate(&mut connection, 2).unwrap(), 8);
         let versions: (i64, i64) = connection.query_row("SELECT app_meta.usage_parser_version,usage_source_states.canonical_algorithm_version FROM app_meta JOIN usage_source_states ON usage_source_states.ledger_epoch=app_meta.usage_active_epoch", [], |row| Ok((row.get(0)?, row.get(1)?))).unwrap();
         assert_eq!(versions, (2, 2));
         assert_eq!(crate::usage::normalized::canonical_algorithm_for(2), None);
     }
 
     #[test]
-    fn t_mu03_s01_v7_migration_fresh_upgrade_idempotence_and_rollback() {
+    fn t_mu03_s01_v7_features_survive_v8_upgrade_idempotence_and_rollback() {
         let mut fresh = Connection::open_in_memory().unwrap();
         fresh.pragma_update(None, "foreign_keys", true).unwrap();
-        assert_eq!(migrate(&mut fresh, 0).unwrap(), 7);
+        assert_eq!(migrate(&mut fresh, 0).unwrap(), 8);
         assert_eq!(
             fresh
                 .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
                 .unwrap(),
-            7
+            8
         );
 
         for (table, required) in [
@@ -1825,7 +1863,7 @@ mod tests {
             .unwrap();
         assert!(usage_sql.contains("estimated_cost_nanos_usd"));
         assert!(usage_sql.contains("estimated_cost_nanos_usd IS NULL"));
-        assert_eq!(migrate(&mut fresh, 7).unwrap(), 7);
+        assert_eq!(migrate(&mut fresh, 8).unwrap(), 8);
 
         let mut upgraded = v5_connection_with_rows();
         let before: (i64, i64, i64, i64, i64) = upgraded
@@ -1848,12 +1886,12 @@ mod tests {
                 },
             )
             .unwrap();
-        assert_eq!(migrate(&mut upgraded, 5).unwrap(), 7);
+        assert_eq!(migrate(&mut upgraded, 5).unwrap(), 8);
         assert_eq!(
             upgraded
                 .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
                 .unwrap(),
-            7
+            8
         );
         let after: (i64, i64, i64, i64, i64) = upgraded
             .query_row(
@@ -1876,7 +1914,7 @@ mod tests {
             )
             .unwrap();
         assert_eq!(before, after);
-        assert_eq!(migrate(&mut upgraded, 7).unwrap(), 7);
+        assert_eq!(migrate(&mut upgraded, 8).unwrap(), 8);
         let mut foreign_key_statement = upgraded.prepare("PRAGMA foreign_key_check").unwrap();
         let mut foreign_key_rows = foreign_key_statement.query([]).unwrap();
         let foreign_key_check = foreign_key_rows.next().unwrap();
