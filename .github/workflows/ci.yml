@@ -10,7 +10,7 @@ permissions:
 jobs:
   apply-resilience:
     name: Apply resilience patch
-    if: github.event_name == 'push' && github.event.head_commit.message == 'chore: run resilience patch'
+    if: "${{ github.event_name == 'push' && github.event.head_commit.message == 'chore: run resilience patch' }}"
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
