@@ -120,6 +120,13 @@ MiniUsage 自身的数据全部落在本机：
 
 监听地址与端口固定为 `127.0.0.1:3210`，不可配置，以保证服务不会暴露到网络。
 
+## 平台、更新与开发
+
+- 正式发布支持：`Windows 10/11 x64` 与 `macOS Apple Silicon arm64`。
+- MiniUsage 会在后台`每 4 小时`查询一次 GitHub Releases；也可以在 Dashboard 点击`检查更新`。发现新版本时会提供`版本升级`入口。
+- 正式安装包是自包含应用；普通用户`不需要安装 Rust`，也不需要单独安装`Node.js`、`SQLite`或`Visual Studio`。
+- 只有从源码开发或执行仓库验收时才需要相应开发工具。前端测试使用 `npm run test`，Rust 全量测试使用 `cargo test --locked`。
+
 ## License
 
 [MIT](LICENSE)
