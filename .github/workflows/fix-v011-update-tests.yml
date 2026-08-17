@@ -57,25 +57,29 @@ jobs:
               raise SystemExit(f'api check assertion anchor count={text.count(old)}')
           text = text.replace(old, new, 1)
 
-          old = '''async fn t_dist_008_open_release_requires_valid_state_and_preserves_state_on_browser_failure() {\n    let current = semver::Version::parse(env!("CARGO_PKG_VERSION")).unwrap();'''
-          new = '''async fn t_dist_008_open_release_requires_valid_state_and_preserves_state_on_browser_failure() {\n    let current = semver::Version::parse(env!("CARGO_PKG_VERSION")).unwrap();\n    let mut latest = current.clone();\n    latest.patch = latest.patch.checked_add(1).unwrap();\n    let expected_url = format!(\n        "https://github.com/Hogeexxl/MiniUsage/releases/tag/v{latest}"\n    );'''
-          if text.count(old) != 1:
-              raise SystemExit(f'api open start anchor count={text.count(old)}')
-          text = text.replace(old, new, 1)
-          old = '    let provider = Arc::new(FixtureProvider::success(semver::Version::new(0, 1, 1)));'
-          if text.count(old) != 2:
-              raise SystemExit(f'api open provider anchor count={text.count(old)}')
-          text = text.replace(old, '    let provider = Arc::new(FixtureProvider::success(latest.clone()));', 2)
+          marker = '''async fn t_dist_008_open_release_requires_valid_state_and_preserves_state_on_browser_failure() {'''
+          if text.count(marker) != 1:
+              raise SystemExit(f'api open marker count={text.count(marker)}')
+          before, section = text.split(marker, 1)
+          old = '''\n    let current = semver::Version::parse(env!("CARGO_PKG_VERSION")).unwrap();'''
+          new = '''\n    let current = semver::Version::parse(env!("CARGO_PKG_VERSION")).unwrap();\n    let mut latest = current.clone();\n    latest.patch = latest.patch.checked_add(1).unwrap();\n    let expected_url = format!(\n        "https://github.com/Hogeexxl/MiniUsage/releases/tag/v{latest}"\n    );'''
+          if section.count(old) < 1:
+              raise SystemExit('api open current anchor missing')
+          section = section.replace(old, new, 1)
+          old_provider = '    let provider = Arc::new(FixtureProvider::success(semver::Version::new(0, 1, 1)));'
+          if section.count(old_provider) != 2:
+              raise SystemExit(f'api open provider count={section.count(old_provider)}')
+          section = section.replace(old_provider, '    let provider = Arc::new(FixtureProvider::success(latest.clone()));', 2)
           old = '''    assert_eq!(\n        browser.0.lock().unwrap().as_slice(),\n        ["https://github.com/Hogeexxl/MiniUsage/releases/tag/v0.1.1"]\n    );'''
           new = '''    assert_eq!(browser.0.lock().unwrap().as_slice(), [expected_url.as_str()]);'''
-          if text.count(old) != 1:
-              raise SystemExit(f'api browser url anchor count={text.count(old)}')
-          text = text.replace(old, new, 1)
+          if section.count(old) != 1:
+              raise SystemExit(f'api browser url anchor count={section.count(old)}')
+          section = section.replace(old, new, 1)
           old = '''    assert_eq!(\n        status["release_url"],\n        "https://github.com/Hogeexxl/MiniUsage/releases/tag/v0.1.1"\n    );'''
           new = '''    assert_eq!(status["release_url"].as_str(), Some(expected_url.as_str()));'''
-          if text.count(old) != 1:
-              raise SystemExit(f'api status url anchor count={text.count(old)}')
-          p.write_text(text.replace(old, new, 1), encoding='utf-8')
+          if section.count(old) != 1:
+              raise SystemExit(f'api status url anchor count={section.count(old)}')
+          p.write_text(before + marker + section.replace(old, new, 1), encoding='utf-8')
           PY
       - name: Verify targeted update tests
         run: |
