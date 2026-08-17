@@ -3,21 +3,39 @@ from pathlib import Path
 p = Path('src/api/query.rs')
 s = p.read_text(encoding='utf-8')
 
-# Two summary fixtures in the DTO mapping test need explicit health state.
-needle = '''                    session_count: 0,
-                },'''
-replacement = '''                    session_count: 0,
-                    health: crate::usage::aggregate::SessionHealthSummary {
+health = '''                    health: crate::usage::aggregate::SessionHealthSummary {
                         total_sessions: 0,
                         complete_sessions: 0,
                         incomplete_sessions: 0,
                         error_sessions: 0,
                     },
+'''
+
+# The zero summary fixture has the canonical closing indentation.
+needle = '''                    session_count: 0,
                 },'''
-count = s.count(needle)
-if count < 2:
-    raise SystemExit(f'expected at least two summary fixtures, found {count}')
-s = s.replace(needle, replacement, 2)
+if s.count(needle) != 1:
+    raise SystemExit(f'expected one canonical zero summary fixture, found {s.count(needle)}')
+s = s.replace(needle, '                    session_count: 0,\n' + health + '                },', 1)
+
+# The overflow fixture uses a compact totals() initializer and a different nesting depth.
+overflow = '''                    value: UsageSummary {
+                        totals: totals(Some(3), 1, 0),
+                        session_count: 0,
+                    },'''
+overflow_new = '''                    value: UsageSummary {
+                        totals: totals(Some(3), 1, 0),
+                        session_count: 0,
+                        health: crate::usage::aggregate::SessionHealthSummary {
+                            total_sessions: 0,
+                            complete_sessions: 0,
+                            incomplete_sessions: 0,
+                            error_sessions: 0,
+                        },
+                    },'''
+if overflow not in s:
+    raise SystemExit('overflow summary fixture not found')
+s = s.replace(overflow, overflow_new, 1)
 
 # Healthy Session fixture now carries explicit health and optional sort values.
 old = '''                    last_activity_at_ms: 20,
