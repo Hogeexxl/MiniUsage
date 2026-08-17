@@ -1912,13 +1912,17 @@ async fn t_s05_009_010_012_014_015_refresh_target_and_revision_watch_use_durable
     .await;
     assert_eq!(persisted_target["target_scan"]["scan_id"], target);
     assert_eq!(persisted_target["target_scan"]["state"], "completed");
+    // The restarted coordinator can publish a later status revision between
+    // the HTTP read and the direct SQLite read. Stop it before asserting exact
+    // equality so this test verifies the durable restart anchor rather than a
+    // scheduler race between two individually valid snapshots.
+    reopened_scanner.shutdown().unwrap();
     let reopened_revision =
         json_body(call(&reopened_app, Method::GET, "/api/revision", &[]).await).await;
     assert_eq!(
         reopened_revision["status_revision"],
         reopened.app_state().unwrap().status_revision
     );
-    reopened_scanner.shutdown().unwrap();
 }
 
 #[tokio::test]
