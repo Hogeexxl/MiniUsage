@@ -11,7 +11,7 @@ permissions:
 jobs:
   apply:
     if: "${{ github.event.head_commit.message == 'chore: fix revision watch race' }}"
-    runs-on: macos-latest
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
         with:
@@ -25,24 +25,8 @@ jobs:
           from pathlib import Path
           p = Path('tests/spec05_api_integration.rs')
           text = p.read_text(encoding='utf-8')
-          old = '''    let reopened_revision =
-        json_body(call(&reopened_app, Method::GET, "/api/revision", &[]).await).await;
-    assert_eq!(
-        reopened_revision["status_revision"],
-        reopened.app_state().unwrap().status_revision
-    );
-    reopened_scanner.shutdown().unwrap();'''
-          new = '''    // The restarted coordinator can publish a later status revision between
-    // the HTTP read and the direct SQLite read. Stop it before asserting exact
-    // equality so this test verifies the durable restart anchor rather than a
-    // scheduler race between two individually valid snapshots.
-    reopened_scanner.shutdown().unwrap();
-    let reopened_revision =
-        json_body(call(&reopened_app, Method::GET, "/api/revision", &[]).await).await;
-    assert_eq!(
-        reopened_revision["status_revision"],
-        reopened.app_state().unwrap().status_revision
-    );'''
+          old = '    let reopened_revision =\n        json_body(call(&reopened_app, Method::GET, "/api/revision", &[]).await).await;\n    assert_eq!(\n        reopened_revision["status_revision"],\n        reopened.app_state().unwrap().status_revision\n    );\n    reopened_scanner.shutdown().unwrap();'
+          new = '    // The restarted coordinator can publish a later status revision between\n    // the HTTP read and the direct SQLite read. Stop it before asserting exact\n    // equality so this test verifies the durable restart anchor rather than a\n    // scheduler race between two individually valid snapshots.\n    reopened_scanner.shutdown().unwrap();\n    let reopened_revision =\n        json_body(call(&reopened_app, Method::GET, "/api/revision", &[]).await).await;\n    assert_eq!(\n        reopened_revision["status_revision"],\n        reopened.app_state().unwrap().status_revision\n    );'
           count = text.count(old)
           if count != 1:
               raise SystemExit(f'revision race anchor: expected 1 match, got {count}')
