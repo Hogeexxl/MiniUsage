@@ -48,22 +48,15 @@ for old, new in [
     s = s.replace(old, new)
 
 # Idempotence checks must start from the schema that is already installed.
-s = s.replace(
+for old in [
     'assert_eq!(migrate(&mut connection, 7).unwrap(), 7);',
-    'assert_eq!(migrate(&mut connection, 8).unwrap(), 8);',
-)
-s = s.replace(
     'assert_eq!(migrate(&mut connection, 7).unwrap(), 8);',
-    'assert_eq!(migrate(&mut connection, 8).unwrap(), 8);',
-)
-s = s.replace(
     'assert_eq!(migrate(&mut fresh, 7).unwrap(), 7);',
-    'assert_eq!(migrate(&mut fresh, 8).unwrap(), 8);',
-)
-s = s.replace(
     'assert_eq!(migrate(&mut fresh, 7).unwrap(), 8);',
-    'assert_eq!(migrate(&mut fresh, 8).unwrap(), 8);',
-)
+    'assert_eq!(migrate(&mut upgraded, 7).unwrap(), 7);',
+    'assert_eq!(migrate(&mut upgraded, 7).unwrap(), 8);',
+]:
+    s = s.replace(old, old.replace('7).unwrap(), 7', '8).unwrap(), 8').replace('7).unwrap(), 8', '8).unwrap(), 8'))
 
 # Remaining direct user_version assertions are terminal schema assertions.
 s = s.replace('        assert_eq!(version, 7);', '        assert_eq!(version, 8);')
