@@ -36,29 +36,38 @@ for old, new in renames.items():
         raise SystemExit(f'migration test name missing: {old}')
     s = s.replace(old, new, 1)
 
-# All of these calls intentionally run through the latest migration.
+# Calls that deliberately run to the latest supported schema now expect v8.
 for old, new in [
     ('assert_eq!(migrate(&mut connection, 0).unwrap(), 7);', 'assert_eq!(migrate(&mut connection, 0).unwrap(), 8);'),
     ('assert_eq!(migrate(&mut connection, 1).unwrap(), 7);', 'assert_eq!(migrate(&mut connection, 1).unwrap(), 8);'),
     ('assert_eq!(migrate(&mut connection, 2).unwrap(), 7);', 'assert_eq!(migrate(&mut connection, 2).unwrap(), 8);'),
     ('assert_eq!(migrate(&mut connection, 3).unwrap(), 7);', 'assert_eq!(migrate(&mut connection, 3).unwrap(), 8);'),
     ('assert_eq!(migrate(&mut fresh, 0).unwrap(), 7);', 'assert_eq!(migrate(&mut fresh, 0).unwrap(), 8);'),
+    ('assert_eq!(migrate(&mut upgraded, 5).unwrap(), 7);', 'assert_eq!(migrate(&mut upgraded, 5).unwrap(), 8);'),
     ('assert_eq!(ledger.schema_version().unwrap(), 7);', 'assert_eq!(ledger.schema_version().unwrap(), 8);'),
 ]:
     s = s.replace(old, new)
 
-# Idempotence checks must start from the schema that is already installed.
-for old in [
-    'assert_eq!(migrate(&mut connection, 7).unwrap(), 7);',
-    'assert_eq!(migrate(&mut connection, 7).unwrap(), 8);',
-    'assert_eq!(migrate(&mut fresh, 7).unwrap(), 7);',
-    'assert_eq!(migrate(&mut fresh, 7).unwrap(), 8);',
-    'assert_eq!(migrate(&mut upgraded, 7).unwrap(), 7);',
-    'assert_eq!(migrate(&mut upgraded, 7).unwrap(), 8);',
+# Idempotence checks must start from the schema already installed.
+for old, new in [
+    ('assert_eq!(migrate(&mut connection, 7).unwrap(), 7);', 'assert_eq!(migrate(&mut connection, 8).unwrap(), 8);'),
+    ('assert_eq!(migrate(&mut fresh, 7).unwrap(), 7);', 'assert_eq!(migrate(&mut fresh, 8).unwrap(), 8);'),
+    ('assert_eq!(migrate(&mut upgraded, 7).unwrap(), 7);', 'assert_eq!(migrate(&mut upgraded, 8).unwrap(), 8);'),
 ]:
-    s = s.replace(old, old.replace('7).unwrap(), 7', '8).unwrap(), 8').replace('7).unwrap(), 8', '8).unwrap(), 8'))
+    s = s.replace(old, new)
 
-# Remaining direct user_version assertions are terminal schema assertions.
+# Direct terminal version assertions after successful migration become v8;
+# rollback checks for older source versions stay unchanged.
+old = '''        assert_eq!(
+            upgraded
+                .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
+                .unwrap(),
+            7
+        );'''
+new = old.replace('            7\n', '            8\n')
+if old not in s:
+    raise SystemExit('upgraded user_version assertion missing')
+s = s.replace(old, new, 1)
 s = s.replace('        assert_eq!(version, 7);', '        assert_eq!(version, 8);')
 s = s.replace('            7\n        );', '            8\n        );')
 
