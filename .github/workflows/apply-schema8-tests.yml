@@ -18,7 +18,19 @@ jobs:
           ref: fix/windows-fork-session-resilience
           fetch-depth: 0
       - name: Update schema expectations
-        run: python tools/update_schema8_expectations.py
+        shell: bash
+        run: |
+          python tools/update_schema8_expectations.py
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src/storage/migrations.rs')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace(
+              'assert_eq!(migrate(&mut upgraded, 7).unwrap(), 7);',
+              'assert_eq!(migrate(&mut upgraded, 8).unwrap(), 8);',
+          )
+          p.write_text(s, encoding='utf-8')
+          PY
       - name: Format
         run: cargo fmt
       - name: Run affected Rust tests
