@@ -1,0 +1,332 @@
+name: Apply generic Session quarantine fix
+
+on:
+  push:
+    branches:
+      - fix/windows-fork-session-resilience
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: "${{ github.event.head_commit.message == 'chore: apply generic quarantine fix' }}"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/windows-fork-session-resilience
+          fetch-depth: 0
+      - name: Apply production and regression patch
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new, label):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected 1 match, got {count}')
+              p.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          path = 'src/scanner/usage_consumer.rs'
+          replace_once(
+              path,
+              '''enum UsageThreadOutcome {
+              Completed,
+              GlobalPlanChanged { retry_thread: bool },
+              SessionDataError(&'static str),
+              OrdinaryError(&'static str),
+              FatalReloadError(&'static str),
+          }
+          ''',
+              '''enum UsageThreadOutcome {
+              Completed,
+              GlobalPlanChanged { retry_thread: bool },
+              SessionDataError(&'static str),
+              OrdinaryError(&'static str),
+              FatalReloadError(&'static str),
+          }
+
+          const SESSION_DATA_INVALID: &str = "USAGE_SESSION_DATA_INVALID";
+
+          fn repeated_shadow_data_error(action: PlanAction) -> Option<&'static str> {
+              (action == PlanAction::BuildFrom).then_some(SESSION_DATA_INVALID)
+          }
+          ''',
+              'session data classifier helper',
+          )
+
+          replace_once(
+              path,
+              '''                UsageReadStep::AwaitingOwnership => {
+                              // The long replay prefix remains memory-only until owning
+                              // evidence is found; zero prepared source commits may leak.
+                              return UsageThreadOutcome::Completed;
+                          }
+                          UsageReadStep::NeedsRebuild => {
+                              if !discovery_complete {
+                                  return UsageThreadOutcome::Completed;
+                              }
+                              let already_rebuilding = plan.action == PlanAction::BuildFrom;
+                              if let Err(error_code) =
+                                  replace_or_begin(usage, &scan, present_ids, [plan.source_file_id])
+                              {
+                                  return UsageThreadOutcome::OrdinaryError(error_code);
+                              }
+                              // A failed nonzero/LocalReplay proof may safely transition
+                              // into a fresh shadow build and retry this fixed physical
+                              // view once. If a BuildFrom read (including a nonzero
+                              // continuation inside an existing build) itself still
+                              // lacks a trustworthy ownership/parser/guard proof, the
+                              // replacement is the durable result for this round.
+                              // Retrying the same bytes would be an infinite
+                              // replace/read loop and cannot create stronger evidence.
+                              if already_rebuilding {
+                                  return UsageThreadOutcome::GlobalPlanChanged {
+                                      retry_thread: false,
+                                  };
+                              }
+                              return UsageThreadOutcome::GlobalPlanChanged { retry_thread: true };
+                          }
+          ''',
+              '''                UsageReadStep::AwaitingOwnership => {
+                              // First-import/live sources may legitimately be waiting for
+                              // owning evidence. A BuildFrom read, however, is already the
+                              // shadow-rebuild attempt. If that fixed view still cannot
+                              // establish trustworthy Session ownership, isolate the whole
+                              // Session Tree instead of leaving the global build pending.
+                              if cancelled(cancellation) {
+                                  return UsageThreadOutcome::Completed;
+                              }
+                              if discovery_complete
+                                  && let Some(error_code) = repeated_shadow_data_error(plan.action)
+                              {
+                                  return UsageThreadOutcome::SessionDataError(error_code);
+                              }
+                              return UsageThreadOutcome::Completed;
+                          }
+                          UsageReadStep::NeedsRebuild => {
+                              if !discovery_complete {
+                                  return UsageThreadOutcome::Completed;
+                              }
+                              // BuildFrom is the one allowed shadow-rebuild attempt for this
+                              // fixed source view. A second ownership/parser/trust failure is
+                              // Session-scoped bad data, not an infrastructure failure.
+                              if let Some(error_code) = repeated_shadow_data_error(plan.action) {
+                                  return UsageThreadOutcome::SessionDataError(error_code);
+                              }
+                              if let Err(error_code) =
+                                  replace_or_begin(usage, &scan, present_ids, [plan.source_file_id])
+                              {
+                                  return UsageThreadOutcome::OrdinaryError(error_code);
+                              }
+                              // A failed nonzero/LocalReplay proof may safely transition
+                              // into a fresh shadow build and retry this fixed physical view
+                              // once. Storage/I/O failures remain Ordinary/Fatal errors and
+                              // never enter the Session quarantine path.
+                              return UsageThreadOutcome::GlobalPlanChanged { retry_thread: true };
+                          }
+          ''',
+              'generic shadow rebuild quarantine branch',
+          )
+
+          replace_once(
+              path,
+              '''        let chunk = match chunk {
+                      Ok(chunk) => chunk,
+                      Err(ChunkReadError::CheckpointGuardMismatch) => {
+                          return Ok(UsageReadStep::NeedsRebuild);
+                      }
+                      Err(
+                          ChunkReadError::SourceChangedBeforeRead | ChunkReadError::SourceChangedDuringRead,
+                      ) => return Ok(UsageReadStep::NeedsRebuildStop),
+                      Err(error) => return Err(read_error_code(error)),
+                  };
+          ''',
+              '''        let chunk = match chunk {
+                      Ok(chunk) => chunk,
+                      Err(
+                          ChunkReadError::CheckpointGuardMismatch
+                          | ChunkReadError::SourceChangedBeforeRead
+                          | ChunkReadError::SourceChangedDuringRead,
+                      ) => return Ok(UsageReadStep::NeedsRebuildStop),
+                      Err(error) => return Err(read_error_code(error)),
+                  };
+          ''',
+              'guard mismatch stays source-change path',
+          )
+
+          replace_once(
+              path,
+              '''fn now_ms() -> i64 {
+              let millis = std::time::SystemTime::now()
+                  .duration_since(std::time::UNIX_EPOCH)
+                  .unwrap_or_default()
+                  .as_millis();
+              i64::try_from(millis).unwrap_or(i64::MAX)
+          }
+          ''',
+              '''#[cfg(test)]
+          mod resilience_tests {
+              use super::*;
+
+              #[test]
+              fn repeated_shadow_rebuild_data_failure_is_session_scoped_only() {
+                  assert_eq!(
+                      repeated_shadow_data_error(PlanAction::BuildFrom),
+                      Some("USAGE_SESSION_DATA_INVALID")
+                  );
+                  for action in [
+                      PlanAction::ReadFrom,
+                      PlanAction::LocalReplay,
+                      PlanAction::AwaitOwningMeta,
+                      PlanAction::ResumeOwningLive,
+                      PlanAction::VerifyRawTail,
+                      PlanAction::CompleteOnly,
+                      PlanAction::BeginCarry,
+                      PlanAction::ResumeCarry,
+                      PlanAction::Skip,
+                      PlanAction::BlockedRelationship,
+                      PlanAction::RebuildRequired,
+                  ] {
+                      assert_eq!(repeated_shadow_data_error(action), None, "{action:?}");
+                  }
+              }
+          }
+
+          fn now_ms() -> i64 {
+              let millis = std::time::SystemTime::now()
+                  .duration_since(std::time::UNIX_EPOCH)
+                  .unwrap_or_default()
+                  .as_millis();
+              i64::try_from(millis).unwrap_or(i64::MAX)
+          }
+          ''',
+              'generic quarantine unit regression',
+          )
+
+          path = 'src/scanner/mod.rs'
+          replace_once(
+              path,
+              '''    fn active_usage_event_count(ledger: &Ledger) -> i64 {
+                  Connection::open(ledger.database_path())
+                      .expect("open ledger query")
+                      .query_row(
+                          "SELECT COUNT(*) FROM usage_events
+                           WHERE ledger_epoch=(SELECT usage_active_epoch FROM app_meta WHERE id=1)",
+                          [],
+                          |row| row.get(0),
+                      )
+                      .expect("count active usage events")
+              }
+          ''',
+              '''    fn active_usage_event_count(ledger: &Ledger) -> i64 {
+                  Connection::open(ledger.database_path())
+                      .expect("open ledger query")
+                      .query_row(
+                          "SELECT COUNT(*) FROM usage_events
+                           WHERE ledger_epoch=(SELECT usage_active_epoch FROM app_meta WHERE id=1)",
+                          [],
+                          |row| row.get(0),
+                      )
+                      .expect("count active usage events")
+              }
+
+              fn active_quarantine_count(ledger: &Ledger) -> i64 {
+                  Connection::open(ledger.database_path())
+                      .expect("open ledger query")
+                      .query_row(
+                          "SELECT COUNT(*) FROM usage_session_quarantine
+                           WHERE ledger_epoch=(SELECT usage_active_epoch FROM app_meta WHERE id=1)",
+                          [],
+                          |row| row.get(0),
+                      )
+                      .expect("count active Session quarantines")
+              }
+          ''',
+              'active quarantine test helper',
+          )
+
+          replace_once(
+              path,
+              '''    #[test]
+              fn ordinary_usage_group_error_does_not_block_the_next_thread() {
+          ''',
+              '''    #[test]
+              fn repeated_shadow_rebuild_data_failure_quarantines_the_session_tree() {
+                  let fixture = UsagePerformanceFixture::new("t-perf-008-quarantine");
+                  fixture.stabilize();
+                  let active_before = usage_epochs(&fixture.ledger).0.expect("active epoch");
+                  let bad_source_id = source_checkpoint(&fixture.ledger, &fixture.paths[0]).0;
+
+                  let connection = Connection::open(fixture.ledger.database_path()).unwrap();
+                  connection
+                      .execute("UPDATE app_meta SET usage_parser_version=1 WHERE id=1", [])
+                      .unwrap();
+                  connection
+                      .execute(
+                          "UPDATE rollout_metadata_facts
+                           SET owning_records_start_offset=1
+                           WHERE source_file_id=?1",
+                          [bad_source_id],
+                      )
+                      .unwrap();
+                  drop(connection);
+
+                  let (result, report) = fixture.run_observed();
+                  result.expect("bad Session data is quarantined without failing the round");
+                  assert!(report.error_codes.contains(&"USAGE_SESSION_DATA_INVALID"));
+                  assert_eq!(report.failed_sources, 1);
+
+                  let (active_after, build_after, parser_after) = usage_epochs(&fixture.ledger);
+                  assert!(active_after.expect("new active epoch") > active_before);
+                  assert_eq!(build_after, None);
+                  assert_eq!(parser_after, crate::usage::USAGE_PARSER_VERSION);
+                  assert_eq!(active_quarantine_count(&fixture.ledger), 1);
+              }
+
+              #[test]
+              fn ordinary_usage_group_error_does_not_block_the_next_thread() {
+          ''',
+              'generic quarantine integration regression',
+          )
+
+          replace_once(
+              path,
+              '''        assert_eq!(active_usage_event_count(&fixture.ledger), 2);
+              }
+
+              #[test]
+              fn required_usage_reload_failures_have_fatal_control_flow() {
+          ''',
+              '''        assert_eq!(active_usage_event_count(&fixture.ledger), 2);
+                  assert_eq!(active_quarantine_count(&fixture.ledger), 0);
+              }
+
+              #[test]
+              fn required_usage_reload_failures_have_fatal_control_flow() {
+          ''',
+              'ordinary failures do not quarantine',
+          )
+          PY
+      - name: Format
+        run: cargo fmt
+      - name: Focused Rust gates
+        run: |
+          cargo check --locked
+          cargo test --locked usage::processor::tests::t_mu03_c03_effort_is_canonical_identity_but_not_derived_cost
+          cargo test --locked scanner::usage_consumer::resilience_tests
+          cargo test --locked scanner::tests::repeated_shadow_rebuild_data_failure_quarantines_the_session_tree
+          cargo test --locked scanner::tests::ordinary_usage_group_error_does_not_block_the_next_thread
+      - name: Commit production patch
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -f .github/workflows/apply-generic-quarantine.yml
+          git add -A
+          git commit -m "fix: quarantine repeated Session data failures"
+          git push origin HEAD:fix/windows-fork-session-resilience
