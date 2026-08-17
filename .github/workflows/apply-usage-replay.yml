@@ -17,6 +17,23 @@ jobs:
         with:
           ref: fix/windows-fork-session-resilience
           fetch-depth: 0
+      - name: Normalize guarded patch pattern
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('tools/apply_usage_replay_patch.py')
+          text = path.read_text(encoding='utf-8')
+          old = '            && !matches!(self.context.resume_state, ResumeState::ReplayedAncestor { .. })\n'
+          new = '''            && !matches!(
+                          self.context.resume_state,
+                          ResumeState::ReplayedAncestor { .. }
+                      )
+          '''
+          if old not in text:
+              raise SystemExit('patch guard source shape not found')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
       - name: Apply guarded patch
         run: python tools/apply_usage_replay_patch.py
       - name: Format
