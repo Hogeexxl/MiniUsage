@@ -976,6 +976,7 @@ impl Parser {
             return;
         }
 
+        let was_replayed = self.machine == MachineState::ReplayedAncestor;
         self.record(
             line,
             EnvelopeKind::SessionMeta,
@@ -994,12 +995,7 @@ impl Parser {
             self.owning_thread_id.clone(),
             Some("id"),
         );
-        if self.resumed_nonzero
-            && !matches!(
-                self.context.resume_state,
-                ResumeState::ReplayedAncestor { .. }
-            )
-        {
+        if self.resumed_nonzero && !was_replayed {
             self.needs_rebuild = true;
         }
     }

@@ -24,8 +24,9 @@ use crate::{
     usage::USAGE_PARSER_VERSION,
     usage::{
         ActivationOutcome, ClassifiedOversizedUsageLine, ClassifiedUsageItem, ClassifiedUsageLine,
-        CompletionStatus, EventKind, FixedViewTail, PipelineDisposition, PlanAction, TailStatus,
-        UsageLedger, UsageScanState, UsageSourceCommitDto, UsageSourceScanPlan,
+        CompletionStatus, EventKind, FixedViewTail, PipelineDisposition, PlanAction,
+        SourceContinuationState, TailStatus, UsageLedger, UsageScanState, UsageSourceCommitDto,
+        UsageSourceScanPlan,
     },
 };
 
@@ -737,12 +738,21 @@ fn process_source_batch(
         let Some(owning_thread_id) = source.owning_thread_id.clone() else {
             return Ok(UsageReadStep::NeedsRebuild);
         };
+        let Some(usage_state) = source.state.as_ref() else {
+            return Ok(UsageReadStep::NeedsRebuild);
+        };
         let SafeFactState::Matching(fact) = &metadata_entry.safe_fact else {
             return Ok(UsageReadStep::NeedsRebuild);
         };
         let fact =
             RolloutThreadFact::from_safe_fact(fact).map_err(|_| "USAGE_SAFE_FACT_INVALID")?;
-        (ResumeState::OwningLive { owning_thread_id }, Some(fact))
+        let resume = match usage_state.continuation_state {
+            SourceContinuationState::ReplayedAncestor => {
+                ResumeState::ReplayedAncestor { owning_thread_id }
+            }
+            SourceContinuationState::OwningLive => ResumeState::OwningLive { owning_thread_id },
+        };
+        (resume, Some(fact))
     };
     let mut parser = RolloutMetadataParser::start_chunk(RolloutParseContext {
         source_file_id: source.source_file_id,
@@ -753,6 +763,15 @@ fn process_source_batch(
     });
 
     let establishing = initial_start == 0 && source.state.is_none();
+    let metadata_replay_tail = matches!(
+        &metadata_entry.safe_fact,
+        SafeFactState::Matching(fact)
+            if fact.continuation_state == crate::domain::ContinuationState::ReplayedAncestor
+    );
+    let allow_replay_tail = metadata_replay_tail
+        || source.state.as_ref().is_some_and(|state| {
+            state.continuation_state == SourceContinuationState::ReplayedAncestor
+        });
     // Metadata has already parsed this exact fixed view.  At offset 0 we still
     // replay the shared ownership classifier ourselves, but the durable safe
     // fact tells us which classifier boundary must be re-observed before a
@@ -874,10 +893,24 @@ fn process_source_batch(
                         }
                     }
                 } else if classification.ownership != RecordOwnership::Owning {
-                    // Any late foreign record after a durable/nonzero OwningLive
-                    // boundary invalidates the whole source result.
-                    retained.push(item);
-                    return ReadControl::StopAfter;
+                    match classification.ownership {
+                        RecordOwnership::ReplayedAncestor if allow_replay_tail => {
+                            replay_window_bytes = replay_window_bytes.saturating_add(bytes);
+                            replay_window_lines = replay_window_lines.saturating_add(1);
+                            retained.push(item);
+                            if bytes > MAX_BATCH_BYTES
+                                || replay_window_bytes >= REPLAY_WINDOW_BYTES
+                                || replay_window_lines >= REPLAY_WINDOW_LINES
+                            {
+                                return ReadControl::StopAfter;
+                            }
+                            return ReadControl::Continue;
+                        }
+                        _ => {
+                            retained.push(item);
+                            return ReadControl::StopAfter;
+                        }
+                    }
                 }
 
                 let candidate = matches!(
@@ -908,7 +941,7 @@ fn process_source_batch(
                     || adapter_bytes >= MAX_BATCH_BYTES
                     || adapter_lines >= MAX_BATCH_LINES
                     || potential_candidates >= MAX_BATCH_CANDIDATES
-                    || (establishing && ownership_established)
+                    || (establishing && ownership_established && !allow_replay_tail)
                 {
                     ReadControl::StopAfter
                 } else {
@@ -952,7 +985,7 @@ fn process_source_batch(
         } else {
             initial_start
         };
-        let pipeline_plan = crate::usage::ledger::pipeline_plan(
+        let mut pipeline_plan = crate::usage::ledger::pipeline_plan(
             scan,
             source,
             file_generation,
@@ -964,6 +997,7 @@ fn process_source_batch(
             replayed_prefix_lines,
         )
         .map_err(|_| "USAGE_PIPELINE_PLAN_FAILED")?;
+        pipeline_plan.allow_replay_tail = allow_replay_tail;
         let tail = tail_from_read(&chunk);
         let guard = chunk.guard.map(|hash| hash.as_bytes().to_vec());
         let disposition = usage

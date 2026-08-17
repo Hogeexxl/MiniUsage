@@ -113,3 +113,61 @@ CREATE TABLE usage_session_quarantine (
     FOREIGN KEY (root_session_id) REFERENCES threads(thread_id)
 );
 CREATE INDEX usage_session_quarantine_epoch_idx ON usage_session_quarantine(ledger_epoch);
+
+
+-- Usage source checkpoints can also end safely while a confirmed fork is still
+-- replaying its ancestor. Rebuild the table because SQLite cannot widen CHECK.
+ALTER TABLE usage_source_states RENAME TO usage_source_states_v7;
+CREATE TABLE usage_source_states (
+    ledger_epoch INTEGER NOT NULL CHECK (ledger_epoch > 0),
+    source_file_id INTEGER NOT NULL,
+    file_generation INTEGER NOT NULL CHECK (file_generation > 0),
+    device_id INTEGER NOT NULL CHECK (device_id >= 0),
+    inode INTEGER NOT NULL CHECK (inode >= 0),
+    usage_parser_version INTEGER NOT NULL CHECK (usage_parser_version >= 0),
+    canonical_algorithm_version INTEGER NOT NULL CHECK (canonical_algorithm_version >= 0),
+    resolved_through_offset INTEGER NOT NULL CHECK (resolved_through_offset >= 0),
+    observed_raw_size INTEGER NOT NULL CHECK (observed_raw_size >= 0),
+    raw_tail_status TEXT NOT NULL CHECK (raw_tail_status IN ('unverified','none','half_line')),
+    raw_tail_start_offset INTEGER CHECK (raw_tail_start_offset >= 0),
+    owning_thread_id TEXT NOT NULL,
+    root_session_id TEXT NOT NULL,
+    continuation_state TEXT NOT NULL CHECK (continuation_state IN ('replayed_ancestor','owning_live')),
+    previous_total_input_tokens INTEGER CHECK (previous_total_input_tokens >= 0),
+    previous_total_cached_tokens INTEGER CHECK (previous_total_cached_tokens >= 0),
+    previous_total_cache_write_tokens INTEGER CHECK (previous_total_cache_write_tokens >= 0),
+    previous_total_output_tokens INTEGER CHECK (previous_total_output_tokens >= 0),
+    previous_total_reasoning_tokens INTEGER CHECK (previous_total_reasoning_tokens >= 0),
+    previous_total_total_tokens INTEGER CHECK (previous_total_total_tokens >= 0),
+    previous_total_fingerprint BLOB,
+    previous_total_offset INTEGER CHECK (previous_total_offset >= 0),
+    chain_state TEXT NOT NULL CHECK (chain_state IN ('continuous','interrupted')),
+    chain_block_reason TEXT CHECK (chain_block_reason IS NULL OR chain_block_reason IN ('malformed','oversized','total_invalid','ownership_gap','parser_gap')),
+    active_turn_key TEXT,
+    active_model TEXT,
+    active_model_offset INTEGER CHECK (active_model_offset >= 0),
+    active_reasoning_effort TEXT,
+    active_reasoning_effort_offset INTEGER CHECK (active_reasoning_effort_offset >= 0),
+    updated_at_ms INTEGER NOT NULL CHECK (updated_at_ms >= 0),
+    PRIMARY KEY (ledger_epoch, source_file_id),
+    FOREIGN KEY (source_file_id) REFERENCES source_files(source_file_id),
+    FOREIGN KEY (owning_thread_id) REFERENCES threads(thread_id),
+    FOREIGN KEY (root_session_id) REFERENCES threads(thread_id),
+    CHECK (resolved_through_offset <= observed_raw_size),
+    CHECK ((active_model IS NULL) = (active_model_offset IS NULL)),
+    CHECK ((active_reasoning_effort IS NULL) = (active_reasoning_effort_offset IS NULL)),
+    CHECK ((previous_total_input_tokens IS NULL AND previous_total_cached_tokens IS NULL
+        AND previous_total_cache_write_tokens IS NULL AND previous_total_output_tokens IS NULL
+        AND previous_total_reasoning_tokens IS NULL AND previous_total_total_tokens IS NULL
+        AND previous_total_fingerprint IS NULL AND previous_total_offset IS NULL)
+      OR (previous_total_input_tokens IS NOT NULL AND previous_total_cached_tokens IS NOT NULL
+        AND previous_total_output_tokens IS NOT NULL AND previous_total_reasoning_tokens IS NOT NULL
+        AND previous_total_total_tokens IS NOT NULL AND previous_total_fingerprint IS NOT NULL
+        AND previous_total_offset IS NOT NULL AND previous_total_offset <= resolved_through_offset
+        AND previous_total_cached_tokens <= previous_total_input_tokens
+        AND previous_total_reasoning_tokens <= previous_total_output_tokens
+        AND previous_total_total_tokens = previous_total_input_tokens + previous_total_output_tokens
+        AND (previous_total_cache_write_tokens IS NULL OR previous_total_cached_tokens + previous_total_cache_write_tokens <= previous_total_input_tokens)))
+);
+INSERT INTO usage_source_states SELECT * FROM usage_source_states_v7;
+DROP TABLE usage_source_states_v7;

@@ -3,14 +3,14 @@
 use crate::domain::DomainError;
 
 /// The parser and canonical algorithm versions compiled into this binary.
-pub const USAGE_PARSER_VERSION: i64 = 6;
+pub const USAGE_PARSER_VERSION: i64 = 7;
 pub const USAGE_CANONICAL_ALGORITHM_VERSION: i64 = 5;
 
 /// Return the canonical algorithm that belongs to a parser version.
 pub const fn canonical_algorithm_for(parser_version: i64) -> Option<i64> {
     match parser_version {
         4 | 5 => Some(4),
-        USAGE_PARSER_VERSION => Some(USAGE_CANONICAL_ALGORITHM_VERSION),
+        6 | USAGE_PARSER_VERSION => Some(USAGE_CANONICAL_ALGORITHM_VERSION),
         _ => None,
     }
 }

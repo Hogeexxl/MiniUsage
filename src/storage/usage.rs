@@ -58,6 +58,31 @@ pub(crate) enum UsageChainState {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum UsageContinuationState {
+    ReplayedAncestor,
+    OwningLive,
+}
+
+impl UsageContinuationState {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::ReplayedAncestor => "replayed_ancestor",
+            Self::OwningLive => "owning_live",
+        }
+    }
+
+    fn parse(value: &str) -> StorageResult<Self> {
+        match value {
+            "replayed_ancestor" => Ok(Self::ReplayedAncestor),
+            "owning_live" => Ok(Self::OwningLive),
+            _ => Err(StorageError::invalid_state(
+                "invalid usage continuation state",
+            )),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum UsageGapReason {
     Malformed,
     Oversized,
@@ -110,6 +135,7 @@ pub(crate) struct UsageSourceStateWrite {
     pub raw_tail_start_offset: Option<i64>,
     pub owning_thread_id: String,
     pub root_session_id: String,
+    pub continuation_state: UsageContinuationState,
     pub previous_total: Option<UsageSnapshot>,
     pub previous_total_offset: Option<i64>,
     pub chain_state: UsageChainState,
@@ -1106,7 +1132,7 @@ fn load_usage_build_work_list_chunk(
                  AND st.observed_raw_size=b.observed_raw_size
                  AND st.owning_thread_id IS b.expected_owning_thread_id
                  AND st.root_session_id IS b.expected_root_session_id
-                 AND st.continuation_state='owning_live'
+                 AND st.continuation_state IN ('replayed_ancestor','owning_live')
                  AND st.raw_tail_status=b.raw_tail_status
                  AND st.raw_tail_start_offset IS b.raw_tail_start_offset
                  AND (b.completion_status<>'carried' OR sf.file_status='missing')
@@ -2506,7 +2532,7 @@ fn read_usage_source_state(
         .query_row(
             "SELECT file_generation,device_id,inode,usage_parser_version,
                 canonical_algorithm_version,resolved_through_offset,observed_raw_size,
-                raw_tail_status,raw_tail_start_offset,owning_thread_id,root_session_id,
+                raw_tail_status,raw_tail_start_offset,owning_thread_id,root_session_id,continuation_state,
                 previous_total_input_tokens,previous_total_cached_tokens,
                 previous_total_cache_write_tokens,previous_total_output_tokens,
                 previous_total_reasoning_tokens,previous_total_total_tokens,previous_total_fingerprint,
@@ -2516,25 +2542,24 @@ fn read_usage_source_state(
             params![epoch, source_file_id],
             |row| {
                 let tail: String = row.get(7)?;
-                let chain: String = row.get(19)?;
-                let reason: Option<String> = row.get(20)?;
-                let previous_input: Option<i64> = row.get(11)?;
+                let continuation: String = row.get(11)?;
+                let chain: String = row.get(20)?;
+                let reason: Option<String> = row.get(21)?;
+                let previous_input: Option<i64> = row.get(12)?;
                 let previous_total = match previous_input {
                     None => None,
-                    Some(input_tokens) => {
-                        Some(UsageSnapshot {
-                            vector: NormalizedTokenUsage::new(
-                                input_tokens,
-                                row.get(12)?,
-                                row.get(13)?,
-                                row.get(14)?,
-                                row.get(15)?,
-                                row.get(16)?,
-                            )
-                            .map_err(super::to_domain_sql_error)?,
-                            fingerprint: row.get(17)?,
-                        })
-                    }
+                    Some(input_tokens) => Some(UsageSnapshot {
+                        vector: NormalizedTokenUsage::new(
+                            input_tokens,
+                            row.get(13)?,
+                            row.get(14)?,
+                            row.get(15)?,
+                            row.get(16)?,
+                            row.get(17)?,
+                        )
+                        .map_err(super::to_domain_sql_error)?,
+                        fingerprint: row.get(18)?,
+                    }),
                 };
                 Ok(UsageSourceStateWrite {
                     file_generation: row.get(0)?,
@@ -2544,33 +2569,31 @@ fn read_usage_source_state(
                     canonical_algorithm_version: row.get(4)?,
                     resolved_through_offset: row.get(5)?,
                     observed_raw_size: row.get(6)?,
-                    raw_tail_status: UsageTailStatus::parse(&tail).map_err(|error| {
-                        rusqlite::Error::InvalidParameterName(error.to_string())
-                    })?,
+                    raw_tail_status: UsageTailStatus::parse(&tail)
+                        .map_err(|error| rusqlite::Error::InvalidParameterName(error.to_string()))?,
                     raw_tail_start_offset: row.get(8)?,
                     owning_thread_id: row.get(9)?,
                     root_session_id: row.get(10)?,
+                    continuation_state: UsageContinuationState::parse(&continuation)
+                        .map_err(|error| rusqlite::Error::InvalidParameterName(error.to_string()))?,
                     previous_total,
-                    previous_total_offset: row.get(18)?,
+                    previous_total_offset: row.get(19)?,
                     chain_state: match (chain.as_str(), reason.as_deref()) {
                         ("continuous", None) => UsageChainState::Continuous,
-                        ("interrupted", Some(reason)) => {
-                            UsageChainState::Interrupted(UsageGapReason::parse(reason).map_err(
-                                |error| rusqlite::Error::InvalidParameterName(error.to_string()),
-                            )?)
-                        }
-                        _ => {
-                            return Err(rusqlite::Error::InvalidParameterName(
-                                "invalid usage chain state".to_owned(),
-                            ));
-                        }
+                        ("interrupted", Some(reason)) => UsageChainState::Interrupted(
+                            UsageGapReason::parse(reason)
+                                .map_err(|error| rusqlite::Error::InvalidParameterName(error.to_string()))?,
+                        ),
+                        _ => return Err(rusqlite::Error::InvalidParameterName(
+                            "invalid usage chain state".to_owned(),
+                        )),
                     },
-                    active_turn_key: row.get(21)?,
-                    active_model: row.get(22)?,
-                    active_model_offset: row.get(23)?,
-                    active_reasoning_effort: row.get(24)?,
-                    active_reasoning_effort_offset: row.get(25)?,
-                    updated_at_ms: row.get(26)?,
+                    active_turn_key: row.get(22)?,
+                    active_model: row.get(23)?,
+                    active_model_offset: row.get(24)?,
+                    active_reasoning_effort: row.get(25)?,
+                    active_reasoning_effort_offset: row.get(26)?,
+                    updated_at_ms: row.get(27)?,
                 })
             },
         )
@@ -3542,8 +3565,8 @@ fn write_source_state_row(
             previous_total_fingerprint,previous_total_offset,chain_state,chain_block_reason,
             active_turn_key,active_model,active_model_offset,active_reasoning_effort,
             active_reasoning_effort_offset,updated_at_ms
-         ) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,'owning_live',
-            ?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29)
+         ) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,
+            ?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30)
          ON CONFLICT(ledger_epoch,source_file_id) DO UPDATE SET
             file_generation=excluded.file_generation,device_id=excluded.device_id,inode=excluded.inode,
             usage_parser_version=excluded.usage_parser_version,
@@ -3552,6 +3575,7 @@ fn write_source_state_row(
             observed_raw_size=excluded.observed_raw_size,raw_tail_status=excluded.raw_tail_status,
             raw_tail_start_offset=excluded.raw_tail_start_offset,
             owning_thread_id=excluded.owning_thread_id,root_session_id=excluded.root_session_id,
+            continuation_state=excluded.continuation_state,
             previous_total_input_tokens=excluded.previous_total_input_tokens,
             previous_total_cached_tokens=excluded.previous_total_cached_tokens,
             previous_total_cache_write_tokens=excluded.previous_total_cache_write_tokens,
@@ -3565,13 +3589,16 @@ fn write_source_state_row(
             active_reasoning_effort=excluded.active_reasoning_effort,
             active_reasoning_effort_offset=excluded.active_reasoning_effort_offset,
             updated_at_ms=excluded.updated_at_ms",
-        params![ledger_epoch,source_file_id,state.file_generation,state.device_id,state.inode,
+        params![
+            ledger_epoch,source_file_id,state.file_generation,state.device_id,state.inode,
             state.usage_parser_version,state.canonical_algorithm_version,state.resolved_through_offset,
             state.observed_raw_size,state.raw_tail_status.as_str(),state.raw_tail_start_offset,
-            state.owning_thread_id,state.root_session_id,previous.0,previous.1,previous.2,previous.3,
-            previous.4,previous.5,previous.6,state.previous_total_offset,
-            chain,reason,state.active_turn_key,state.active_model,state.active_model_offset,
-            state.active_reasoning_effort,state.active_reasoning_effort_offset,state.updated_at_ms],
+            state.owning_thread_id,state.root_session_id,state.continuation_state.as_str(),
+            previous.0,previous.1,previous.2,previous.3,previous.4,previous.5,previous.6,
+            state.previous_total_offset,chain,reason,state.active_turn_key,state.active_model,
+            state.active_model_offset,state.active_reasoning_effort,state.active_reasoning_effort_offset,
+            state.updated_at_ms
+        ],
     )?;
     Ok(())
 }
@@ -3974,6 +4001,7 @@ mod tests {
             raw_tail_start_offset: None,
             owning_thread_id: thread_id.to_owned(),
             root_session_id: root_id.to_owned(),
+            continuation_state: UsageContinuationState::OwningLive,
             previous_total: Some(UsageSnapshot {
                 fingerprint: value.fingerprint().to_vec(),
                 vector: value,

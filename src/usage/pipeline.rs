@@ -44,6 +44,12 @@ pub enum CheckpointStatus {
     RebuildRequired,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SourceContinuationState {
+    ReplayedAncestor,
+    OwningLive,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CheckpointExpectation {
     pub parser_version: i64,
@@ -65,6 +71,7 @@ pub struct SourceStateProof {
     pub raw_tail_start_offset: Option<u64>,
     pub owning_thread_id: String,
     pub root_session_id: String,
+    pub continuation_state: SourceContinuationState,
     pub processor_state: UsageSourceState,
     pub active_model_offset: Option<u64>,
     pub active_reasoning_effort_offset: Option<u64>,
@@ -87,6 +94,9 @@ pub struct UsagePipelinePlan {
     pub root_session_id: Option<String>,
     pub checkpoint: CheckpointExpectation,
     pub state: Option<SourceStateProof>,
+    /// True only when the metadata safe fact for this exact fixed view proves
+    /// that a newly established owner legitimately ends while replaying an ancestor.
+    pub allow_replay_tail: bool,
     pub replayed_prefix_bytes_before_chunk: u64,
     pub replayed_prefix_lines_before_chunk: u64,
 }
@@ -281,12 +291,9 @@ impl UsagePipeline {
             );
         }
 
-        let original_state = plan
-            .state
-            .as_ref()
-            .ok_or(PipelineError::InvalidPlan)?
-            .processor_state
-            .clone();
+        let original_proof = plan.state.as_ref().ok_or(PipelineError::InvalidPlan)?;
+        let original_state = original_proof.processor_state.clone();
+        let mut continuation_state = original_proof.continuation_state;
         let context = UsageContext {
             source_file_id: plan.source_file_id,
             file_generation: plan.file_generation,
@@ -314,9 +321,6 @@ impl UsagePipeline {
             if !matching_item(&item, last_complete_offset, plan.fixed_observed_size) {
                 return Ok(PipelineDisposition::NeedsRebuild);
             }
-            if item.classification().ownership != RecordOwnership::Owning {
-                return Ok(PipelineDisposition::NeedsRebuild);
-            }
             let start = item.start_offset();
             let end = item.end_offset();
             let line_bytes = end - start;
@@ -328,6 +332,25 @@ impl UsagePipeline {
                 oversized,
             ) {
                 break;
+            }
+            match item.classification().ownership {
+                RecordOwnership::UnknownOwnership => {
+                    return Ok(PipelineDisposition::NeedsRebuild);
+                }
+                RecordOwnership::ReplayedAncestor => {
+                    if continuation_state != SourceContinuationState::ReplayedAncestor {
+                        return Ok(PipelineDisposition::NeedsRebuild);
+                    }
+                    complete_line_count += 1;
+                    last_complete_offset = end;
+                    if oversized {
+                        break;
+                    }
+                    continue;
+                }
+                RecordOwnership::Owning => {
+                    continuation_state = SourceContinuationState::OwningLive;
+                }
             }
             let record = match &item {
                 ClassifiedUsageItem::Line(value) => adapter.parse_line(&value.line),
@@ -417,6 +440,7 @@ impl UsagePipeline {
             committed_at_ms,
             active_model_offset,
             active_reasoning_effort_offset,
+            continuation_state,
         )))
     }
 }
@@ -439,96 +463,195 @@ where
         root_session_id: root_session_id.to_owned(),
     };
     let adapter = CodexRolloutParser;
+    let mut state = UsageSourceState::default();
+    let mut active_model_offset = None;
+    let mut active_reasoning_effort_offset = None;
+    let mut events = Vec::new();
+    let mut occurrences = Vec::new();
+    let mut anomalies = Vec::new();
+    let mut closed_turns = Vec::new();
     let mut last = plan.read_start_offset;
+    let mut replayed_bytes = plan.replayed_prefix_bytes_before_chunk;
     let mut replayed_lines = plan.replayed_prefix_lines_before_chunk;
-    for item in lines {
+    let mut complete_line_count = replayed_lines;
+    let mut ownership_established = false;
+    let mut continuation_state = SourceContinuationState::OwningLive;
+
+    while let Some(item) = lines.next() {
         if !matching_item(&item, last, plan.fixed_observed_size) {
             return Ok(PipelineDisposition::NeedsRebuild);
         }
-        last = item.end_offset();
-        match item.classification().ownership {
-            RecordOwnership::ReplayedAncestor => replayed_lines += 1,
-            RecordOwnership::UnknownOwnership => {
-                return Ok(PipelineDisposition::AwaitingOwningMeta);
-            }
-            RecordOwnership::Owning => {
-                let ClassifiedUsageItem::Line(item) = item else {
-                    return Ok(PipelineDisposition::AwaitingOwningMeta);
-                };
-                // Ownership establishment is intentionally its own empty
-                // commit.  For a top-level rollout the boundary is session_meta;
-                // for a subagent whose file begins with an ancestor replay the
-                // shared classifier's first stable OwningLive boundary is the
-                // owning turn_context.  No Token/lifecycle record may establish
-                // this checkpoint.
-                if !matches!(
-                    item.classification.envelope,
-                    EnvelopeKind::SessionMeta | EnvelopeKind::TurnContext
-                ) {
+        let start = item.start_offset();
+        let end = item.end_offset();
+        let bytes = end - start;
+        let oversized = matches!(item, ClassifiedUsageItem::Oversized(_));
+
+        if !ownership_established {
+            match item.classification().ownership {
+                RecordOwnership::ReplayedAncestor => {
+                    replayed_bytes = replayed_bytes.saturating_add(bytes);
+                    replayed_lines = replayed_lines.saturating_add(1);
+                    complete_line_count = complete_line_count.saturating_add(1);
+                    last = end;
+                    continue;
+                }
+                RecordOwnership::UnknownOwnership => {
                     return Ok(PipelineDisposition::AwaitingOwningMeta);
                 }
-                let result = if item.classification.envelope == EnvelopeKind::TurnContext {
-                    let raw = adapter.parse_line(&item.line);
-                    let Some(record) = normalized_record(
-                        raw,
-                        owning_thread_id,
-                        item.line.start_offset(),
-                        item.line.end_offset(),
-                    ) else {
+                RecordOwnership::Owning => {
+                    let ClassifiedUsageItem::Line(line) = &item else {
                         return Ok(PipelineDisposition::AwaitingOwningMeta);
                     };
-                    let result = UsageProcessor::new(context.clone(), None).process([record]);
-                    if result.needs_rebuild {
+                    if !matches!(
+                        line.classification.envelope,
+                        EnvelopeKind::SessionMeta | EnvelopeKind::TurnContext
+                    ) {
+                        return Ok(PipelineDisposition::AwaitingOwningMeta);
+                    }
+                    ownership_established = true;
+                    continuation_state = SourceContinuationState::OwningLive;
+                }
+            }
+        } else {
+            match item.classification().ownership {
+                RecordOwnership::UnknownOwnership => {
+                    return Ok(PipelineDisposition::NeedsRebuild);
+                }
+                RecordOwnership::ReplayedAncestor => {
+                    if !plan.allow_replay_tail {
                         return Ok(PipelineDisposition::NeedsRebuild);
                     }
-                    result
-                } else {
-                    ProcessResult {
-                        events: Vec::new(),
-                        occurrences: Vec::new(),
-                        anomalies: Vec::new(),
-                        closed_turns: Vec::new(),
-                        updated_state: UsageSourceState::default(),
-                        needs_rebuild: false,
+                    continuation_state = SourceContinuationState::ReplayedAncestor;
+                    replayed_bytes = replayed_bytes.saturating_add(bytes);
+                    replayed_lines = replayed_lines.saturating_add(1);
+                    complete_line_count = complete_line_count.saturating_add(1);
+                    last = end;
+                    if oversized {
+                        break;
                     }
-                };
-                let active_model_offset = result
-                    .updated_state
-                    .active_model
-                    .as_ref()
-                    .map(|_| item.line.start_offset());
-                let active_reasoning_effort_offset = result
-                    .updated_state
-                    .active_reasoning_effort
-                    .as_ref()
-                    .map(|_| item.line.start_offset());
-                let replayed_bytes = plan.replayed_prefix_bytes_before_chunk
-                    + item.line.start_offset()
-                    - plan.read_start_offset;
-                let consumed_lines = replayed_lines + 1;
-                return Ok(PipelineDisposition::Commit(commit_dto(
-                    plan,
-                    owning_thread_id.to_owned(),
-                    root_session_id.to_owned(),
-                    result,
-                    last,
-                    consumed_lines,
-                    replayed_bytes,
-                    replayed_lines,
-                    FixedViewTail {
-                        exhausted: false,
-                        status: TailStatus::Unverified,
-                        half_line_start: None,
-                    },
-                    next_guard_hash,
-                    committed_at_ms,
-                    active_model_offset,
-                    active_reasoning_effort_offset,
-                )));
+                    continue;
+                }
+                RecordOwnership::Owning => {
+                    continuation_state = SourceContinuationState::OwningLive;
+                }
             }
         }
+
+        if !fits_line_budget(
+            last.saturating_sub(plan.start_offset)
+                .saturating_sub(replayed_bytes),
+            complete_line_count.saturating_sub(replayed_lines),
+            bytes,
+            oversized,
+        ) {
+            break;
+        }
+        let raw = match &item {
+            ClassifiedUsageItem::Line(value) => adapter.parse_line(&value.line),
+            ClassifiedUsageItem::Oversized(_) => UsageRawRecord::OversizedComplete {
+                start_offset: start,
+                end_offset: end,
+            },
+        };
+        if let Some(record) = normalized_record(raw, owning_thread_id, start, end) {
+            let context_record = match &record {
+                UsageRecord::TurnContext {
+                    model,
+                    reasoning_effort,
+                    ..
+                } => Some((model.is_some(), reasoning_effort.is_some())),
+                _ => None,
+            };
+            let processed =
+                UsageProcessor::new(context.clone(), Some(state.clone())).process([record]);
+            if processed.needs_rebuild
+                || occurrences.len() + processed.occurrences.len() > MAX_BATCH_CANDIDATES as usize
+            {
+                return Ok(PipelineDisposition::NeedsRebuild);
+            }
+            state = processed.updated_state;
+            if let Some((has_model, has_effort)) = context_record {
+                if has_model {
+                    active_model_offset = Some(start);
+                }
+                active_reasoning_effort_offset = has_effort.then_some(start);
+            }
+            events.extend(processed.events);
+            occurrences.extend(processed.occurrences);
+            anomalies.extend(processed.anomalies);
+            closed_turns.extend(processed.closed_turns);
+        }
+        complete_line_count = complete_line_count.saturating_add(1);
+        last = end;
+
+        // Preserve the historical empty ownership-boundary commit for normal
+        // sources. The extended path is entered only for metadata-proven replay EOF.
+        if !plan.allow_replay_tail {
+            return Ok(PipelineDisposition::Commit(commit_dto(
+                plan,
+                owning_thread_id.to_owned(),
+                root_session_id.to_owned(),
+                ProcessResult {
+                    events,
+                    occurrences,
+                    anomalies,
+                    closed_turns,
+                    updated_state: state,
+                    needs_rebuild: false,
+                },
+                last,
+                complete_line_count,
+                replayed_bytes,
+                replayed_lines,
+                FixedViewTail {
+                    exhausted: false,
+                    status: TailStatus::Unverified,
+                    half_line_start: None,
+                },
+                next_guard_hash,
+                committed_at_ms,
+                active_model_offset,
+                active_reasoning_effort_offset,
+                SourceContinuationState::OwningLive,
+            )));
+        }
     }
-    Ok(PipelineDisposition::AwaitingOwningMeta)
+
+    if !ownership_established {
+        return Ok(PipelineDisposition::AwaitingOwningMeta);
+    }
+    let tail = FixedViewTail {
+        exhausted: last == plan.fixed_observed_size,
+        status: if last == plan.fixed_observed_size {
+            TailStatus::None
+        } else {
+            TailStatus::Unverified
+        },
+        half_line_start: None,
+    };
+    Ok(PipelineDisposition::Commit(commit_dto(
+        plan,
+        owning_thread_id.to_owned(),
+        root_session_id.to_owned(),
+        ProcessResult {
+            events,
+            occurrences,
+            anomalies,
+            closed_turns,
+            updated_state: state,
+            needs_rebuild: false,
+        },
+        last,
+        complete_line_count,
+        replayed_bytes,
+        replayed_lines,
+        tail,
+        next_guard_hash,
+        committed_at_ms,
+        active_model_offset,
+        active_reasoning_effort_offset,
+        continuation_state,
+    )))
 }
 
 fn process_local_replay<I>(
@@ -569,6 +692,7 @@ where
     let mut adapter_lines = 0u64;
     let mut adapter_bytes = 0u64;
     let mut ownership_established = false;
+    let mut continuation_state = SourceContinuationState::OwningLive;
 
     while let Some(item) = lines.next() {
         if !matching_item(&item, last, plan.fixed_observed_size) {
@@ -593,8 +717,23 @@ where
                     ownership_established = true;
                 }
             }
-        } else if item.classification().ownership != RecordOwnership::Owning {
-            return Ok(PipelineDisposition::NeedsRebuild);
+        } else {
+            match item.classification().ownership {
+                RecordOwnership::UnknownOwnership => return Ok(PipelineDisposition::NeedsRebuild),
+                RecordOwnership::ReplayedAncestor => {
+                    if !plan.allow_replay_tail {
+                        return Ok(PipelineDisposition::NeedsRebuild);
+                    }
+                    continuation_state = SourceContinuationState::ReplayedAncestor;
+                    replayed_bytes = replayed_bytes.saturating_add(bytes);
+                    replayed_lines = replayed_lines.saturating_add(1);
+                    last = end;
+                    continue;
+                }
+                RecordOwnership::Owning => {
+                    continuation_state = SourceContinuationState::OwningLive;
+                }
+            }
         }
 
         let oversized = matches!(item, ClassifiedUsageItem::Oversized(_));
@@ -671,6 +810,7 @@ where
         committed_at_ms,
         active_model_offset,
         active_reasoning_effort_offset,
+        continuation_state,
     )))
 }
 
@@ -786,6 +926,7 @@ fn commit_dto(
     committed_at_ms: i64,
     active_model_offset: Option<u64>,
     active_reasoning_effort_offset: Option<u64>,
+    continuation_state: SourceContinuationState,
 ) -> UsageSourceCommitDto {
     let updated_state = SourceStateProof {
         file_generation: plan.file_generation,
@@ -800,6 +941,7 @@ fn commit_dto(
         raw_tail_start_offset: tail.half_line_start,
         owning_thread_id: owning_thread_id.clone(),
         root_session_id: root_session_id.clone(),
+        continuation_state,
         processor_state: result.updated_state.clone(),
         active_model_offset,
         active_reasoning_effort_offset,
@@ -1013,11 +1155,13 @@ mod tests {
                 raw_tail_start_offset: None,
                 owning_thread_id: OWNER.to_owned(),
                 root_session_id: ROOT.to_owned(),
+                continuation_state: SourceContinuationState::OwningLive,
                 processor_state,
                 active_model_offset: None,
                 active_reasoning_effort_offset: None,
                 updated_at_ms: 0,
             }),
+            allow_replay_tail: false,
             replayed_prefix_bytes_before_chunk: 0,
             replayed_prefix_lines_before_chunk: 0,
         }
