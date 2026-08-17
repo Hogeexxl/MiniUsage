@@ -34,6 +34,8 @@ function item(id: string, total = 3): SessionItemDto {
     inclusive_usage: { ...usage, total_tokens: total },
     self_usage: { ...usage, total_tokens: total },
     subagent_usage: usage,
+    data_status: "complete",
+    error_code: null,
   };
 }
 
@@ -46,6 +48,8 @@ function snapshot(count: number, seedCount = 60, key: RangeKey = "today"): Sessi
     total_tokens: count - index,
     combined_total_tokens: count - index,
     cache_hit_rate: index % 6 === 0 ? null : (index % 10) / 10,
+    data_status: "complete" as const,
+    error_code: null,
   }));
   return {
     range: range(key),
@@ -138,6 +142,8 @@ describe("useSessionTableController", () => {
       total_tokens: index < 2 ? 200 : 200 - index,
       combined_total_tokens: index < 2 ? 400 : 400 - index,
       cache_hit_rate: index === 198 ? null : (index % 10) / 10,
+      data_status: "complete" as const,
+      error_code: null,
     }));
     const full: SessionSnapshotResponse = {
       range: range(),

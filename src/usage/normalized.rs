@@ -318,7 +318,7 @@ mod tests {
 
     #[test]
     fn t_dc_010_fingerprint_is_v5_and_distinguishes_states() {
-        assert_eq!(USAGE_PARSER_VERSION, 6);
+        assert_eq!(USAGE_PARSER_VERSION, 7);
         assert_eq!(USAGE_CANONICAL_ALGORITHM_VERSION, 5);
         assert_eq!(canonical_algorithm_for(1), None);
         assert_eq!(canonical_algorithm_for(2), None);

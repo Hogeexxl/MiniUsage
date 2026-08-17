@@ -16,6 +16,12 @@ const usage = {
   estimated_cost: null,
   estimated_cost_status: "unknown" as const,
   session_count: 0,
+  session_health: {
+    total_sessions: 0,
+    complete_sessions: 0,
+    incomplete_sessions: 0,
+    error_sessions: 0,
+  },
 };
 
 afterEach(() => vi.useRealTimers());

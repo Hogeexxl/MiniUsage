@@ -30,6 +30,8 @@ const item: SessionItemDto = {
   inclusive_usage: { ...usage, total_tokens: 5_678 },
   self_usage: { ...usage, total_tokens: 1_234 },
   subagent_usage: usage,
+  data_status: "complete",
+  error_code: null,
 };
 
 function view(overrides: Partial<SessionTableViewModel> = {}): SessionTableViewModel {

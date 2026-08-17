@@ -552,8 +552,17 @@ button:focus-visible {
   cursor: pointer;
 }
 
-.metric-notice-trigger:hover,
-.metric-notice-trigger:focus-visible {
+.metric-notice-trigger.is-warning {
+  color: #d97706;
+}
+
+.metric-notice-trigger.is-warning:hover,
+.metric-notice-trigger.is-warning:focus-visible {
+  background: #fef3c7;
+}
+
+.metric-notice-trigger.is-error:hover,
+.metric-notice-trigger.is-error:focus-visible {
   background: #ffe4e6;
 }
 
@@ -579,6 +588,12 @@ button:focus-visible {
   line-height: 16px;
   white-space: normal;
   overflow-wrap: anywhere;
+}
+
+.metric-notice-bubble.is-warning {
+  border-color: #fde68a;
+  color: #92400e;
+  background: #fffbeb;
 }
 
 .metric-skeleton {
@@ -688,6 +703,52 @@ button:focus-visible {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+.session-table tbody tr.is-incomplete td:first-child {
+  box-shadow: inset 3px 0 0 #f59e0b;
+}
+
+.session-table tbody tr.is-error td:first-child {
+  box-shadow: inset 3px 0 0 #e11d48;
+}
+
+.session-table tbody tr.is-incomplete {
+  background: #fffdf5;
+}
+
+.session-table tbody tr.is-error {
+  background: #fff8f8;
+}
+
+.session-title-content {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+  gap: 6px;
+}
+
+.session-title-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.session-health-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.session-health-icon.is-incomplete { color: #d97706; }
+.session-health-icon.is-error { color: #be123c; }
 
 .session-state-cell {
   height: 192px !important;

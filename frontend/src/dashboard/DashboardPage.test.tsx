@@ -22,6 +22,12 @@ const summary = (range: "today" | "yesterday") => ({
     estimated_cost: null,
     estimated_cost_status: "unknown" as const,
     session_count: 1,
+    session_health: {
+      total_sessions: 1,
+      complete_sessions: 1,
+      incomplete_sessions: 0,
+      error_sessions: 0,
+    },
   },
 });
 

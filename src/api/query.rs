@@ -16,8 +16,9 @@ use crate::{
     usage::{
         aggregate::{
             AggregateError, CostCompleteness, FilterOptions, ModelUsageRow, ProjectFilterOption,
-            ReasoningEffortSummary, SessionDetail, SessionSortField, SessionSortIndexItem,
-            SessionSortOrder, SessionUsageRow, TokenTotals, UsageFilter, UsageSummary,
+            ReasoningEffortSummary, SessionDataStatus, SessionDetail, SessionSortField,
+            SessionSortIndexItem, SessionSortOrder, SessionUsageRow, TokenTotals, UsageFilter,
+            UsageSummary,
         },
         ledger::{
             SessionDetailSnapshot, SessionRowsSnapshot, SessionSnapshot, UsageLedgerError,
@@ -126,6 +127,14 @@ pub struct TokenUsageDto {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct SessionHealthDto {
+    pub total_sessions: i64,
+    pub complete_sessions: i64,
+    pub incomplete_sessions: i64,
+    pub error_sessions: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct SummaryUsageDto {
     pub input_tokens: i64,
     pub cached_tokens: i64,
@@ -139,6 +148,7 @@ pub struct SummaryUsageDto {
     pub estimated_cost: Option<f64>,
     pub estimated_cost_status: String,
     pub session_count: i64,
+    pub session_health: SessionHealthDto,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -163,9 +173,11 @@ pub struct SessionUsageDto {
     pub last_activity_at_ms: i64,
     pub models_used: Vec<String>,
     pub subagent_count: i64,
-    pub inclusive_usage: TokenUsageDto,
-    pub self_usage: TokenUsageDto,
-    pub subagent_usage: TokenUsageDto,
+    pub inclusive_usage: Option<TokenUsageDto>,
+    pub self_usage: Option<TokenUsageDto>,
+    pub subagent_usage: Option<TokenUsageDto>,
+    pub data_status: String,
+    pub error_code: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -183,9 +195,11 @@ pub struct SessionSortIndexDto {
     pub last_activity_at_ms: i64,
     pub project_sort_key: Option<String>,
     pub model_sort_key: Option<String>,
-    pub total_tokens: i64,
-    pub combined_total_tokens: i64,
+    pub total_tokens: Option<i64>,
+    pub combined_total_tokens: Option<i64>,
     pub cache_hit_rate: Option<f64>,
+    pub data_status: String,
+    pub error_code: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -460,6 +474,14 @@ pub fn summary_response(
 ) -> Result<SummaryResponse, ApiError> {
     ensure_safe(snapshot.data_revision)?;
     ensure_safe(snapshot.value.session_count)?;
+    for value in [
+        snapshot.value.health.total_sessions,
+        snapshot.value.health.complete_sessions,
+        snapshot.value.health.incomplete_sessions,
+        snapshot.value.health.error_sessions,
+    ] {
+        ensure_safe(value)?;
+    }
     let tokens = map_totals(snapshot.value.totals)?;
     Ok(SummaryResponse {
         range: RangeDto::from(range),
@@ -477,6 +499,12 @@ pub fn summary_response(
             estimated_cost: tokens.estimated_cost,
             estimated_cost_status: tokens.estimated_cost_status,
             session_count: snapshot.value.session_count,
+            session_health: SessionHealthDto {
+                total_sessions: snapshot.value.health.total_sessions,
+                complete_sessions: snapshot.value.health.complete_sessions,
+                incomplete_sessions: snapshot.value.health.incomplete_sessions,
+                error_sessions: snapshot.value.health.error_sessions,
+            },
         },
     })
 }
@@ -582,16 +610,28 @@ fn map_session(row: SessionUsageRow) -> Result<SessionUsageDto, ApiError> {
         last_activity_at_ms: row.last_activity_at_ms,
         models_used: row.models_used,
         subagent_count: row.subagent_count,
-        inclusive_usage: map_totals(row.inclusive_usage)?,
-        self_usage: map_totals(row.self_usage)?,
-        subagent_usage: map_totals(row.subagent_usage)?,
+        inclusive_usage: (row.data_status != SessionDataStatus::Error)
+            .then(|| map_totals(row.inclusive_usage))
+            .transpose()?,
+        self_usage: (row.data_status != SessionDataStatus::Error)
+            .then(|| map_totals(row.self_usage))
+            .transpose()?,
+        subagent_usage: (row.data_status != SessionDataStatus::Error)
+            .then(|| map_totals(row.subagent_usage))
+            .transpose()?,
+        data_status: session_status(row.data_status).to_owned(),
+        error_code: row.error_code,
     })
 }
 
 fn map_sort_index(row: SessionSortIndexItem) -> Result<SessionSortIndexDto, ApiError> {
     ensure_safe(row.last_activity_at_ms)?;
-    ensure_safe(row.total_tokens)?;
-    ensure_safe(row.combined_total_tokens)?;
+    if let Some(value) = row.total_tokens {
+        ensure_safe(value)?;
+    }
+    if let Some(value) = row.combined_total_tokens {
+        ensure_safe(value)?;
+    }
     if row
         .cache_hit_rate
         .is_some_and(|ratio| !ratio.is_finite() || !(0.0..=1.0).contains(&ratio))
@@ -606,7 +646,17 @@ fn map_sort_index(row: SessionSortIndexItem) -> Result<SessionSortIndexDto, ApiE
         total_tokens: row.total_tokens,
         combined_total_tokens: row.combined_total_tokens,
         cache_hit_rate: row.cache_hit_rate,
+        data_status: session_status(row.data_status).to_owned(),
+        error_code: row.error_code,
     })
+}
+
+fn session_status(status: SessionDataStatus) -> &'static str {
+    match status {
+        SessionDataStatus::Complete => "complete",
+        SessionDataStatus::Incomplete => "incomplete",
+        SessionDataStatus::Error => "error",
+    }
 }
 
 fn map_detail(
@@ -1005,6 +1055,12 @@ mod tests {
                         cost_completeness: CostCompleteness::Empty,
                     },
                     session_count: 0,
+                    health: crate::usage::aggregate::SessionHealthSummary {
+                        total_sessions: 0,
+                        complete_sessions: 0,
+                        incomplete_sessions: 0,
+                        error_sessions: 0,
+                    },
                 },
             },
         )
@@ -1031,44 +1087,117 @@ mod tests {
                     subagent_count: 1,
                     last_activity_at_ms: 20,
                     models_used: vec!["unknown".into(), "gpt-5".into()],
+                    data_status: SessionDataStatus::Incomplete,
+                    error_code: None,
                 }],
                 sort_index: vec![SessionSortIndexItem {
                     root_session_id: "root-a".into(),
                     last_activity_at_ms: 20,
                     project_sort_key: None,
                     model_sort_key: Some("unknown".into()),
-                    total_tokens: 12,
-                    combined_total_tokens: 12,
+                    total_tokens: Some(12),
+                    combined_total_tokens: Some(12),
                     cache_hit_rate: Some(0.4),
+                    data_status: SessionDataStatus::Incomplete,
+                    error_code: None,
                 }],
             },
         )
         .unwrap();
-        assert_eq!(response.items[0].inclusive_usage.cache_write_tokens, None);
         assert_eq!(
-            response.items[0].inclusive_usage.uncached_input_tokens,
+            response.items[0]
+                .inclusive_usage
+                .as_ref()
+                .unwrap()
+                .cache_write_tokens,
             None
         );
-        assert_eq!(response.items[0].self_usage.cache_write_tokens, Some(3));
-        assert_eq!(response.items[0].self_usage.cache_hit_rate, Some(0.4));
-        assert_eq!(response.items[0].subagent_usage.cache_write_tokens, Some(0));
         assert_eq!(
-            response.items[0].subagent_usage.uncached_input_tokens,
+            response.items[0]
+                .inclusive_usage
+                .as_ref()
+                .unwrap()
+                .uncached_input_tokens,
+            None
+        );
+        assert_eq!(
+            response.items[0]
+                .self_usage
+                .as_ref()
+                .unwrap()
+                .cache_write_tokens,
+            Some(3)
+        );
+        assert_eq!(
+            response.items[0]
+                .self_usage
+                .as_ref()
+                .unwrap()
+                .cache_hit_rate,
+            Some(0.4)
+        );
+        assert_eq!(
+            response.items[0]
+                .subagent_usage
+                .as_ref()
+                .unwrap()
+                .cache_write_tokens,
+            Some(0)
+        );
+        assert_eq!(
+            response.items[0]
+                .subagent_usage
+                .as_ref()
+                .unwrap()
+                .uncached_input_tokens,
             Some(6)
         );
-        assert_eq!(response.items[0].inclusive_usage.estimated_cost, None);
-        assert_eq!(response.items[0].self_usage.estimated_cost, None);
-        assert_eq!(response.items[0].subagent_usage.estimated_cost, None);
         assert_eq!(
-            response.items[0].inclusive_usage.estimated_cost_status,
+            response.items[0]
+                .inclusive_usage
+                .as_ref()
+                .unwrap()
+                .estimated_cost,
+            None
+        );
+        assert_eq!(
+            response.items[0]
+                .self_usage
+                .as_ref()
+                .unwrap()
+                .estimated_cost,
+            None
+        );
+        assert_eq!(
+            response.items[0]
+                .subagent_usage
+                .as_ref()
+                .unwrap()
+                .estimated_cost,
+            None
+        );
+        assert_eq!(
+            response.items[0]
+                .inclusive_usage
+                .as_ref()
+                .unwrap()
+                .estimated_cost_status,
             "unknown"
         );
         assert_eq!(
-            response.items[0].self_usage.estimated_cost_status,
+            response.items[0]
+                .self_usage
+                .as_ref()
+                .unwrap()
+                .estimated_cost_status,
             "unknown"
         );
         assert_eq!(
-            response.items[0].subagent_usage.estimated_cost_status,
+            response.items[0]
+                .subagent_usage
+                .as_ref()
+                .unwrap()
+                .estimated_cost_status,
             "unknown"
         );
 
@@ -1122,6 +1251,12 @@ mod tests {
                     value: UsageSummary {
                         totals: totals(Some(3), 1, 0),
                         session_count: 0,
+                        health: crate::usage::aggregate::SessionHealthSummary {
+                            total_sessions: 0,
+                            complete_sessions: 0,
+                            incomplete_sessions: 0,
+                            error_sessions: 0,
+                        },
                     },
                 }
             ),

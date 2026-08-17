@@ -13,19 +13,23 @@ export function SessionTableRow({ item, timezone, selected = false, onOpen }: Se
   const model = formatSessionModel(item.models_used);
   const title = formatSessionTitle(item.title);
   const project = formatSessionProject(item.project_name);
-  const cost = formatCost(item.inclusive_usage.estimated_cost);
-  const costClassName = item.inclusive_usage.estimated_cost_status === "partial"
+  const isError = item.data_status === "error";
+  const inclusive = item.inclusive_usage;
+  const self = item.self_usage;
+  const cost = formatCost(inclusive?.estimated_cost ?? null);
+  const costClassName = inclusive?.estimated_cost_status === "partial"
     ? "session-cost-cell is-partial"
     : "session-cost-cell";
-  const activate = () => onOpen?.(item);
+  const activate = () => { if (!isError) onOpen?.(item); };
+  const rowClassName = [selected ? "is-selected" : "", `is-${item.data_status}`].filter(Boolean).join(" ");
   return (
     <tr
-      className={selected ? "is-selected" : undefined}
+      className={rowClassName || undefined}
       data-session-root-id={item.root_session_id}
-      tabIndex={onOpen ? 0 : -1}
+      tabIndex={onOpen && !isError ? 0 : -1}
       aria-selected={selected}
-      onClick={onOpen ? activate : undefined}
-      onKeyDown={onOpen ? (event) => {
+      onClick={onOpen && !isError ? activate : undefined}
+      onKeyDown={onOpen && !isError ? (event) => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
           activate();
@@ -33,13 +37,20 @@ export function SessionTableRow({ item, timezone, selected = false, onOpen }: Se
       } : undefined}
     >
       <td className="session-text-cell" title={time.title}>{time.text}</td>
-      <td className="session-text-cell" title={title}>{title}</td>
+      <td className="session-text-cell" title={isError ? `${title} · 数据计算异常` : title}>
+        <span className="session-title-content">
+          {item.data_status !== "complete" ? (
+            <span className={`session-health-icon is-${item.data_status}`} aria-label={item.data_status === "error" ? "数据计算异常" : "数据不完整"} title={item.data_status === "error" ? "数据计算异常" : "数据不完整"}>!</span>
+          ) : null}
+          <span className="session-title-text">{title}</span>
+        </span>
+      </td>
       <td className="session-text-cell" title={item.project_path ?? project}>{project}</td>
       <td className="session-text-cell" title={model.title} aria-label={model.accessibleName}>{model.text}</td>
-      <td className="session-number-cell" title={String(item.self_usage.total_tokens)} aria-label={String(item.self_usage.total_tokens)}>{formatSessionTokenInteger(item.self_usage.total_tokens).text}</td>
-      <td className="session-number-cell" title={String(item.inclusive_usage.total_tokens)} aria-label={String(item.inclusive_usage.total_tokens)}>{formatSessionTokenInteger(item.inclusive_usage.total_tokens).text}</td>
-      <td className="session-number-cell" title={formatRatio(item.inclusive_usage.cache_hit_rate).title}>{formatRatio(item.inclusive_usage.cache_hit_rate).text}</td>
-      <td className={`session-number-cell ${costClassName}`} title={cost.title}>{cost.text}</td>
+      <td className="session-number-cell" title={self ? String(self.total_tokens) : "数据计算异常"} aria-label={self ? String(self.total_tokens) : "数据计算异常"}>{self ? formatSessionTokenInteger(self.total_tokens).text : "—"}</td>
+      <td className="session-number-cell" title={inclusive ? String(inclusive.total_tokens) : "数据计算异常"} aria-label={inclusive ? String(inclusive.total_tokens) : "数据计算异常"}>{inclusive ? formatSessionTokenInteger(inclusive.total_tokens).text : "—"}</td>
+      <td className="session-number-cell" title={inclusive ? formatRatio(inclusive.cache_hit_rate).title : "数据计算异常"}>{inclusive ? formatRatio(inclusive.cache_hit_rate).text : "—"}</td>
+      <td className={`session-number-cell ${costClassName}`} title={isError ? "数据计算异常" : cost.title}>{isError ? "—" : cost.text}</td>
     </tr>
   );
 }

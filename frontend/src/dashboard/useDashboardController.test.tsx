@@ -39,6 +39,12 @@ const summary = (range: RangeKey, revision = 1, input = 10): SummaryResponse => 
     estimated_cost: null,
     estimated_cost_status: "unknown",
     session_count: 1,
+    session_health: {
+      total_sessions: 1,
+      complete_sessions: 1,
+      incomplete_sessions: 0,
+      error_sessions: 0,
+    },
   },
 });
 

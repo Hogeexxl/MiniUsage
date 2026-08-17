@@ -54,10 +54,12 @@ const row: SessionItemDto = {
     estimated_cost: null,
     estimated_cost_status: "unknown",
   },
+  data_status: "complete",
+  error_code: null,
 };
 
 function detail(revision: number, total = revision, rootSessionId = "root-1"): SessionDetailResponse {
-  const usage = { ...row.self_usage, total_tokens: total };
+  const usage = { ...row.self_usage!, total_tokens: total };
   const secondModelUsage = { ...usage, total_tokens: total + 1 };
   return {
     range: { key: "today", start_ms: 1, end_ms: 3, timezone: "Asia/Shanghai" },
