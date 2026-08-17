@@ -5,12 +5,7 @@
 //! prompt fields.  The resolver can therefore consume this module without
 //! giving the SQLite schema a place in the rest of the application.
 
-use std::{
-    collections::HashMap,
-    fmt,
-    path::{Path, PathBuf},
-    time::Duration,
-};
+use std::{collections::HashMap, fmt, path::Path, time::Duration};
 
 use chrono::DateTime;
 use rusqlite::{Connection, OpenFlags, TransactionBehavior, types::ValueRef};
@@ -694,6 +689,7 @@ fn valid_identifier(value: &str) -> bool {
 mod tests {
     use std::{
         fs,
+        path::PathBuf,
         sync::atomic::{AtomicU64, Ordering},
         time::{SystemTime, UNIX_EPOCH},
     };
@@ -787,8 +783,15 @@ mod tests {
         let connection = database.connection();
         let rollout_path = fixture_path("sessions/rollout-child.jsonl");
         let cwd_path = fixture_path("work/./project");
-        let expected_rollout_path = normalize_absolute_path(&rollout_path).unwrap();
-        let expected_cwd_path = normalize_absolute_path(&fixture_path("work/project")).unwrap();
+        let expected_rollout_path = paths::normalize_source_path(Path::new(&rollout_path))
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        let expected_cwd_path =
+            paths::normalize_source_path(Path::new(&fixture_path("work/project")))
+                .unwrap()
+                .to_string_lossy()
+                .into_owned();
         connection
             .execute_batch(&format!(
                 "CREATE TABLE threads (

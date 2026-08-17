@@ -506,10 +506,9 @@ pub(super) fn owning_candidates(
         .threads
         .iter()
         .find(|thread| {
-            thread
-                .rollout_path
-                .as_deref()
-                .is_some_and(|rollout_path| paths::same_source_path(Path::new(rollout_path), &file.path))
+            thread.rollout_path.as_deref().is_some_and(|rollout_path| {
+                paths::same_source_path(Path::new(rollout_path), &file.path)
+            })
         })
         .map(|thread| OwningThreadCandidate {
             thread_id: thread.thread_id.clone(),

@@ -995,7 +995,10 @@ impl Parser {
             Some("id"),
         );
         if self.resumed_nonzero
-            && !matches!(self.context.resume_state, ResumeState::ReplayedAncestor { .. })
+            && !matches!(
+                self.context.resume_state,
+                ResumeState::ReplayedAncestor { .. }
+            )
         {
             self.needs_rebuild = true;
         }
@@ -2076,7 +2079,7 @@ mod tests {
     }
 
     #[test]
-    fn unresolved_live_boundary_keeps_replayed_range_and_unresolved_confidence() {
+    fn eof_in_replayed_ancestor_is_stable_resumable_continuation() {
         let parent = uuid7(1_000, 1);
         let child = uuid7(2_000, 2);
         let parent_turn = uuid7(1_500, 3);
@@ -2093,9 +2096,13 @@ mod tests {
             context(0, &child, ResumeState::AwaitOwningMeta, None),
             lines(&records, 0),
         );
-
         assert!(!result.needs_rebuild);
-        assert_eq!(result.final_continuation, FinalContinuation::Unstable);
+        assert_eq!(
+            result.final_continuation,
+            FinalContinuation::ReplayedAncestor {
+                owning_thread_id: child.clone(),
+            }
+        );
         assert_eq!(
             result
                 .records
@@ -2111,26 +2118,91 @@ mod tests {
             ]
         );
         assert_eq!(result.ownership_ranges.len(), 2);
-        assert_eq!(
-            result.ownership_ranges[1],
-            OwnershipRange {
-                start_offset: result.records[1].start_offset,
-                end_offset: result.records[4].end_offset,
-                ownership: RecordOwnership::ReplayedAncestor,
-            }
-        );
         let fact = result.fact.unwrap();
         assert_eq!(
             fact.ownership_boundary.confidence,
-            OwnershipConfidence::Unresolved
+            OwnershipConfidence::Confirmed
         );
         assert_eq!(fact.latest_context_model, None);
-        assert!(
-            result
-                .diagnostics
-                .iter()
-                .any(|diagnostic| diagnostic.code == DiagnosticCode::UnresolvedReplayBoundary)
+        let safe = fact
+            .to_safe_fact(
+                1,
+                METADATA_PARSER_VERSION,
+                result.last_processed_offset,
+                10,
+                &result.final_continuation,
+            )
+            .unwrap();
+        assert_eq!(
+            safe.continuation_state,
+            crate::domain::ContinuationState::ReplayedAncestor
         );
+        assert_eq!(
+            safe.ownership_confidence,
+            crate::domain::OwnershipConfidence::Confirmed
+        );
+    }
+
+    #[test]
+    fn nonzero_replayed_ancestor_resume_stays_replay_until_owning_boundary() {
+        let child = uuid7(2_000, 2);
+        let parent_turn = uuid7(1_500, 3);
+        let child_turn = uuid7(2_100, 4);
+        let mut existing = RolloutThreadFact::empty(7, child.clone());
+        existing.ownership_boundary.replay_start_offset = Some(20);
+        let replay_records = vec![
+            format!(
+                r#"{{"type":"turn_context","payload":{{"turn_id":"{parent_turn}","model":"parent"}}}}"#
+            ),
+            r#"{"type":"event_msg","payload":{"type":"token_count"}}"#.to_owned(),
+        ];
+        let replay = RolloutMetadataParser::parse_chunk(
+            context(
+                100,
+                &child,
+                ResumeState::ReplayedAncestor {
+                    owning_thread_id: child.clone(),
+                },
+                Some(existing),
+            ),
+            lines(&replay_records, 100),
+        );
+        assert!(!replay.needs_rebuild);
+        assert_eq!(
+            replay.final_continuation,
+            FinalContinuation::ReplayedAncestor {
+                owning_thread_id: child.clone()
+            }
+        );
+        assert!(
+            replay
+                .records
+                .iter()
+                .all(|record| record.ownership == RecordOwnership::ReplayedAncestor)
+        );
+        let resume_offset = replay.last_processed_offset;
+        let owning_record = format!(
+            r#"{{"type":"turn_context","payload":{{"turn_id":"{child_turn}","model":"child"}}}}"#
+        );
+        let owning = RolloutMetadataParser::parse_chunk(
+            context(
+                resume_offset,
+                &child,
+                ResumeState::ReplayedAncestor {
+                    owning_thread_id: child.clone(),
+                },
+                replay.fact,
+            ),
+            lines(&[owning_record], resume_offset),
+        );
+        assert!(!owning.needs_rebuild);
+        assert_eq!(
+            owning.final_continuation,
+            FinalContinuation::OwningLive {
+                owning_thread_id: child
+            }
+        );
+        assert_eq!(owning.records[0].ownership, RecordOwnership::Owning);
     }
 
     #[test]
