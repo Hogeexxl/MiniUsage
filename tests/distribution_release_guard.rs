@@ -17,11 +17,11 @@ fn windows_smoke() -> String {
 }
 
 #[test]
-fn t_dist_012_release_workflow_is_tag_only_and_version_gated() {
+fn t_dist_012_release_workflow_is_tag_gated_and_allows_explicit_dispatch() {
     let release = workflow();
     let windows_smoke = windows_smoke();
     assert!(release.contains("on:\n  push:\n    tags:\n      - 'v*.*.*'"));
-    assert!(!release.contains("workflow_dispatch:"));
+    assert!(release.contains("workflow_dispatch:"));
     assert!(!release.contains("pull_request:"));
     assert!(!release.contains("branches:"));
     assert!(release.contains("permissions:\n  contents: read"));
