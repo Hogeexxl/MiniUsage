@@ -534,6 +534,11 @@ fn optional_text(
     result
 }
 
+/// Normalize state-index path metadata lexically so the normalized value is
+/// independent of whether the referenced file/directory currently exists.
+/// Filesystem canonicalization here would make a disappearing source able to
+/// change a Thread field (for example macOS /var -> /private/var), causing a
+/// spurious data_revision change during usage carry.
 fn optional_path(
     value: Option<ValueRef<'_>>,
     thread_id: &str,
@@ -548,7 +553,7 @@ fn optional_path(
         if value.chars().any(char::is_control) {
             return None;
         }
-        paths::normalize_source_path(Path::new(value.trim()))
+        paths::normalize_absolute_path(Path::new(value.trim()))
             .and_then(|path| path.to_str().map(ToOwned::to_owned))
     });
     if result.is_none() {
