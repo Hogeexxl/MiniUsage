@@ -1,0 +1,263 @@
+name: Fix phase1 gates
+
+on:
+  push:
+    branches:
+      - fix/windows-fork-session-resilience
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: "${{ github.event.head_commit.message == 'chore: fix phase1 gates' }}"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/windows-fork-session-resilience
+          fetch-depth: 0
+      - name: Apply phase1 gate fixes and regressions
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          # state_index: production no longer owns a private path normalizer;
+          # keep test-only PathBuf local and assert through platform paths.
+          p = Path('src/codex/state_index.rs')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace('    path::{Path, PathBuf},\n', '    path::Path,\n', 1)
+          s = s.replace(
+              '    use std::{\n        fs,\n',
+              '    use std::{\n        fs,\n        path::PathBuf,\n',
+              1,
+          )
+          s = s.replace(
+              '        let expected_rollout_path = normalize_absolute_path(&rollout_path).unwrap();\n        let expected_cwd_path = normalize_absolute_path(&fixture_path("work/project")).unwrap();',
+              '''        let expected_rollout_path = paths::normalize_source_path(Path::new(&rollout_path))
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        let expected_cwd_path = paths::normalize_source_path(Path::new(&fixture_path("work/project")))
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();''',
+              1,
+          )
+          p.write_text(s, encoding='utf-8')
+
+          # Update the old EOF-replay test to the newly valid durable state and
+          # add explicit incremental recovery coverage.
+          p = Path('src/codex/rollout.rs')
+          s = p.read_text(encoding='utf-8')
+          old = '''    #[test]
+    fn unresolved_live_boundary_keeps_replayed_range_and_unresolved_confidence() {
+        let parent = uuid7(1_000, 1);
+        let child = uuid7(2_000, 2);
+        let parent_turn = uuid7(1_500, 3);
+        let records = vec![
+            format!(r#"{{"type":"session_meta","payload":{{"id":"{child}"}}}}"#),
+            format!(r#"{{"type":"session_meta","payload":{{"id":"{parent}"}}}}"#),
+            format!(
+                r#"{{"type":"turn_context","payload":{{"turn_id":"{parent_turn}","model":"parent-model"}}}}"#
+            ),
+            r#"{"type":"turn_context","payload":{"model":"missing-turn-id"}}"#.to_owned(),
+            r#"{"type":"event_msg","payload":{"type":"token_count"}}"#.to_owned(),
+        ];
+        let result = RolloutMetadataParser::parse_chunk(
+            context(0, &child, ResumeState::AwaitOwningMeta, None),
+            lines(&records, 0),
+        );
+
+        assert!(!result.needs_rebuild);
+        assert_eq!(result.final_continuation, FinalContinuation::Unstable);
+        assert_eq!(
+            result
+                .records
+                .iter()
+                .map(|record| record.ownership)
+                .collect::<Vec<_>>(),
+            vec![
+                RecordOwnership::Owning,
+                RecordOwnership::ReplayedAncestor,
+                RecordOwnership::ReplayedAncestor,
+                RecordOwnership::ReplayedAncestor,
+                RecordOwnership::ReplayedAncestor,
+            ]
+        );
+        assert_eq!(result.ownership_ranges.len(), 2);
+        assert_eq!(
+            result.ownership_ranges[1],
+            OwnershipRange {
+                start_offset: result.records[1].start_offset,
+                end_offset: result.records[4].end_offset,
+                ownership: RecordOwnership::ReplayedAncestor,
+            }
+        );
+        let fact = result.fact.unwrap();
+        assert_eq!(
+            fact.ownership_boundary.confidence,
+            OwnershipConfidence::Unresolved
+        );
+        assert_eq!(fact.latest_context_model, None);
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.code == DiagnosticCode::UnresolvedReplayBoundary)
+        );
+    }
+'''
+          new = '''    #[test]
+    fn eof_in_replayed_ancestor_is_stable_resumable_continuation() {
+        let parent = uuid7(1_000, 1);
+        let child = uuid7(2_000, 2);
+        let parent_turn = uuid7(1_500, 3);
+        let records = vec![
+            format!(r#"{{"type":"session_meta","payload":{{"id":"{child}"}}}}"#),
+            format!(r#"{{"type":"session_meta","payload":{{"id":"{parent}"}}}}"#),
+            format!(
+                r#"{{"type":"turn_context","payload":{{"turn_id":"{parent_turn}","model":"parent-model"}}}}"#
+            ),
+            r#"{"type":"turn_context","payload":{"model":"missing-turn-id"}}"#.to_owned(),
+            r#"{"type":"event_msg","payload":{"type":"token_count"}}"#.to_owned(),
+        ];
+        let result = RolloutMetadataParser::parse_chunk(
+            context(0, &child, ResumeState::AwaitOwningMeta, None),
+            lines(&records, 0),
+        );
+
+        assert!(!result.needs_rebuild);
+        assert_eq!(
+            result.final_continuation,
+            FinalContinuation::ReplayedAncestor {
+                owning_thread_id: child.clone(),
+            }
+        );
+        assert_eq!(
+            result
+                .records
+                .iter()
+                .map(|record| record.ownership)
+                .collect::<Vec<_>>(),
+            vec![
+                RecordOwnership::Owning,
+                RecordOwnership::ReplayedAncestor,
+                RecordOwnership::ReplayedAncestor,
+                RecordOwnership::ReplayedAncestor,
+                RecordOwnership::ReplayedAncestor,
+            ]
+        );
+        assert_eq!(result.ownership_ranges.len(), 2);
+        assert_eq!(
+            result.ownership_ranges[1],
+            OwnershipRange {
+                start_offset: result.records[1].start_offset,
+                end_offset: result.records[4].end_offset,
+                ownership: RecordOwnership::ReplayedAncestor,
+            }
+        );
+        let fact = result.fact.unwrap();
+        assert_eq!(
+            fact.ownership_boundary.confidence,
+            OwnershipConfidence::Confirmed
+        );
+        assert_eq!(fact.latest_context_model, None);
+        let safe = fact
+            .to_safe_fact(
+                1,
+                METADATA_PARSER_VERSION,
+                result.last_processed_offset,
+                10,
+                &result.final_continuation,
+            )
+            .unwrap();
+        assert_eq!(
+            safe.continuation_state,
+            crate::domain::ContinuationState::ReplayedAncestor
+        );
+        assert_eq!(safe.ownership_confidence, crate::domain::OwnershipConfidence::Confirmed);
+    }
+
+    #[test]
+    fn nonzero_replayed_ancestor_resume_stays_replay_until_owning_boundary() {
+        let parent = uuid7(1_000, 1);
+        let child = uuid7(2_000, 2);
+        let parent_turn = uuid7(1_500, 3);
+        let child_turn = uuid7(2_100, 4);
+        let mut existing = RolloutThreadFact::empty(7, child.clone());
+        existing.ownership_boundary.replay_start_offset = Some(20);
+
+        let replay_records = vec![
+            format!(r#"{{"type":"turn_context","payload":{{"turn_id":"{parent_turn}","model":"parent"}}}}"#),
+            r#"{"type":"event_msg","payload":{"type":"token_count"}}"#.to_owned(),
+        ];
+        let replay = RolloutMetadataParser::parse_chunk(
+            context(
+                100,
+                &child,
+                ResumeState::ReplayedAncestor {
+                    owning_thread_id: child.clone(),
+                },
+                Some(existing.clone()),
+            ),
+            lines(&replay_records, 100),
+        );
+        assert!(!replay.needs_rebuild);
+        assert_eq!(
+            replay.final_continuation,
+            FinalContinuation::ReplayedAncestor {
+                owning_thread_id: child.clone(),
+            }
+        );
+        assert!(
+            replay
+                .records
+                .iter()
+                .all(|record| record.ownership == RecordOwnership::ReplayedAncestor)
+        );
+
+        let owning_record = format!(
+            r#"{{"type":"turn_context","payload":{{"turn_id":"{child_turn}","model":"child"}}}}"#
+        );
+        let owning = RolloutMetadataParser::parse_chunk(
+            context(
+                replay.last_processed_offset,
+                &child,
+                ResumeState::ReplayedAncestor {
+                    owning_thread_id: child.clone(),
+                },
+                replay.fact,
+            ),
+            lines(&[owning_record], replay.last_processed_offset),
+        );
+        assert!(!owning.needs_rebuild);
+        assert_eq!(
+            owning.final_continuation,
+            FinalContinuation::OwningLive {
+                owning_thread_id: child,
+            }
+        );
+        assert_eq!(owning.records[0].ownership, RecordOwnership::Owning);
+    }
+'''
+          if old not in s:
+              raise SystemExit('old replay EOF regression test not found')
+          p.write_text(s.replace(old, new, 1), encoding='utf-8')
+          PY
+      - name: Format
+        run: cargo fmt
+      - name: Targeted Rust regressions
+        run: |
+          cargo test --locked codex::rollout::tests
+          cargo test --locked codex::state_index::tests
+      - name: Commit fixes
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm .github/workflows/fix-phase1-gates.yml
+          git add -A
+          git commit -m "test: cover resumable replay continuation"
+          git push origin HEAD:fix/windows-fork-session-resilience
