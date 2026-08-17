@@ -71,6 +71,12 @@ enum UsageThreadOutcome {
     FatalReloadError(&'static str),
 }
 
+const SESSION_DATA_INVALID: &str = "USAGE_SESSION_DATA_INVALID";
+
+fn repeated_shadow_data_error(action: PlanAction) -> Option<&'static str> {
+    (action == PlanAction::BuildFrom).then_some(SESSION_DATA_INVALID)
+}
+
 pub(super) fn collect_usage_carry_observation_proofs(
     ledger: &Ledger,
     discovery: &DiscoverySnapshot,
@@ -577,33 +583,40 @@ fn process_thread_group(
                     }
                 }
                 UsageReadStep::AwaitingOwnership => {
-                    // The long replay prefix remains memory-only until owning
-                    // evidence is found; zero prepared source commits may leak.
+                    // First-import/live sources may legitimately be waiting for
+                    // owning evidence. A BuildFrom read, however, is already the
+                    // shadow-rebuild attempt. If that fixed view still cannot
+                    // establish trustworthy Session ownership, isolate the whole
+                    // Session Tree instead of leaving the global build pending.
+                    if cancelled(cancellation) {
+                        return UsageThreadOutcome::Completed;
+                    }
+                    if discovery_complete {
+                        if let Some(error_code) = repeated_shadow_data_error(plan.action) {
+                            return UsageThreadOutcome::SessionDataError(error_code);
+                        }
+                    }
                     return UsageThreadOutcome::Completed;
                 }
                 UsageReadStep::NeedsRebuild => {
                     if !discovery_complete {
                         return UsageThreadOutcome::Completed;
                     }
-                    let already_rebuilding = plan.action == PlanAction::BuildFrom;
+                    // BuildFrom is the one allowed shadow-rebuild attempt for this
+                    // fixed source view. A second ownership/parser/trust failure is
+                    // Session-scoped bad data, not an infrastructure failure.
+                    if let Some(error_code) = repeated_shadow_data_error(plan.action) {
+                        return UsageThreadOutcome::SessionDataError(error_code);
+                    }
                     if let Err(error_code) =
                         replace_or_begin(usage, &scan, present_ids, [plan.source_file_id])
                     {
                         return UsageThreadOutcome::OrdinaryError(error_code);
                     }
                     // A failed nonzero/LocalReplay proof may safely transition
-                    // into a fresh shadow build and retry this fixed physical
-                    // view once. If a BuildFrom read (including a nonzero
-                    // continuation inside an existing build) itself still
-                    // lacks a trustworthy ownership/parser/guard proof, the
-                    // replacement is the durable result for this round.
-                    // Retrying the same bytes would be an infinite
-                    // replace/read loop and cannot create stronger evidence.
-                    if already_rebuilding {
-                        return UsageThreadOutcome::GlobalPlanChanged {
-                            retry_thread: false,
-                        };
-                    }
+                    // into a fresh shadow build and retry this fixed physical view
+                    // once. Storage/I/O failures remain Ordinary/Fatal errors and
+                    // never enter the Session quarantine path.
                     return UsageThreadOutcome::GlobalPlanChanged { retry_thread: true };
                 }
                 UsageReadStep::NeedsRebuildStop => {
@@ -1008,11 +1021,10 @@ fn process_source_batch(
         );
         let chunk = match chunk {
             Ok(chunk) => chunk,
-            Err(ChunkReadError::CheckpointGuardMismatch) => {
-                return Ok(UsageReadStep::NeedsRebuild);
-            }
             Err(
-                ChunkReadError::SourceChangedBeforeRead | ChunkReadError::SourceChangedDuringRead,
+                ChunkReadError::CheckpointGuardMismatch
+                | ChunkReadError::SourceChangedBeforeRead
+                | ChunkReadError::SourceChangedDuringRead,
             ) => return Ok(UsageReadStep::NeedsRebuildStop),
             Err(error) => return Err(read_error_code(error)),
         };
@@ -1262,6 +1274,34 @@ impl UsageCommitMetrics {
             }
         }
         value
+    }
+}
+
+#[cfg(test)]
+mod resilience_tests {
+    use super::*;
+
+    #[test]
+    fn repeated_shadow_rebuild_data_failure_is_session_scoped_only() {
+        assert_eq!(
+            repeated_shadow_data_error(PlanAction::BuildFrom),
+            Some("USAGE_SESSION_DATA_INVALID")
+        );
+        for action in [
+            PlanAction::ReadFrom,
+            PlanAction::LocalReplay,
+            PlanAction::AwaitOwningMeta,
+            PlanAction::ResumeOwningLive,
+            PlanAction::VerifyRawTail,
+            PlanAction::CompleteOnly,
+            PlanAction::BeginCarry,
+            PlanAction::ResumeCarry,
+            PlanAction::Skip,
+            PlanAction::BlockedRelationship,
+            PlanAction::RebuildRequired,
+        ] {
+            assert_eq!(repeated_shadow_data_error(action), None, "{action:?}");
+        }
     }
 }
 
