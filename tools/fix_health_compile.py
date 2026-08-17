@@ -36,6 +36,28 @@ s = s.replace('            data_status: status_for_totals(&inclusive_usage),\n',
 start = s.index('    fn quarantined_roots(')
 end = s.index('    fn aggregate_for_root', start)
 helper = s[start:end]
+anchor = '''        if !filter.models.is_empty() {
+            return Ok(Vec::new());
+        }
+'''
+insert = '''        if !filter.models.is_empty() {
+            return Ok(Vec::new());
+        }
+        let quarantine_count: i64 = self
+            .connection
+            .query_row(
+                "SELECT COUNT(*) FROM usage_session_quarantine WHERE ledger_epoch=?1",
+                [epoch],
+                |row| row.get(0),
+            )
+            .map_err(map_sql_error)?;
+        if quarantine_count == 0 {
+            return Ok(Vec::new());
+        }
+'''
+if anchor not in helper:
+    raise SystemExit('quarantine short-circuit anchor missing')
+helper = helper.replace(anchor, insert, 1)
 old = '        let mut next = 4_usize;\n'
 if old not in helper:
     raise SystemExit('quarantine next binding missing')
