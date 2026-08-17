@@ -24,19 +24,32 @@ jobs:
           from pathlib import Path
           p = Path('src/codex/state_index.rs')
           text = p.read_text(encoding='utf-8')
-          old = '''        paths::normalize_source_path(Path::new(value.trim()))
-              .and_then(|path| path.to_str().map(ToOwned::to_owned))'''
-          new = '''        // State-index paths are metadata values. Their normalized value must
-              // not depend on whether the referenced file/directory exists at
-              // this instant: otherwise a source disappearing can change a
-              // Thread field (for example macOS /var -> /private/var after
-              // canonicalization) and spuriously increment data_revision.
-              paths::normalize_absolute_path(Path::new(value.trim()))
-                  .and_then(|path| path.to_str().map(ToOwned::to_owned))'''
+          old = 'paths::normalize_source_path(Path::new(value.trim()))'
+          new = 'paths::normalize_absolute_path(Path::new(value.trim()))'
           count = text.count(old)
           if count != 1:
               raise SystemExit(f'optional_path normalization: expected 1 match, got {count}')
-          p.write_text(text.replace(old, new, 1), encoding='utf-8')
+          text = text.replace(old, new, 1)
+          old_comment = '''fn optional_path(
+              value: Option<ValueRef<'_>>,
+              thread_id: &str,
+              field: &str,
+              diagnostics: &mut Vec<StateDiagnostic>,
+          ) -> Option<String> {'''
+          new_comment = '''/// Normalize state-index path metadata lexically so the normalized value is
+          /// independent of whether the referenced file/directory currently exists.
+          /// Filesystem canonicalization here would make a disappearing source able to
+          /// change a Thread field (for example macOS /var -> /private/var), causing a
+          /// spurious data_revision change during usage carry.
+          fn optional_path(
+              value: Option<ValueRef<'_>>,
+              thread_id: &str,
+              field: &str,
+              diagnostics: &mut Vec<StateDiagnostic>,
+          ) -> Option<String> {'''
+          if text.count(old_comment) != 1:
+              raise SystemExit(f'optional_path comment anchor: expected 1 match, got {text.count(old_comment)}')
+          p.write_text(text.replace(old_comment, new_comment, 1), encoding='utf-8')
           PY
       - name: Format and focused gates
         run: |
