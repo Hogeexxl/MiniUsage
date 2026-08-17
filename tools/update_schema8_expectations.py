@@ -26,27 +26,46 @@ p.write_text(s, encoding='utf-8')
 # Migration tests that call the full migration runner now terminate at v8.
 p = Path('src/storage/migrations.rs')
 s = p.read_text(encoding='utf-8')
-exact = {
+renames = {
     'fn v1_upgrade_preserves_metadata_and_installs_v7_usage_schema()': 'fn v1_upgrade_preserves_metadata_and_installs_v8_resilience_schema()',
     'fn t_dc_026_fresh_schema_is_v7_and_has_only_canonical_columns()': 'fn t_dc_026_fresh_schema_is_v8_and_has_only_canonical_columns()',
     'fn t_mu03_s01_v7_migration_fresh_upgrade_idempotence_and_rollback()': 'fn t_mu03_s01_v7_features_survive_v8_upgrade_idempotence_and_rollback()',
-    'assert_eq!(migrate(&mut connection, 1).unwrap(), 7);': 'assert_eq!(migrate(&mut connection, 1).unwrap(), 8);',
-    'assert_eq!(migrate(&mut connection, 3).unwrap(), 7);': 'assert_eq!(migrate(&mut connection, 3).unwrap(), 8);',
-    'assert_eq!(migrate(&mut connection, 2).unwrap(), 7);': 'assert_eq!(migrate(&mut connection, 2).unwrap(), 8);',
-    'assert_eq!(migrate(&mut fresh, 0).unwrap(), 7);': 'assert_eq!(migrate(&mut fresh, 0).unwrap(), 8);',
-    'assert_eq!(ledger.schema_version().unwrap(), 7);': 'assert_eq!(ledger.schema_version().unwrap(), 8);',
-    'assert_eq!(migrate(&mut connection, 7).unwrap(), 7);': 'assert_eq!(migrate(&mut connection, 7).unwrap(), 8);',
 }
-for old, new in exact.items():
+for old, new in renames.items():
     if old not in s:
-        # Some migrate patterns legitimately occur more than once and are handled below.
-        if old.startswith('assert_eq!(migrate(&mut connection, 2)') or old.startswith('assert_eq!(migrate(&mut connection, 3)'):
-            continue
-        raise SystemExit(f'migration expectation missing: {old}')
+        raise SystemExit(f'migration test name missing: {old}')
+    s = s.replace(old, new, 1)
+
+# All of these calls intentionally run through the latest migration.
+for old, new in [
+    ('assert_eq!(migrate(&mut connection, 0).unwrap(), 7);', 'assert_eq!(migrate(&mut connection, 0).unwrap(), 8);'),
+    ('assert_eq!(migrate(&mut connection, 1).unwrap(), 7);', 'assert_eq!(migrate(&mut connection, 1).unwrap(), 8);'),
+    ('assert_eq!(migrate(&mut connection, 2).unwrap(), 7);', 'assert_eq!(migrate(&mut connection, 2).unwrap(), 8);'),
+    ('assert_eq!(migrate(&mut connection, 3).unwrap(), 7);', 'assert_eq!(migrate(&mut connection, 3).unwrap(), 8);'),
+    ('assert_eq!(migrate(&mut fresh, 0).unwrap(), 7);', 'assert_eq!(migrate(&mut fresh, 0).unwrap(), 8);'),
+    ('assert_eq!(ledger.schema_version().unwrap(), 7);', 'assert_eq!(ledger.schema_version().unwrap(), 8);'),
+]:
     s = s.replace(old, new)
 
-# Remaining terminal PRAGMA/user_version expectations in this test module are
-# schema assertions, not payload values. Limit replacements to the exact common shapes.
+# Idempotence checks must start from the schema that is already installed.
+s = s.replace(
+    'assert_eq!(migrate(&mut connection, 7).unwrap(), 7);',
+    'assert_eq!(migrate(&mut connection, 8).unwrap(), 8);',
+)
+s = s.replace(
+    'assert_eq!(migrate(&mut connection, 7).unwrap(), 8);',
+    'assert_eq!(migrate(&mut connection, 8).unwrap(), 8);',
+)
+s = s.replace(
+    'assert_eq!(migrate(&mut fresh, 7).unwrap(), 7);',
+    'assert_eq!(migrate(&mut fresh, 8).unwrap(), 8);',
+)
+s = s.replace(
+    'assert_eq!(migrate(&mut fresh, 7).unwrap(), 8);',
+    'assert_eq!(migrate(&mut fresh, 8).unwrap(), 8);',
+)
+
+# Remaining direct user_version assertions are terminal schema assertions.
 s = s.replace('        assert_eq!(version, 7);', '        assert_eq!(version, 8);')
 s = s.replace('            7\n        );', '            8\n        );')
 
