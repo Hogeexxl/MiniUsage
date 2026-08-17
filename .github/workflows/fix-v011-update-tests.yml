@@ -83,7 +83,7 @@ jobs:
           PY
       - name: Verify targeted update tests
         run: |
-          cargo fmt --check
+          cargo fmt
           cargo test --locked t_dist_007 -- --nocapture
           cargo test --locked t_dist_008 -- --nocapture
       - name: Commit clean compatibility fix and remove helper
