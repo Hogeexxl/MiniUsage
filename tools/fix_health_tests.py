@@ -87,10 +87,5 @@ count = tests.count('CREATE TABLE usage_events (')
 if count == 0:
     raise SystemExit('aggregate usage_events fixtures missing')
 tests = tests.replace('CREATE TABLE usage_events (', health_table + 'CREATE TABLE usage_events (')
-# The health query no longer needs a mutable parameter index when there are no
-# later optional bind groups.
-tests = tests
 s = head + marker + tests
-# Production helper warning cleanup.
-s = s.replace('        let mut next = 4_usize;\n', '        let next = 4_usize;\n', 1)
 p.write_text(s, encoding='utf-8')
