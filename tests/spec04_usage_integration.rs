@@ -393,7 +393,7 @@ fn t_s04_053_full_incident_replays_guardian_repairs_blocked_build_and_activates_
         .unwrap()
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .unwrap();
-    assert_eq!(user_version, 7);
+    assert_eq!(user_version, 8);
     let source_id = 1_i64;
     let db = Connection::open(&fixture.db).unwrap();
     let old_metadata: (i64, i64, Option<String>, Option<String>, Option<i64>) = db
@@ -711,14 +711,14 @@ fn t_mu03_f02_v5_upgrade_rebuilds_metadata_usage_and_cost_without_loss() {
     .unwrap();
     drop(db);
 
-    // Opening a schema-v5 database performs v6/v7 migration and the
+    // Opening a schema-v5 database performs v6/v7/v8 migration and the
     // independent cost backfill before scanner metadata/usage rebuilds run.
     let ledger = fixture.ledger();
     let db = Connection::open(&fixture.db).unwrap();
     assert_eq!(
         db.query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
             .unwrap(),
-        7
+        8
     );
     let backfilled_cost: Option<i64> = db
         .query_row(
@@ -906,7 +906,17 @@ async fn t_mu03_s03_usage_v3_to_v5_rebuild_uses_rollout_effort_and_preserves_tok
             },
         )
         .unwrap();
-    assert_eq!(after, (2, baseline.1, 1, 1, 0, 6));
+    assert_eq!(
+        after,
+        (
+            2,
+            baseline.1,
+            1,
+            1,
+            0,
+            mini_usage::usage::USAGE_PARSER_VERSION,
+        )
+    );
     assert_eq!(fs::read(&rollout).unwrap(), raw_before);
 
     let detail = UsageLedger::new(&ledger)
@@ -1156,7 +1166,8 @@ fn t_mu03_s02_version_upgrades_remain_independent() {
         .unwrap();
     assert_ne!(usage_only.0, initial.0);
     assert_eq!(usage_only.1, mini_usage::usage::USAGE_PARSER_VERSION);
-    assert_eq!((usage_only.2, usage_only.3, usage_only.4), (1, 2, 3));
+    assert_eq!((usage_only.2, usage_only.3), (1, 2));
+    assert_eq!(usage_only.4, mini_usage::codex::METADATA_PARSER_VERSION);
     scanner.shutdown().unwrap();
 }
 

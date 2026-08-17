@@ -58,6 +58,7 @@ enum UsageReadStep {
         metrics: UsageCommitMetrics,
     },
     AwaitingOwnership,
+    InvalidSessionData,
     NeedsRebuild,
     NeedsRebuildStop,
 }
@@ -73,8 +74,11 @@ enum UsageThreadOutcome {
 
 const SESSION_DATA_INVALID: &str = "USAGE_SESSION_DATA_INVALID";
 
-fn repeated_shadow_data_error(action: PlanAction) -> Option<&'static str> {
-    (action == PlanAction::BuildFrom).then_some(SESSION_DATA_INVALID)
+fn shadow_session_data_error(
+    action: PlanAction,
+    invalid_session_data: bool,
+) -> Option<&'static str> {
+    (action == PlanAction::BuildFrom && invalid_session_data).then_some(SESSION_DATA_INVALID)
 }
 
 pub(super) fn collect_usage_carry_observation_proofs(
@@ -583,29 +587,21 @@ fn process_thread_group(
                     }
                 }
                 UsageReadStep::AwaitingOwnership => {
-                    // First-import/live sources may legitimately be waiting for
-                    // owning evidence. A BuildFrom read, however, is already the
-                    // shadow-rebuild attempt. If that fixed view still cannot
-                    // establish trustworthy Session ownership, isolate the whole
-                    // Session Tree instead of leaving the global build pending.
-                    if cancelled(cancellation) {
-                        return UsageThreadOutcome::Completed;
-                    }
-                    if discovery_complete {
-                        if let Some(error_code) = repeated_shadow_data_error(plan.action) {
-                            return UsageThreadOutcome::SessionDataError(error_code);
-                        }
-                    }
+                    // The replay prefix remains memory-only until owning evidence
+                    // is found. Awaiting ownership is a valid transient state, even
+                    // while a shadow build is open, and is never quarantined by
+                    // itself.
                     return UsageThreadOutcome::Completed;
                 }
-                UsageReadStep::NeedsRebuild => {
+                UsageReadStep::InvalidSessionData => {
                     if !discovery_complete {
                         return UsageThreadOutcome::Completed;
                     }
-                    // BuildFrom is the one allowed shadow-rebuild attempt for this
-                    // fixed source view. A second ownership/parser/trust failure is
-                    // Session-scoped bad data, not an infrastructure failure.
-                    if let Some(error_code) = repeated_shadow_data_error(plan.action) {
+                    // A contradiction against durable metadata proof gets one
+                    // normal rebuild opportunity. If the same contradiction is
+                    // observed from BuildFrom, the fixed Session Tree is bad data
+                    // and can be isolated without masking storage/system failures.
+                    if let Some(error_code) = shadow_session_data_error(plan.action, true) {
                         return UsageThreadOutcome::SessionDataError(error_code);
                     }
                     if let Err(error_code) =
@@ -613,10 +609,27 @@ fn process_thread_group(
                     {
                         return UsageThreadOutcome::OrdinaryError(error_code);
                     }
-                    // A failed nonzero/LocalReplay proof may safely transition
-                    // into a fresh shadow build and retry this fixed physical view
-                    // once. Storage/I/O failures remain Ordinary/Fatal errors and
-                    // never enter the Session quarantine path.
+                    return UsageThreadOutcome::GlobalPlanChanged { retry_thread: true };
+                }
+                UsageReadStep::NeedsRebuild => {
+                    if !discovery_complete {
+                        return UsageThreadOutcome::Completed;
+                    }
+                    let already_rebuilding = plan.action == PlanAction::BuildFrom;
+                    if let Err(error_code) =
+                        replace_or_begin(usage, &scan, present_ids, [plan.source_file_id])
+                    {
+                        return UsageThreadOutcome::OrdinaryError(error_code);
+                    }
+                    // Generic rebuild requests include legitimate metadata/owner
+                    // transitions such as late foreign-meta discovery. Replacing
+                    // the shadow source is durable; an existing BuildFrom stops
+                    // this scan rather than being misclassified as bad Session data.
+                    if already_rebuilding {
+                        return UsageThreadOutcome::GlobalPlanChanged {
+                            retry_thread: false,
+                        };
+                    }
                     return UsageThreadOutcome::GlobalPlanChanged { retry_thread: true };
                 }
                 UsageReadStep::NeedsRebuildStop => {
@@ -876,6 +889,7 @@ fn process_source_batch(
         let mut replay_window_bytes = 0u64;
         let mut replay_window_lines = 0u64;
         let mut unknown_ownership = false;
+        let mut invalid_session_data = false;
         let mut token_records_seen = 0u64;
         let mut saw_owning_boundary = ownership_established;
         let parsing_started = Instant::now();
@@ -924,6 +938,7 @@ fn process_source_batch(
                         }
                         if start > boundary || classification.ownership != RecordOwnership::Owning {
                             unknown_ownership = true;
+                            invalid_session_data = true;
                             return ReadControl::StopAfter;
                         }
                         // The shared classifier independently re-observed the
@@ -1031,7 +1046,9 @@ fn process_source_batch(
         report.observe_usage_read(&chunk, token_records_seen, parsing_started.elapsed());
 
         if unknown_ownership {
-            return Ok(if establishing {
+            return Ok(if invalid_session_data {
+                UsageReadStep::InvalidSessionData
+            } else if establishing {
                 UsageReadStep::AwaitingOwnership
             } else {
                 UsageReadStep::NeedsRebuild
@@ -1284,8 +1301,12 @@ mod resilience_tests {
     #[test]
     fn repeated_shadow_rebuild_data_failure_is_session_scoped_only() {
         assert_eq!(
-            repeated_shadow_data_error(PlanAction::BuildFrom),
+            shadow_session_data_error(PlanAction::BuildFrom, true),
             Some("USAGE_SESSION_DATA_INVALID")
+        );
+        assert_eq!(
+            shadow_session_data_error(PlanAction::BuildFrom, false),
+            None
         );
         for action in [
             PlanAction::ReadFrom,
@@ -1300,7 +1321,7 @@ mod resilience_tests {
             PlanAction::BlockedRelationship,
             PlanAction::RebuildRequired,
         ] {
-            assert_eq!(repeated_shadow_data_error(action), None, "{action:?}");
+            assert_eq!(shadow_session_data_error(action, true), None, "{action:?}");
         }
     }
 }
