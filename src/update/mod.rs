@@ -283,10 +283,13 @@ mod tests {
 
     #[tokio::test]
     async fn t_dist_007_newer_equal_and_older_matrix() {
+        let current = Version::parse(CURRENT_VERSION).unwrap();
+        let mut newer = current.clone();
+        newer.patch = newer.patch.checked_add(1).unwrap();
         for (latest, expected_available) in [
-            (Version::new(0, 1, 1), true),
-            (Version::new(0, 1, 0), false),
-            (Version::new(0, 0, 9), false),
+            (newer, true),
+            (current, false),
+            (Version::new(0, 0, 0), false),
         ] {
             let service = UpdateService::new_with_clock(
                 Arc::new(FakeProvider::success(latest.clone())),
@@ -302,7 +305,9 @@ mod tests {
 
     #[tokio::test]
     async fn t_dist_007_failure_matrix_preserves_successful_newer_release() {
-        let provider = Arc::new(FakeProvider::success(Version::new(0, 1, 1)));
+        let mut newer = Version::parse(CURRENT_VERSION).unwrap();
+        newer.patch = newer.patch.checked_add(1).unwrap();
+        let provider = Arc::new(FakeProvider::success(newer.clone()));
         let service = UpdateService::new_with_clock(
             Arc::clone(&provider) as Arc<dyn ReleaseProvider>,
             fixed_clock(),
@@ -320,7 +325,7 @@ mod tests {
             assert_eq!(service.check_now().await.unwrap_err(), failure);
             let snapshot = service.status().await;
             assert_eq!(snapshot.last_attempt_failure, Some(failure));
-            assert_eq!(snapshot.latest_version, Some(Version::new(0, 1, 1)));
+            assert_eq!(snapshot.latest_version, Some(newer.clone()));
             assert!(snapshot.update_available);
             assert!(!snapshot.checking);
         }
