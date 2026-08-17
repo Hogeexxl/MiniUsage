@@ -66,6 +66,7 @@ enum UsageReadStep {
 enum UsageThreadOutcome {
     Completed,
     GlobalPlanChanged { retry_thread: bool },
+    SessionDataError(&'static str),
     OrdinaryError(&'static str),
     FatalReloadError(&'static str),
 }
@@ -161,7 +162,24 @@ pub(super) fn run_usage_round(
     let discovery_complete =
         discovery.sessions.is_complete() && discovery.archived_sessions.is_complete();
 
-    let mut worklist = load_work_list(&usage, &present_ids, report, false)?;
+    let quarantine_state = usage
+        .active_quarantine_state()
+        .map_err(|_| "USAGE_QUARANTINE_STATE_FAILED")?;
+    let work_present_ids = if quarantine_state.dirty {
+        present_ids.clone()
+    } else {
+        let skipped = quarantine_state
+            .unchanged_source_ids
+            .iter()
+            .copied()
+            .collect::<BTreeSet<_>>();
+        present_ids
+            .iter()
+            .copied()
+            .filter(|source_id| !skipped.contains(source_id))
+            .collect::<Vec<_>>()
+    };
+    let mut worklist = load_work_list(&usage, &work_present_ids, report, false)?;
     let mut first_group_error = None;
 
     // A global transition invalidates every old worklist.  The reloaded
@@ -169,6 +187,21 @@ pub(super) fn run_usage_round(
     // transition; detailed plans are loaded only for the current Thread.
     let mut skip_thread_ids = BTreeSet::new();
     'global_plan: loop {
+        if quarantine_state.dirty
+            && worklist.epoch.active_epoch > 0
+            && worklist.epoch.build_epoch.is_none()
+        {
+            if !discovery_complete {
+                return Ok(());
+            }
+            usage
+                .begin_rebuild(USAGE_PARSER_VERSION, present_ids.iter().copied(), now_ms())
+                .map_err(|_| "USAGE_QUARANTINE_RETRY_BEGIN_FAILED")?;
+            report.observe_usage_global_replan();
+            worklist = load_work_list(&usage, &present_ids, report, true)?;
+            skip_thread_ids.clear();
+            continue 'global_plan;
+        }
         if worklist.epoch.active_epoch == 0 && worklist.epoch.build_epoch.is_none() {
             if !discovery_complete {
                 return Ok(());
@@ -238,6 +271,20 @@ pub(super) fn run_usage_round(
                     }
                     continue 'global_plan;
                 }
+                UsageThreadOutcome::SessionDataError(error_code) => {
+                    report.failed_source();
+                    report.error(error_code);
+                    if worklist.epoch.build_epoch.is_none() {
+                        return Err(error_code);
+                    }
+                    usage
+                        .quarantine_thread(&work_thread.thread_id, error_code, now_ms())
+                        .map_err(|_| "USAGE_SESSION_QUARANTINE_FAILED")?;
+                    report.observe_usage_global_replan();
+                    worklist = load_work_list(&usage, &present_ids, report, true)?;
+                    skip_thread_ids.clear();
+                    continue 'global_plan;
+                }
                 UsageThreadOutcome::OrdinaryError(error_code) => {
                     report.failed_source();
                     report.error(error_code);
@@ -269,7 +316,9 @@ pub(super) fn run_usage_round(
             && snapshot.members.iter().all(|member| {
                 matches!(
                     member.completion_status,
-                    CompletionStatus::Rebuilt | CompletionStatus::Carried
+                    CompletionStatus::Rebuilt
+                        | CompletionStatus::Carried
+                        | CompletionStatus::Quarantined
                 )
             })
         {
@@ -317,15 +366,23 @@ fn process_thread_group(
             return UsageThreadOutcome::Completed;
         }
         let group = scan.plans.to_vec();
-        if group.is_empty()
-            || group.iter().all(|plan| {
-                matches!(
-                    plan.action,
-                    PlanAction::Skip | PlanAction::BlockedRelationship
-                )
-            })
-        {
+        if group.is_empty() {
             return UsageThreadOutcome::Completed;
+        }
+        if group.iter().all(|plan| {
+            matches!(
+                plan.action,
+                PlanAction::Skip | PlanAction::BlockedRelationship
+            )
+        }) {
+            return if group
+                .iter()
+                .any(|plan| plan.action == PlanAction::BlockedRelationship)
+            {
+                UsageThreadOutcome::SessionDataError("USAGE_SESSION_RELATIONSHIP_INVALID")
+            } else {
+                UsageThreadOutcome::Completed
+            };
         }
 
         // Planner-owned control transitions happen before any source payload is

@@ -404,6 +404,7 @@ pub(crate) enum UsageBuildCompletion {
     Rebuilt,
     Carried,
     Blocked,
+    Quarantined,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -914,6 +915,17 @@ impl Ledger {
         )?;
         let excluded_build = build.unwrap_or(-1);
         let statements = [
+            "DELETE FROM usage_session_quarantine_sources WHERE rowid IN (
+                SELECT rowid FROM usage_session_quarantine_sources
+                WHERE ledger_epoch<>?1 AND ledger_epoch<>?2
+                ORDER BY ledger_epoch,rowid LIMIT ?3)",
+            "DELETE FROM usage_session_quarantine WHERE rowid IN (
+                SELECT q.rowid FROM usage_session_quarantine q
+                WHERE q.ledger_epoch<>?1 AND q.ledger_epoch<>?2
+                  AND NOT EXISTS (
+                    SELECT 1 FROM usage_session_quarantine_sources qs
+                    WHERE qs.ledger_epoch=q.ledger_epoch AND qs.root_session_id=q.root_session_id)
+                ORDER BY q.ledger_epoch,q.rowid LIMIT ?3)",
             "DELETE FROM usage_event_occurrences WHERE rowid IN (
                 SELECT rowid FROM usage_event_occurrences WHERE ledger_epoch<>?1 AND ledger_epoch<>?2
                 ORDER BY ledger_epoch,rowid LIMIT ?3)",
@@ -1016,6 +1028,14 @@ fn load_usage_stable_work_list_chunk(
          WHERE sf.file_status='present'
            AND sf.thread_id IS NOT NULL
            AND th.root_session_id IS NOT NULL
+           AND NOT EXISTS (
+               SELECT 1 FROM usage_session_quarantine_sources qs
+               WHERE qs.ledger_epoch=?{epoch_bind}
+                 AND qs.source_file_id=sf.source_file_id
+                 AND qs.file_generation=sf.file_generation
+                 AND qs.device_id=sf.device_id AND qs.inode=sf.inode
+                 AND qs.observed_size=sf.observed_size
+           )
            AND (cp.source_file_id IS NULL OR NOT (
                cp.processing_status='ready'
                AND cp.parser_version=?{parser_bind}
@@ -1294,7 +1314,9 @@ fn load_source_plan(
     if let Some(build) = &build
         && matches!(
             build.completion_status,
-            UsageBuildCompletion::Rebuilt | UsageBuildCompletion::Carried
+            UsageBuildCompletion::Rebuilt
+                | UsageBuildCompletion::Carried
+                | UsageBuildCompletion::Quarantined
         )
     {
         plan.action = UsagePlanAction::Skip;
@@ -1559,6 +1581,7 @@ fn read_build_plan_state(
                     "rebuilt" => UsageBuildCompletion::Rebuilt,
                     "carried" => UsageBuildCompletion::Carried,
                     "blocked" => UsageBuildCompletion::Blocked,
+                    "quarantined" => UsageBuildCompletion::Quarantined,
                     _ => return Err(rusqlite::Error::InvalidParameterName("invalid build completion".to_owned())),
                 },
                 carry_phase: match carry.as_str() {

@@ -31,7 +31,9 @@ use super::{
         Anomaly, AnomalyCode, ClosedTurn, CompensationBlocks, EventKind, GapKind, TurnEndStatus,
         TurnModelState, TurnReasoningEffortState, TurnState, UsageSourceState,
     },
-    rebuild::{ActivationOutcome, BuildSnapshot, RebuildError, RebuildLedger},
+    rebuild::{
+        ActivationOutcome, ActiveQuarantineState, BuildSnapshot, RebuildError, RebuildLedger,
+    },
 };
 
 type TurnCommon = (
@@ -360,6 +362,29 @@ impl<'a> UsageLedger<'a> {
         self.ledger
             .complete_usage_build_source(source_file_id, now_ms)?;
         Ok(())
+    }
+
+    pub fn quarantine_thread(
+        &self,
+        thread_id: &str,
+        error_code: &str,
+        now_ms: i64,
+    ) -> Result<usize, UsageLedgerError> {
+        let mut connection = self.ledger.connection()?;
+        let root: Option<String> = connection
+            .query_row(
+                "SELECT root_session_id FROM threads WHERE thread_id=?1",
+                [thread_id],
+                |row| row.get(0),
+            )
+            .map_err(storage::StorageError::sqlite)?;
+        let root = root.ok_or(UsageLedgerError::Invalid("thread has no root session"))?;
+        Ok(RebuildLedger::new(&mut connection).quarantine_session(&root, error_code, now_ms)?)
+    }
+
+    pub fn active_quarantine_state(&self) -> Result<ActiveQuarantineState, UsageLedgerError> {
+        let mut connection = self.ledger.connection()?;
+        Ok(RebuildLedger::new(&mut connection).active_quarantine_state()?)
     }
 
     pub fn activate_rebuild(
