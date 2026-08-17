@@ -6,6 +6,20 @@ on:
       - Release
     types:
       - completed
+  workflow_dispatch:
+    inputs:
+      release_run_id:
+        description: Successful canonical Release workflow run ID
+        required: true
+        type: string
+      release_tag:
+        description: Stable release tag, for example v0.1.1
+        required: true
+        type: string
+      release_head_sha:
+        description: Commit SHA released by the canonical Release workflow
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -17,13 +31,58 @@ env:
 jobs:
   published-update-e2e:
     name: T-DIST-015 public Release update E2E
-    if: ${{ github.event.workflow_run.conclusion == 'success' && startsWith(github.event.workflow_run.head_branch, 'v') && !contains(github.event.workflow_run.head_branch, '-rc.') }}
+    if: >-
+      ${{
+        (
+          github.event_name == 'workflow_run' &&
+          github.event.workflow_run.conclusion == 'success' &&
+          startsWith(github.event.workflow_run.head_branch, 'v') &&
+          !contains(github.event.workflow_run.head_branch, '-rc.')
+        ) || (
+          github.event_name == 'workflow_dispatch' &&
+          startsWith(inputs.release_tag, 'v') &&
+          !contains(inputs.release_tag, '-rc.')
+        )
+      }}
     runs-on: macos-latest
     steps:
+      - name: Validate explicit successful Release run evidence
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_RUN_ID: ${{ inputs.release_run_id }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          RELEASE_HEAD_SHA: ${{ inputs.release_head_sha }}
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/release-run.json"
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RELEASE_RUN_ID" > "$evidence"
+          python3 - "$evidence" "$RELEASE_TAG" "$RELEASE_HEAD_SHA" <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          run = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+          expected_tag = sys.argv[2]
+          expected_sha = sys.argv[3]
+          checks = {
+              "name": run.get("name") == "Release",
+              "path": run.get("path") == ".github/workflows/release.yml",
+              "status": run.get("status") == "completed",
+              "conclusion": run.get("conclusion") == "success",
+              "head_branch": run.get("head_branch") == expected_tag,
+              "head_sha": run.get("head_sha") == expected_sha,
+          }
+          failed = [name for name, passed in checks.items() if not passed]
+          if failed:
+              raise SystemExit(f"Release run evidence mismatch: {failed}; run={run}")
+          PY
+
       - name: Check out released commit
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.release_head_sha }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -41,7 +100,7 @@ jobs:
           name: macos-dmg
           path: staging/macos
           repository: ${{ github.repository }}
-          run-id: ${{ github.event.workflow_run.id }}
+          run-id: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || inputs.release_run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build frontend for internal lower-version probe
@@ -53,9 +112,10 @@ jobs:
       - name: Run T-DIST-015 against anonymous public latest Release
         shell: bash
         env:
-          MINIUSAGE_RELEASE_DMG: staging/macos/MiniUsage-${{ github.event.workflow_run.head_branch }}-macos-arm64.dmg
+          RELEASE_TAG: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || inputs.release_tag }}
+          MINIUSAGE_RELEASE_DMG: staging/macos/MiniUsage-${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || inputs.release_tag }}-macos-arm64.dmg
         run: |
-          export GITHUB_REF_NAME='${{ github.event.workflow_run.head_branch }}'
+          export GITHUB_REF_NAME="$RELEASE_TAG"
           bash ./.github/scripts/s13-public-release-e2e.sh
 
   frontend-regression:
@@ -69,7 +129,7 @@ jobs:
       - name: Check out released commit
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.release_head_sha }}
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -103,7 +163,7 @@ jobs:
       - name: Check out released commit
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.release_head_sha }}
       - name: Set up Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -136,7 +196,7 @@ jobs:
       - name: Check out released commit
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.release_head_sha }}
       - name: Set up Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -169,7 +229,7 @@ jobs:
       - name: Check out released commit
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.release_head_sha }}
       - name: Set up Rust stable
         uses: dtolnay/rust-toolchain@stable
       - name: Cache Rust build
@@ -190,7 +250,22 @@ jobs:
 
   automated-final:
     name: Automated FINAL evidence summary
-    if: ${{ always() && github.event.workflow_run.conclusion == 'success' && startsWith(github.event.workflow_run.head_branch, 'v') && !contains(github.event.workflow_run.head_branch, '-rc.') }}
+    if: >-
+      ${{
+        always() &&
+        (
+          (
+            github.event_name == 'workflow_run' &&
+            github.event.workflow_run.conclusion == 'success' &&
+            startsWith(github.event.workflow_run.head_branch, 'v') &&
+            !contains(github.event.workflow_run.head_branch, '-rc.')
+          ) || (
+            github.event_name == 'workflow_dispatch' &&
+            startsWith(inputs.release_tag, 'v') &&
+            !contains(inputs.release_tag, '-rc.')
+          )
+        )
+      }}
     needs:
       - published-update-e2e
       - frontend-regression
