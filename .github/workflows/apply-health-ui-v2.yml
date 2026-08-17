@@ -21,6 +21,7 @@ jobs:
         run: |
           python tools/apply_health_ui.py
           python tools/fix_health_compile.py
+          python tools/fix_health_tests.py
       - name: Align parser-version regression expectations
         shell: bash
         run: |
@@ -54,7 +55,7 @@ jobs:
           git fetch origin main
           git checkout origin/main -- .github/workflows/ci.yml
           rm -f .github/workflows/apply-health-ui-v2.yml
-          rm -f tools/apply_health_ui.py tools/fix_health_compile.py
+          rm -f tools/apply_health_ui.py tools/fix_health_compile.py tools/fix_health_tests.py
           git add -A
           git commit -m "feat: surface Session data health in dashboard"
           git push origin HEAD:fix/windows-fork-session-resilience
