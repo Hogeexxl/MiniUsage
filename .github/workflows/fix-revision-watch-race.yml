@@ -1,0 +1,70 @@
+name: Fix revision watch race
+
+on:
+  push:
+    branches:
+      - fix/windows-fork-session-resilience
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: "${{ github.event.head_commit.message == 'chore: fix revision watch race' }}"
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/windows-fork-session-resilience
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Quiesce restarted scanner before exact revision comparison
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('tests/spec05_api_integration.rs')
+          text = p.read_text(encoding='utf-8')
+          old = '''    let reopened_revision =
+        json_body(call(&reopened_app, Method::GET, "/api/revision", &[]).await).await;
+    assert_eq!(
+        reopened_revision["status_revision"],
+        reopened.app_state().unwrap().status_revision
+    );
+    reopened_scanner.shutdown().unwrap();'''
+          new = '''    // The restarted coordinator can publish a later status revision between
+    // the HTTP read and the direct SQLite read. Stop it before asserting exact
+    // equality so this test verifies the durable restart anchor rather than a
+    // scheduler race between two individually valid snapshots.
+    reopened_scanner.shutdown().unwrap();
+    let reopened_revision =
+        json_body(call(&reopened_app, Method::GET, "/api/revision", &[]).await).await;
+    assert_eq!(
+        reopened_revision["status_revision"],
+        reopened.app_state().unwrap().status_revision
+    );'''
+          count = text.count(old)
+          if count != 1:
+              raise SystemExit(f'revision race anchor: expected 1 match, got {count}')
+          p.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+      - name: Format
+        run: cargo fmt
+      - name: Repeat race regression
+        shell: bash
+        run: |
+          for i in 1 2 3 4 5; do
+            echo "revision race pass $i"
+            cargo test --locked --test spec05_api_integration t_s05_009_010_012_014_015_refresh_target_and_revision_watch_use_durable_anchors
+          done
+      - name: Run full Spec05 API integration
+        run: cargo test --locked --test spec05_api_integration
+      - name: Commit and remove helper workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -f .github/workflows/fix-revision-watch-race.yml
+          git add -A
+          git commit -m "test: remove revision watch restart race"
+          git push origin HEAD:fix/windows-fork-session-resilience
