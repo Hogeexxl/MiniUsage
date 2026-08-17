@@ -5,67 +5,9 @@ on:
   pull_request:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  apply-resilience:
-    name: Apply resilience patch
-    if: "${{ github.event_name == 'push' && github.event.head_commit.message == 'chore: run resilience patch' }}"
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-        with:
-          ref: fix/windows-fork-session-resilience
-          fetch-depth: 0
-      - name: Relax guarded finish replacement
-        shell: bash
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          path = Path('tools/apply_resilience_patch.py')
-          text = path.read_text(encoding='utf-8')
-          old = '''def regex_once(text: str, pattern: str, replacement: str, label: str) -> str:
-              updated, count = re.subn(pattern, replacement, text, count=1, flags=re.S)
-              if count == 0:
-                  if replacement in text:
-                      return text
-                  raise RuntimeError(f"{label}: regex not found")
-              return updated
-          '''
-          new = '''def regex_once(text: str, pattern: str, replacement: str, label: str) -> str:
-              updated, count = re.subn(pattern, replacement, text, count=1, flags=re.S)
-              if count == 0:
-                  if replacement in text:
-                      return text
-                  if label == "rollout finish continuation":
-                      start = text.index("    fn finish(mut self) -> RolloutParseResult {")
-                      end = text.index("        RolloutParseResult {", start)
-                      return text[:start] + replacement + "\\n" + text[end:]
-                  raise RuntimeError(f"{label}: regex not found")
-              return updated
-          '''
-          if old not in text:
-              raise SystemExit('regex_once helper shape changed')
-          path.write_text(text.replace(old, new, 1), encoding='utf-8')
-          PY
-      - name: Apply guarded patch
-        run: python tools/apply_resilience_patch.py
-      - name: Verify patch shape
-        run: git diff --check && git status --short
-      - name: Commit production changes and restore CI
-        shell: bash
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git fetch origin main
-          git checkout origin/main -- .github/workflows/ci.yml
-          rm -f .github/workflows/apply-resilience-patch.yml
-          rm -f tools/apply_resilience_patch.py
-          git add -A
-          git commit -m "fix: support Windows paths and replay continuation"
-          git push origin HEAD:fix/windows-fork-session-resilience
-
   frontend:
     name: Frontend
     runs-on: ubuntu-latest

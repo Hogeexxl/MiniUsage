@@ -159,7 +159,7 @@ impl ParsedSource {
         !self.needs_rebuild
             && matches!(
                 self.final_continuation,
-                FinalContinuation::OwningLive { .. }
+                FinalContinuation::ReplayedAncestor { .. } | FinalContinuation::OwningLive { .. }
             )
             && self.fact.is_some()
     }
@@ -434,14 +434,22 @@ impl MetadataPipeline {
         }
         let stable_fact = matching_stable_fact(entry);
         let resume_state = stable_fact.and_then(|fact| {
-            entry
+            let thread_id = entry
                 .source
                 .thread_id
                 .as_ref()
-                .filter(|thread_id| *thread_id == &fact.owning_thread_id)
-                .map(|thread_id| ResumeState::OwningLive {
+                .filter(|thread_id| *thread_id == &fact.owning_thread_id)?;
+            match fact.continuation_state {
+                crate::domain::ContinuationState::ReplayedAncestor => {
+                    Some(ResumeState::ReplayedAncestor {
+                        owning_thread_id: thread_id.clone(),
+                    })
+                }
+                crate::domain::ContinuationState::OwningLive => Some(ResumeState::OwningLive {
                     owning_thread_id: thread_id.clone(),
-                })
+                }),
+                crate::domain::ContinuationState::Unstable => None,
+            }
         });
         match checkpoint.processing_status {
             CheckpointProcessingStatus::Pending if offset == 0 => FilePlan::ReadFrom {
@@ -837,7 +845,11 @@ fn matching_stable_fact(
     let SafeFactState::Matching(fact) = &entry.safe_fact else {
         return None;
     };
-    if fact.continuation_state != crate::domain::ContinuationState::OwningLive {
+    if !matches!(
+        fact.continuation_state,
+        crate::domain::ContinuationState::ReplayedAncestor
+            | crate::domain::ContinuationState::OwningLive
+    ) {
         return None;
     }
     let thread_id = entry.source.thread_id.as_deref()?;

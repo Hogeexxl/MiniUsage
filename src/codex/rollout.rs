@@ -16,7 +16,7 @@ use super::DiagnosticSeverity;
 ///
 /// This is the only production authority for the metadata parser version;
 /// persisted checkpoints and facts carry the version they were produced with.
-pub const METADATA_PARSER_VERSION: i64 = 3;
+pub const METADATA_PARSER_VERSION: i64 = 4;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EnvelopeKind {
@@ -39,11 +39,13 @@ pub enum RecordOwnership {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ResumeState {
     AwaitOwningMeta,
+    ReplayedAncestor { owning_thread_id: String },
     OwningLive { owning_thread_id: String },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FinalContinuation {
+    ReplayedAncestor { owning_thread_id: String },
     OwningLive { owning_thread_id: String },
     Unstable,
 }
@@ -173,19 +175,27 @@ impl RolloutThreadFact {
             })
         };
         let continuation_state = match continuation {
+            FinalContinuation::ReplayedAncestor { owning_thread_id }
+                if owning_thread_id == &self.owning_thread_id =>
+            {
+                DomainContinuationState::ReplayedAncestor
+            }
             FinalContinuation::OwningLive { owning_thread_id }
                 if owning_thread_id == &self.owning_thread_id =>
             {
                 DomainContinuationState::OwningLive
             }
-            FinalContinuation::OwningLive { .. } => {
+            FinalContinuation::ReplayedAncestor { .. } | FinalContinuation::OwningLive { .. } => {
                 return Err(crate::domain::DomainError::InvariantViolation {
                     invariant: "continuation owning thread must match rollout fact",
                 });
             }
             FinalContinuation::Unstable => DomainContinuationState::Unstable,
         };
-        let ownership_confidence = if continuation_state == DomainContinuationState::OwningLive {
+        let ownership_confidence = if matches!(
+            continuation_state,
+            DomainContinuationState::ReplayedAncestor | DomainContinuationState::OwningLive
+        ) {
             DomainOwnershipConfidence::Confirmed
         } else {
             DomainOwnershipConfidence::Unresolved
@@ -725,16 +735,24 @@ impl Parser {
 
         if self.context.chunk_start_offset > 0 {
             self.resumed_nonzero = true;
-            let ResumeState::OwningLive { owning_thread_id } = &self.context.resume_state else {
-                self.needs_rebuild = true;
-                self.diagnostic(
-                    DiagnosticCode::InvalidResumeState,
-                    DiagnosticSeverity::Conflict,
-                    None,
-                    external.as_ref().map(|(thread_id, _)| thread_id.clone()),
-                    Some("resume_state"),
-                );
-                return;
+            let (owning_thread_id, resume_machine) = match &self.context.resume_state {
+                ResumeState::ReplayedAncestor { owning_thread_id } => {
+                    (owning_thread_id, MachineState::ReplayedAncestor)
+                }
+                ResumeState::OwningLive { owning_thread_id } => {
+                    (owning_thread_id, MachineState::OwningLive)
+                }
+                ResumeState::AwaitOwningMeta => {
+                    self.needs_rebuild = true;
+                    self.diagnostic(
+                        DiagnosticCode::InvalidResumeState,
+                        DiagnosticSeverity::Conflict,
+                        None,
+                        external.as_ref().map(|(thread_id, _)| thread_id.clone()),
+                        Some("resume_state"),
+                    );
+                    return;
+                }
             };
             let Some(resume_id) = valid_uuid_string(Some(owning_thread_id)) else {
                 self.needs_rebuild = true;
@@ -775,7 +793,7 @@ impl Parser {
             }
             self.owning_thread_id = Some(resume_id);
             self.owning_confirmed = true;
-            self.machine = MachineState::OwningLive;
+            self.machine = resume_machine;
             return;
         }
 
@@ -806,20 +824,15 @@ impl Parser {
     }
 
     fn finish(mut self) -> RolloutParseResult {
-        if self.machine == MachineState::ReplayedAncestor {
-            self.diagnostic(
-                DiagnosticCode::UnresolvedReplayBoundary,
-                DiagnosticSeverity::Warning,
-                None,
-                self.owning_thread_id.clone(),
-                None,
-            );
-        }
-
         let final_continuation = if self.needs_rebuild || !self.owning_confirmed {
             FinalContinuation::Unstable
         } else {
             match (&self.owning_thread_id, self.machine) {
+                (Some(owning_thread_id), MachineState::ReplayedAncestor) => {
+                    FinalContinuation::ReplayedAncestor {
+                        owning_thread_id: owning_thread_id.clone(),
+                    }
+                }
                 (
                     Some(owning_thread_id),
                     MachineState::OwningBootstrap | MachineState::OwningLive,
@@ -830,12 +843,14 @@ impl Parser {
             }
         };
         if let Some(fact) = self.fact.as_mut() {
-            fact.ownership_boundary.confidence =
-                if matches!(final_continuation, FinalContinuation::OwningLive { .. }) {
-                    OwnershipConfidence::Confirmed
-                } else {
-                    OwnershipConfidence::Unresolved
-                };
+            fact.ownership_boundary.confidence = if matches!(
+                final_continuation,
+                FinalContinuation::ReplayedAncestor { .. } | FinalContinuation::OwningLive { .. }
+            ) {
+                OwnershipConfidence::Confirmed
+            } else {
+                OwnershipConfidence::Unresolved
+            };
         }
         RolloutParseResult {
             fact: if self.needs_rebuild { None } else { self.fact },
@@ -934,9 +949,15 @@ impl Parser {
         }
 
         if self.owning_thread_id.as_deref() == Some(session_id.as_str()) {
+            let resumed_from_replay = self.machine == MachineState::ReplayedAncestor;
             self.record(line, EnvelopeKind::SessionMeta, RecordOwnership::Owning);
+            if resumed_from_replay {
+                self.machine = MachineState::OwningLive;
+            }
             if let Some(fact) = self.fact.as_mut() {
-                if fact
+                if resumed_from_replay {
+                    fact.ownership_boundary.owning_records_start_offset = Some(line.start_offset);
+                } else if fact
                     .ownership_boundary
                     .owning_records_start_offset
                     .is_none()
@@ -973,7 +994,9 @@ impl Parser {
             self.owning_thread_id.clone(),
             Some("id"),
         );
-        if self.resumed_nonzero {
+        if self.resumed_nonzero
+            && !matches!(self.context.resume_state, ResumeState::ReplayedAncestor { .. })
+        {
             self.needs_rebuild = true;
         }
     }

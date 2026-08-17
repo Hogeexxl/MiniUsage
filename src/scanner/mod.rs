@@ -23,6 +23,7 @@ use crate::{
         SourceAvailability, StateIndexReader, StateSnapshot,
     },
     domain::{CheckpointRebuildCommand, ConsumerKind, MetadataScanStateEntry, SafeFactState},
+    platform::paths,
     storage::Ledger,
 };
 
@@ -393,9 +394,10 @@ impl MetadataWorker {
         };
         let candidates = owning_candidates(file, state_snapshot);
         let existing_fact = match (&resume_state, &entry.safe_fact) {
-            (ResumeState::OwningLive { .. }, SafeFactState::Matching(fact)) => {
-                RolloutThreadFact::from_safe_fact(fact).ok()
-            }
+            (
+                ResumeState::OwningLive { .. } | ResumeState::ReplayedAncestor { .. },
+                SafeFactState::Matching(fact),
+            ) => RolloutThreadFact::from_safe_fact(fact).ok(),
             _ => None,
         };
         let mut parser: RolloutChunkParser =
@@ -503,7 +505,12 @@ pub(super) fn owning_candidates(
     let state_rollout = state
         .threads
         .iter()
-        .find(|thread| thread.rollout_path.as_deref() == file.path.to_str())
+        .find(|thread| {
+            thread
+                .rollout_path
+                .as_deref()
+                .is_some_and(|rollout_path| paths::same_source_path(Path::new(rollout_path), &file.path))
+        })
         .map(|thread| OwningThreadCandidate {
             thread_id: thread.thread_id.clone(),
             confidence: crate::codex::rollout::OwningCandidateConfidence::Confirmed,

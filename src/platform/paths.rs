@@ -70,6 +70,29 @@ pub fn normalize_absolute_path(path: &Path) -> Option<PathBuf> {
     Some(simplify_verbatim_path(lexically_normalize_strict(path)?))
 }
 
+/// Normalize a Codex source path into MiniUsage's one internal identity form.
+/// Existing paths are canonicalized when possible; otherwise a strict lexical
+/// normalization is used. Windows verbatim disk/UNC prefixes are simplified in
+/// both cases so adapters and discovery compare the same representation.
+pub fn normalize_source_path(path: &Path) -> Option<PathBuf> {
+    if !path.is_absolute() {
+        return None;
+    }
+    let normalized = fs::canonicalize(path)
+        .ok()
+        .map(simplify_verbatim_path)
+        .or_else(|| normalize_absolute_path(path))?;
+    Some(normalized)
+}
+
+/// Compare two absolute source paths after applying the same platform rules.
+pub fn same_source_path(left: &Path, right: &Path) -> bool {
+    match (normalize_source_path(left), normalize_source_path(right)) {
+        (Some(left), Some(right)) => left == right,
+        _ => false,
+    }
+}
+
 fn non_empty_env_path(name: &str) -> Option<PathBuf> {
     env::var_os(name)
         .filter(|value| !value.is_empty())
@@ -229,5 +252,9 @@ mod tests {
         assert_eq!(disk, PathBuf::from(r"C:\Users\用户\Codex"));
         let unc = normalize_absolute_path(Path::new(r"\\?\UNC\server\share\Codex")).unwrap();
         assert_eq!(unc, PathBuf::from(r"\\server\share\Codex"));
+        assert!(same_source_path(
+            Path::new(r"\\?\C:\Users\用户\Codex"),
+            Path::new(r"C:\Users\用户\Codex")
+        ));
     }
 }

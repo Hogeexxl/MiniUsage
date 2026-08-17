@@ -16,6 +16,7 @@ use chrono::DateTime;
 use rusqlite::{Connection, OpenFlags, TransactionBehavior, types::ValueRef};
 
 use super::{DiagnosticSeverity, SourceAvailability};
+use crate::platform::paths;
 
 const DEFAULT_BUSY_TIMEOUT: Duration = Duration::from_millis(2_000);
 const MAX_REASONABLE_EPOCH_MS: i64 = 253_402_300_799_999;
@@ -548,7 +549,13 @@ fn optional_path(
     if matches!(value, ValueRef::Null) {
         return None;
     }
-    let result = value_string(value).and_then(|value| normalize_absolute_path(&value));
+    let result = value_string(value).and_then(|value| {
+        if value.chars().any(char::is_control) {
+            return None;
+        }
+        paths::normalize_source_path(Path::new(value.trim()))
+            .and_then(|path| path.to_str().map(ToOwned::to_owned))
+    });
     if result.is_none() {
         diagnostics.push(
             StateDiagnostic::new("invalid_path", DiagnosticSeverity::Warning)
@@ -681,28 +688,6 @@ fn parse_time_value(value: ValueRef<'_>, as_millis: bool) -> Option<i64> {
 
 fn valid_identifier(value: &str) -> bool {
     !value.is_empty() && !value.chars().any(char::is_control)
-}
-
-/// Lexically normalize an absolute path without touching the filesystem.
-fn normalize_absolute_path(value: &str) -> Option<String> {
-    let path = Path::new(value.trim());
-    if !path.is_absolute() || value.chars().any(char::is_control) {
-        return None;
-    }
-    let mut normalized = PathBuf::new();
-    for component in path.components() {
-        match component {
-            std::path::Component::RootDir | std::path::Component::Prefix(_) => {
-                normalized.push(component.as_os_str())
-            }
-            std::path::Component::CurDir => {}
-            std::path::Component::ParentDir => {
-                normalized.pop();
-            }
-            std::path::Component::Normal(component) => normalized.push(component),
-        }
-    }
-    normalized.to_str().map(ToOwned::to_owned)
 }
 
 #[cfg(test)]

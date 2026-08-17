@@ -6,7 +6,7 @@
 
 use rusqlite::{Connection, Result, TransactionBehavior};
 
-pub const LATEST_SCHEMA_VERSION: u32 = 7;
+pub const LATEST_SCHEMA_VERSION: u32 = 8;
 
 struct Migration {
     version: u32,
@@ -41,6 +41,10 @@ const MIGRATIONS: &[Migration] = &[
     Migration {
         version: 7,
         sql: include_str!("schema/0007_usage_context_and_estimated_cost.sql"),
+    },
+    Migration {
+        version: 8,
+        sql: include_str!("schema/0008_session_resilience.sql"),
     },
 ];
 
