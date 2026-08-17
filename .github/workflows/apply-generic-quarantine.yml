@@ -17,9 +17,10 @@ jobs:
         with:
           ref: fix/windows-fork-session-resilience
           fetch-depth: 0
-      - name: Apply production and regression patch
+      - name: Restore processor and apply production/regression patch
         shell: bash
         run: |
+          git show 3d6f23a883707a505d6aa3929b005f1fc1c90e4b:src/usage/processor.rs > src/usage/processor.rs
           python - <<'PY'
           from pathlib import Path
 
@@ -30,6 +31,13 @@ jobs:
               if count != 1:
                   raise SystemExit(f'{label}: expected 1 match, got {count}')
               p.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          replace_once(
+              'src/usage/processor.rs',
+              'assert_eq!(crate::usage::USAGE_PARSER_VERSION, 6);',
+              'assert_eq!(crate::usage::USAGE_PARSER_VERSION, 7);',
+              'usage parser regression expectation',
+          )
 
           path = 'src/scanner/usage_consumer.rs'
           replace_once(
@@ -101,10 +109,10 @@ jobs:
                               if cancelled(cancellation) {
                                   return UsageThreadOutcome::Completed;
                               }
-                              if discovery_complete
-                                  && let Some(error_code) = repeated_shadow_data_error(plan.action)
-                              {
-                                  return UsageThreadOutcome::SessionDataError(error_code);
+                              if discovery_complete {
+                                  if let Some(error_code) = repeated_shadow_data_error(plan.action) {
+                                      return UsageThreadOutcome::SessionDataError(error_code);
+                                  }
                               }
                               return UsageThreadOutcome::Completed;
                           }
