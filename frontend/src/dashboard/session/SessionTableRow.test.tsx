@@ -29,6 +29,8 @@ const item: SessionItemDto = {
   inclusive_usage: usage,
   self_usage: usage,
   subagent_usage: { ...usage, estimated_cost: null, estimated_cost_status: "unknown" },
+  data_status: "complete",
+  error_code: null,
 };
 
 describe("SessionTableRow cost completeness", () => {

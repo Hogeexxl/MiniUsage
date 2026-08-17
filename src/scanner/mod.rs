@@ -23,6 +23,7 @@ use crate::{
         SourceAvailability, StateIndexReader, StateSnapshot,
     },
     domain::{CheckpointRebuildCommand, ConsumerKind, MetadataScanStateEntry, SafeFactState},
+    platform::paths,
     storage::Ledger,
 };
 
@@ -393,9 +394,10 @@ impl MetadataWorker {
         };
         let candidates = owning_candidates(file, state_snapshot);
         let existing_fact = match (&resume_state, &entry.safe_fact) {
-            (ResumeState::OwningLive { .. }, SafeFactState::Matching(fact)) => {
-                RolloutThreadFact::from_safe_fact(fact).ok()
-            }
+            (
+                ResumeState::OwningLive { .. } | ResumeState::ReplayedAncestor { .. },
+                SafeFactState::Matching(fact),
+            ) => RolloutThreadFact::from_safe_fact(fact).ok(),
             _ => None,
         };
         let mut parser: RolloutChunkParser =
@@ -503,7 +505,11 @@ pub(super) fn owning_candidates(
     let state_rollout = state
         .threads
         .iter()
-        .find(|thread| thread.rollout_path.as_deref() == file.path.to_str())
+        .find(|thread| {
+            thread.rollout_path.as_deref().is_some_and(|rollout_path| {
+                paths::same_source_path(Path::new(rollout_path), &file.path)
+            })
+        })
         .map(|thread| OwningThreadCandidate {
             thread_id: thread.thread_id.clone(),
             confidence: crate::codex::rollout::OwningCandidateConfidence::Confirmed,
@@ -1192,6 +1198,18 @@ mod tests {
             .expect("count active usage events")
     }
 
+    fn active_quarantine_count(ledger: &Ledger) -> i64 {
+        Connection::open(ledger.database_path())
+            .expect("open ledger query")
+            .query_row(
+                "SELECT COUNT(*) FROM usage_session_quarantine
+                 WHERE ledger_epoch=(SELECT usage_active_epoch FROM app_meta WHERE id=1)",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count active Session quarantines")
+    }
+
     fn fact_provenance(ledger: &Ledger, source_file_id: i64) -> FactProvenance {
         let connection = Connection::open(ledger.database_path()).expect("open ledger query");
         connection
@@ -1473,7 +1491,7 @@ not-json
             .unwrap()
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("read guardian fixture schema version");
-        assert_eq!(user_version, 7);
+        assert_eq!(user_version, 8);
         let child_source_id = source_checkpoint(&fixture.ledger, &fixture.child_path).0;
         let file_before = fs::File::open(&fixture.child_path).expect("open guardian rollout");
         let metadata_before = file_before.metadata().expect("stat guardian rollout");
@@ -1598,7 +1616,7 @@ not-json
             .unwrap()
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("read guardian fixture schema version");
-        assert_eq!(user_version, 7);
+        assert_eq!(user_version, 8);
         let child_source_id = source_checkpoint(&fixture.ledger, &fixture.child_path).0;
         let usage_checkpoint_before =
             checkpoint_state(&fixture.ledger, &fixture.child_path, "usage");
@@ -2177,6 +2195,39 @@ not-json
     }
 
     #[test]
+    fn repeated_shadow_rebuild_data_failure_quarantines_the_session_tree() {
+        let fixture = UsagePerformanceFixture::new("t-perf-008-quarantine");
+        fixture.stabilize();
+        let active_before = usage_epochs(&fixture.ledger).0.expect("active epoch");
+        let bad_source_id = source_checkpoint(&fixture.ledger, &fixture.paths[0]).0;
+
+        let connection = Connection::open(fixture.ledger.database_path()).unwrap();
+        connection
+            .execute("UPDATE app_meta SET usage_parser_version=1 WHERE id=1", [])
+            .unwrap();
+        connection
+            .execute(
+                "UPDATE rollout_metadata_facts
+                 SET owning_records_start_offset=1
+                 WHERE source_file_id=?1",
+                [bad_source_id],
+            )
+            .unwrap();
+        drop(connection);
+
+        let (result, report) = fixture.run_observed();
+        result.expect("bad Session data is quarantined without failing the round");
+        assert!(report.error_codes.contains(&"USAGE_SESSION_DATA_INVALID"));
+        assert_eq!(report.failed_sources, 1);
+
+        let (active_after, build_after, parser_after) = usage_epochs(&fixture.ledger);
+        assert!(active_after.expect("new active epoch") > active_before);
+        assert_eq!(build_after, None);
+        assert_eq!(parser_after, crate::usage::USAGE_PARSER_VERSION);
+        assert_eq!(active_quarantine_count(&fixture.ledger), 1);
+    }
+
+    #[test]
     fn ordinary_usage_group_error_does_not_block_the_next_thread() {
         let fixture = UsagePerformanceFixture::new("t-perf-008-isolation");
         fixture.stabilize();
@@ -2215,6 +2266,7 @@ not-json
             fs::metadata(successful_path).unwrap().len() as i64
         );
         assert_eq!(active_usage_event_count(&fixture.ledger), 2);
+        assert_eq!(active_quarantine_count(&fixture.ledger), 0);
     }
 
     #[test]

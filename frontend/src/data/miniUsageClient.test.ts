@@ -18,6 +18,12 @@ const usage = {
   estimated_cost: null,
   estimated_cost_status: "unknown",
   session_count: 1,
+  session_health: {
+    total_sessions: 1,
+    complete_sessions: 0,
+    incomplete_sessions: 1,
+    error_sessions: 0,
+  },
 };
 
 const sessionUsage = {
@@ -45,6 +51,8 @@ const sessionItem = (root_session_id = "root-1") => ({
   inclusive_usage: sessionUsage,
   self_usage: sessionUsage,
   subagent_usage: sessionUsage,
+  data_status: "incomplete",
+  error_code: null,
 });
 
 afterEach(() => vi.restoreAllMocks());
@@ -228,6 +236,8 @@ describe("miniUsageClient DTO seam", () => {
       total_tokens: 30,
       combined_total_tokens: 30,
       cache_hit_rate: 0.4,
+      data_status: "incomplete",
+      error_code: null,
     };
     fetchMock.mockResolvedValueOnce(
       new Response(
@@ -352,6 +362,8 @@ describe("miniUsageClient DTO seam", () => {
       total_tokens: 30,
       combined_total_tokens: 30,
       cache_hit_rate: 0.4,
+      data_status: "incomplete",
+      error_code: null,
     };
     const partialSessionUsage = { ...sessionUsage, estimated_cost: 1.25, estimated_cost_status: "partial" };
     fetchMock.mockResolvedValueOnce(

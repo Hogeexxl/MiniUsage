@@ -566,10 +566,11 @@ impl_string_enum!(
     Conflict => "conflict"
 );
 
-/// Safe fact continuation state.  Only `OwningLive` can be resumed from a
-/// non-zero metadata offset.
+/// Safe fact continuation state. Confirmed owning identity may be resumed
+/// either while still replaying an ancestor or after returning to owning data.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ContinuationState {
+    ReplayedAncestor,
     OwningLive,
     Unstable,
 }
@@ -577,13 +578,20 @@ pub enum ContinuationState {
 impl ContinuationState {
     pub const fn as_str(self) -> &'static str {
         match self {
+            Self::ReplayedAncestor => "replayed_ancestor",
             Self::OwningLive => "owning_live",
             Self::Unstable => "unstable",
         }
     }
 }
 
-impl_string_enum!(ContinuationState, "continuation_state", OwningLive => "owning_live", Unstable => "unstable");
+impl_string_enum!(
+    ContinuationState,
+    "continuation_state",
+    ReplayedAncestor => "replayed_ancestor",
+    OwningLive => "owning_live",
+    Unstable => "unstable"
+);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum OwnershipConfidence {
@@ -1419,11 +1427,13 @@ impl RolloutMetadataFact {
         if let Some(agent_path) = self.agent_path.as_deref() {
             non_empty(agent_path, "agent_path")?;
         }
-        if self.continuation_state == ContinuationState::OwningLive
-            && self.ownership_confidence != OwnershipConfidence::Confirmed
+        if matches!(
+            self.continuation_state,
+            ContinuationState::ReplayedAncestor | ContinuationState::OwningLive
+        ) && self.ownership_confidence != OwnershipConfidence::Confirmed
         {
             return Err(DomainError::InvariantViolation {
-                invariant: "owning_live fact must have confirmed ownership",
+                invariant: "resumable fact must have confirmed ownership",
             });
         }
         Ok(())

@@ -132,6 +132,12 @@ function requiredEstimatedCostStatus(record: JsonRecord, key: string): Estimated
   throw new MiniUsageClientError("HTTP_ERROR", 200);
 }
 
+function requiredSessionDataStatus(record: JsonRecord, key: string): SessionItemDto["data_status"] {
+  const value = record[key];
+  if (value === "complete" || value === "incomplete" || value === "error") return value;
+  throw new MiniUsageClientError("HTTP_ERROR", 200);
+}
+
 function parseRange(value: unknown): RangeDto {
   const record = requiredRecord(value);
   const key = requiredString(record, "key");
@@ -176,9 +182,28 @@ function parseTokenUsage(value: unknown, requireNullCost = false): UsageDto {
 
 function parseUsage(value: unknown): SummaryUsageDto {
   const record = requiredRecord(value);
+  const sessionCount = requiredSafeInteger(record, "session_count");
+  const healthRecord = requiredRecord(record.session_health);
+  const sessionHealth = {
+    total_sessions: requiredSafeInteger(healthRecord, "total_sessions"),
+    complete_sessions: requiredSafeInteger(healthRecord, "complete_sessions"),
+    incomplete_sessions: requiredSafeInteger(healthRecord, "incomplete_sessions"),
+    error_sessions: requiredSafeInteger(healthRecord, "error_sessions"),
+  };
+  const healthySessions = sessionHealth.complete_sessions + sessionHealth.incomplete_sessions;
+  const allSessions = healthySessions + sessionHealth.error_sessions;
+  if (
+    !Number.isSafeInteger(healthySessions) ||
+    !Number.isSafeInteger(allSessions) ||
+    healthySessions !== sessionCount ||
+    allSessions !== sessionHealth.total_sessions
+  ) {
+    throw new MiniUsageClientError("HTTP_ERROR", 200);
+  }
   return {
     ...parseTokenUsage(record),
-    session_count: requiredSafeInteger(record, "session_count"),
+    session_count: sessionCount,
+    session_health: sessionHealth,
   };
 }
 
@@ -248,6 +273,18 @@ function parseSessionItem(value: unknown): SessionItemDto {
   if (!Array.isArray(modelsValue) || modelsValue.some((model) => typeof model !== "string")) {
     throw new MiniUsageClientError("HTTP_ERROR", 200);
   }
+  const dataStatus = requiredSessionDataStatus(record, "data_status");
+  const errorCode = nullableString(record, "error_code");
+  const inclusiveUsage = record.inclusive_usage === null ? null : parseTokenUsage(record.inclusive_usage);
+  const selfUsage = record.self_usage === null ? null : parseTokenUsage(record.self_usage);
+  const subagentUsage = record.subagent_usage === null ? null : parseTokenUsage(record.subagent_usage);
+  if (dataStatus === "error") {
+    if (inclusiveUsage !== null || selfUsage !== null || subagentUsage !== null || !errorCode) {
+      throw new MiniUsageClientError("HTTP_ERROR", 200);
+    }
+  } else if (inclusiveUsage === null || selfUsage === null || subagentUsage === null || errorCode !== null) {
+    throw new MiniUsageClientError("HTTP_ERROR", 200);
+  }
   return {
     root_session_id: requiredString(record, "root_session_id"),
     title: nullableString(record, "title"),
@@ -256,22 +293,37 @@ function parseSessionItem(value: unknown): SessionItemDto {
     last_activity_at_ms: requiredSafeInteger(record, "last_activity_at_ms"),
     models_used: modelsValue,
     subagent_count: requiredSafeInteger(record, "subagent_count"),
-    inclusive_usage: parseTokenUsage(record.inclusive_usage),
-    self_usage: parseTokenUsage(record.self_usage),
-    subagent_usage: parseTokenUsage(record.subagent_usage),
+    inclusive_usage: inclusiveUsage,
+    self_usage: selfUsage,
+    subagent_usage: subagentUsage,
+    data_status: dataStatus,
+    error_code: errorCode,
   };
 }
 
 function parseSessionSortIndex(value: unknown): SessionSnapshotResponse["sort_index"][number] {
   const record = requiredRecord(value);
+  const dataStatus = requiredSessionDataStatus(record, "data_status");
+  const errorCode = nullableString(record, "error_code");
+  const totalTokens = nullableSafeInteger(record, "total_tokens");
+  const combinedTotalTokens = nullableSafeInteger(record, "combined_total_tokens");
+  if (dataStatus === "error") {
+    if (totalTokens !== null || combinedTotalTokens !== null || !errorCode) {
+      throw new MiniUsageClientError("HTTP_ERROR", 200);
+    }
+  } else if (totalTokens === null || combinedTotalTokens === null || errorCode !== null) {
+    throw new MiniUsageClientError("HTTP_ERROR", 200);
+  }
   return {
     root_session_id: requiredString(record, "root_session_id"),
     last_activity_at_ms: requiredSafeInteger(record, "last_activity_at_ms"),
     project_sort_key: nullableString(record, "project_sort_key"),
     model_sort_key: nullableString(record, "model_sort_key"),
-    total_tokens: requiredSafeInteger(record, "total_tokens"),
-    combined_total_tokens: requiredSafeInteger(record, "combined_total_tokens"),
+    total_tokens: totalTokens,
+    combined_total_tokens: combinedTotalTokens,
     cache_hit_rate: nullableRatio(record, "cache_hit_rate"),
+    data_status: dataStatus,
+    error_code: errorCode,
   };
 }
 

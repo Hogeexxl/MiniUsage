@@ -5,17 +5,13 @@
 //! prompt fields.  The resolver can therefore consume this module without
 //! giving the SQLite schema a place in the rest of the application.
 
-use std::{
-    collections::HashMap,
-    fmt,
-    path::{Path, PathBuf},
-    time::Duration,
-};
+use std::{collections::HashMap, fmt, path::Path, time::Duration};
 
 use chrono::DateTime;
 use rusqlite::{Connection, OpenFlags, TransactionBehavior, types::ValueRef};
 
 use super::{DiagnosticSeverity, SourceAvailability};
+use crate::platform::paths;
 
 const DEFAULT_BUSY_TIMEOUT: Duration = Duration::from_millis(2_000);
 const MAX_REASONABLE_EPOCH_MS: i64 = 253_402_300_799_999;
@@ -538,6 +534,11 @@ fn optional_text(
     result
 }
 
+/// Normalize state-index path metadata lexically so the normalized value is
+/// independent of whether the referenced file/directory currently exists.
+/// Filesystem canonicalization here would make a disappearing source able to
+/// change a Thread field (for example macOS /var -> /private/var), causing a
+/// spurious data_revision change during usage carry.
 fn optional_path(
     value: Option<ValueRef<'_>>,
     thread_id: &str,
@@ -548,7 +549,13 @@ fn optional_path(
     if matches!(value, ValueRef::Null) {
         return None;
     }
-    let result = value_string(value).and_then(|value| normalize_absolute_path(&value));
+    let result = value_string(value).and_then(|value| {
+        if value.chars().any(char::is_control) {
+            return None;
+        }
+        paths::normalize_absolute_path(Path::new(value.trim()))
+            .and_then(|path| path.to_str().map(ToOwned::to_owned))
+    });
     if result.is_none() {
         diagnostics.push(
             StateDiagnostic::new("invalid_path", DiagnosticSeverity::Warning)
@@ -683,32 +690,11 @@ fn valid_identifier(value: &str) -> bool {
     !value.is_empty() && !value.chars().any(char::is_control)
 }
 
-/// Lexically normalize an absolute path without touching the filesystem.
-fn normalize_absolute_path(value: &str) -> Option<String> {
-    let path = Path::new(value.trim());
-    if !path.is_absolute() || value.chars().any(char::is_control) {
-        return None;
-    }
-    let mut normalized = PathBuf::new();
-    for component in path.components() {
-        match component {
-            std::path::Component::RootDir | std::path::Component::Prefix(_) => {
-                normalized.push(component.as_os_str())
-            }
-            std::path::Component::CurDir => {}
-            std::path::Component::ParentDir => {
-                normalized.pop();
-            }
-            std::path::Component::Normal(component) => normalized.push(component),
-        }
-    }
-    normalized.to_str().map(ToOwned::to_owned)
-}
-
 #[cfg(test)]
 mod tests {
     use std::{
         fs,
+        path::PathBuf,
         sync::atomic::{AtomicU64, Ordering},
         time::{SystemTime, UNIX_EPOCH},
     };
@@ -802,8 +788,15 @@ mod tests {
         let connection = database.connection();
         let rollout_path = fixture_path("sessions/rollout-child.jsonl");
         let cwd_path = fixture_path("work/./project");
-        let expected_rollout_path = normalize_absolute_path(&rollout_path).unwrap();
-        let expected_cwd_path = normalize_absolute_path(&fixture_path("work/project")).unwrap();
+        let expected_rollout_path = paths::normalize_source_path(Path::new(&rollout_path))
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        let expected_cwd_path =
+            paths::normalize_source_path(Path::new(&fixture_path("work/project")))
+                .unwrap()
+                .to_string_lossy()
+                .into_owned();
         connection
             .execute_batch(&format!(
                 "CREATE TABLE threads (

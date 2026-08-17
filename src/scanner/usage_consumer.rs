@@ -24,8 +24,9 @@ use crate::{
     usage::USAGE_PARSER_VERSION,
     usage::{
         ActivationOutcome, ClassifiedOversizedUsageLine, ClassifiedUsageItem, ClassifiedUsageLine,
-        CompletionStatus, EventKind, FixedViewTail, PipelineDisposition, PlanAction, TailStatus,
-        UsageLedger, UsageScanState, UsageSourceCommitDto, UsageSourceScanPlan,
+        CompletionStatus, EventKind, FixedViewTail, PipelineDisposition, PlanAction,
+        SourceContinuationState, TailStatus, UsageLedger, UsageScanState, UsageSourceCommitDto,
+        UsageSourceScanPlan,
     },
 };
 
@@ -57,6 +58,7 @@ enum UsageReadStep {
         metrics: UsageCommitMetrics,
     },
     AwaitingOwnership,
+    InvalidSessionData,
     NeedsRebuild,
     NeedsRebuildStop,
 }
@@ -65,8 +67,18 @@ enum UsageReadStep {
 enum UsageThreadOutcome {
     Completed,
     GlobalPlanChanged { retry_thread: bool },
+    SessionDataError(&'static str),
     OrdinaryError(&'static str),
     FatalReloadError(&'static str),
+}
+
+const SESSION_DATA_INVALID: &str = "USAGE_SESSION_DATA_INVALID";
+
+fn shadow_session_data_error(
+    action: PlanAction,
+    invalid_session_data: bool,
+) -> Option<&'static str> {
+    (action == PlanAction::BuildFrom && invalid_session_data).then_some(SESSION_DATA_INVALID)
 }
 
 pub(super) fn collect_usage_carry_observation_proofs(
@@ -160,7 +172,24 @@ pub(super) fn run_usage_round(
     let discovery_complete =
         discovery.sessions.is_complete() && discovery.archived_sessions.is_complete();
 
-    let mut worklist = load_work_list(&usage, &present_ids, report, false)?;
+    let quarantine_state = usage
+        .active_quarantine_state()
+        .map_err(|_| "USAGE_QUARANTINE_STATE_FAILED")?;
+    let work_present_ids = if quarantine_state.dirty {
+        present_ids.clone()
+    } else {
+        let skipped = quarantine_state
+            .unchanged_source_ids
+            .iter()
+            .copied()
+            .collect::<BTreeSet<_>>();
+        present_ids
+            .iter()
+            .copied()
+            .filter(|source_id| !skipped.contains(source_id))
+            .collect::<Vec<_>>()
+    };
+    let mut worklist = load_work_list(&usage, &work_present_ids, report, false)?;
     let mut first_group_error = None;
 
     // A global transition invalidates every old worklist.  The reloaded
@@ -168,6 +197,21 @@ pub(super) fn run_usage_round(
     // transition; detailed plans are loaded only for the current Thread.
     let mut skip_thread_ids = BTreeSet::new();
     'global_plan: loop {
+        if quarantine_state.dirty
+            && worklist.epoch.active_epoch > 0
+            && worklist.epoch.build_epoch.is_none()
+        {
+            if !discovery_complete {
+                return Ok(());
+            }
+            usage
+                .begin_rebuild(USAGE_PARSER_VERSION, present_ids.iter().copied(), now_ms())
+                .map_err(|_| "USAGE_QUARANTINE_RETRY_BEGIN_FAILED")?;
+            report.observe_usage_global_replan();
+            worklist = load_work_list(&usage, &present_ids, report, true)?;
+            skip_thread_ids.clear();
+            continue 'global_plan;
+        }
         if worklist.epoch.active_epoch == 0 && worklist.epoch.build_epoch.is_none() {
             if !discovery_complete {
                 return Ok(());
@@ -237,6 +281,20 @@ pub(super) fn run_usage_round(
                     }
                     continue 'global_plan;
                 }
+                UsageThreadOutcome::SessionDataError(error_code) => {
+                    report.failed_source();
+                    report.error(error_code);
+                    if worklist.epoch.build_epoch.is_none() {
+                        return Err(error_code);
+                    }
+                    usage
+                        .quarantine_thread(&work_thread.thread_id, error_code, now_ms())
+                        .map_err(|_| "USAGE_SESSION_QUARANTINE_FAILED")?;
+                    report.observe_usage_global_replan();
+                    worklist = load_work_list(&usage, &present_ids, report, true)?;
+                    skip_thread_ids.clear();
+                    continue 'global_plan;
+                }
                 UsageThreadOutcome::OrdinaryError(error_code) => {
                     report.failed_source();
                     report.error(error_code);
@@ -268,7 +326,9 @@ pub(super) fn run_usage_round(
             && snapshot.members.iter().all(|member| {
                 matches!(
                     member.completion_status,
-                    CompletionStatus::Rebuilt | CompletionStatus::Carried
+                    CompletionStatus::Rebuilt
+                        | CompletionStatus::Carried
+                        | CompletionStatus::Quarantined
                 )
             })
         {
@@ -316,15 +376,23 @@ fn process_thread_group(
             return UsageThreadOutcome::Completed;
         }
         let group = scan.plans.to_vec();
-        if group.is_empty()
-            || group.iter().all(|plan| {
-                matches!(
-                    plan.action,
-                    PlanAction::Skip | PlanAction::BlockedRelationship
-                )
-            })
-        {
+        if group.is_empty() {
             return UsageThreadOutcome::Completed;
+        }
+        if group.iter().all(|plan| {
+            matches!(
+                plan.action,
+                PlanAction::Skip | PlanAction::BlockedRelationship
+            )
+        }) {
+            return if group
+                .iter()
+                .any(|plan| plan.action == PlanAction::BlockedRelationship)
+            {
+                UsageThreadOutcome::SessionDataError("USAGE_SESSION_RELATIONSHIP_INVALID")
+            } else {
+                UsageThreadOutcome::Completed
+            };
         }
 
         // Planner-owned control transitions happen before any source payload is
@@ -519,9 +587,29 @@ fn process_thread_group(
                     }
                 }
                 UsageReadStep::AwaitingOwnership => {
-                    // The long replay prefix remains memory-only until owning
-                    // evidence is found; zero prepared source commits may leak.
+                    // The replay prefix remains memory-only until owning evidence
+                    // is found. Awaiting ownership is a valid transient state, even
+                    // while a shadow build is open, and is never quarantined by
+                    // itself.
                     return UsageThreadOutcome::Completed;
+                }
+                UsageReadStep::InvalidSessionData => {
+                    if !discovery_complete {
+                        return UsageThreadOutcome::Completed;
+                    }
+                    // A contradiction against durable metadata proof gets one
+                    // normal rebuild opportunity. If the same contradiction is
+                    // observed from BuildFrom, the fixed Session Tree is bad data
+                    // and can be isolated without masking storage/system failures.
+                    if let Some(error_code) = shadow_session_data_error(plan.action, true) {
+                        return UsageThreadOutcome::SessionDataError(error_code);
+                    }
+                    if let Err(error_code) =
+                        replace_or_begin(usage, &scan, present_ids, [plan.source_file_id])
+                    {
+                        return UsageThreadOutcome::OrdinaryError(error_code);
+                    }
+                    return UsageThreadOutcome::GlobalPlanChanged { retry_thread: true };
                 }
                 UsageReadStep::NeedsRebuild => {
                     if !discovery_complete {
@@ -533,14 +621,10 @@ fn process_thread_group(
                     {
                         return UsageThreadOutcome::OrdinaryError(error_code);
                     }
-                    // A failed nonzero/LocalReplay proof may safely transition
-                    // into a fresh shadow build and retry this fixed physical
-                    // view once. If a BuildFrom read (including a nonzero
-                    // continuation inside an existing build) itself still
-                    // lacks a trustworthy ownership/parser/guard proof, the
-                    // replacement is the durable result for this round.
-                    // Retrying the same bytes would be an infinite
-                    // replace/read loop and cannot create stronger evidence.
+                    // Generic rebuild requests include legitimate metadata/owner
+                    // transitions such as late foreign-meta discovery. Replacing
+                    // the shadow source is durable; an existing BuildFrom stops
+                    // this scan rather than being misclassified as bad Session data.
                     if already_rebuilding {
                         return UsageThreadOutcome::GlobalPlanChanged {
                             retry_thread: false,
@@ -737,12 +821,21 @@ fn process_source_batch(
         let Some(owning_thread_id) = source.owning_thread_id.clone() else {
             return Ok(UsageReadStep::NeedsRebuild);
         };
+        let Some(usage_state) = source.state.as_ref() else {
+            return Ok(UsageReadStep::NeedsRebuild);
+        };
         let SafeFactState::Matching(fact) = &metadata_entry.safe_fact else {
             return Ok(UsageReadStep::NeedsRebuild);
         };
         let fact =
             RolloutThreadFact::from_safe_fact(fact).map_err(|_| "USAGE_SAFE_FACT_INVALID")?;
-        (ResumeState::OwningLive { owning_thread_id }, Some(fact))
+        let resume = match usage_state.continuation_state {
+            SourceContinuationState::ReplayedAncestor => {
+                ResumeState::ReplayedAncestor { owning_thread_id }
+            }
+            SourceContinuationState::OwningLive => ResumeState::OwningLive { owning_thread_id },
+        };
+        (resume, Some(fact))
     };
     let mut parser = RolloutMetadataParser::start_chunk(RolloutParseContext {
         source_file_id: source.source_file_id,
@@ -753,6 +846,15 @@ fn process_source_batch(
     });
 
     let establishing = initial_start == 0 && source.state.is_none();
+    let metadata_replay_tail = matches!(
+        &metadata_entry.safe_fact,
+        SafeFactState::Matching(fact)
+            if fact.continuation_state == crate::domain::ContinuationState::ReplayedAncestor
+    );
+    let allow_replay_tail = metadata_replay_tail
+        || source.state.as_ref().is_some_and(|state| {
+            state.continuation_state == SourceContinuationState::ReplayedAncestor
+        });
     // Metadata has already parsed this exact fixed view.  At offset 0 we still
     // replay the shared ownership classifier ourselves, but the durable safe
     // fact tells us which classifier boundary must be re-observed before a
@@ -787,6 +889,7 @@ fn process_source_batch(
         let mut replay_window_bytes = 0u64;
         let mut replay_window_lines = 0u64;
         let mut unknown_ownership = false;
+        let mut invalid_session_data = false;
         let mut token_records_seen = 0u64;
         let mut saw_owning_boundary = ownership_established;
         let parsing_started = Instant::now();
@@ -835,6 +938,7 @@ fn process_source_batch(
                         }
                         if start > boundary || classification.ownership != RecordOwnership::Owning {
                             unknown_ownership = true;
+                            invalid_session_data = true;
                             return ReadControl::StopAfter;
                         }
                         // The shared classifier independently re-observed the
@@ -874,10 +978,24 @@ fn process_source_batch(
                         }
                     }
                 } else if classification.ownership != RecordOwnership::Owning {
-                    // Any late foreign record after a durable/nonzero OwningLive
-                    // boundary invalidates the whole source result.
-                    retained.push(item);
-                    return ReadControl::StopAfter;
+                    match classification.ownership {
+                        RecordOwnership::ReplayedAncestor if allow_replay_tail => {
+                            replay_window_bytes = replay_window_bytes.saturating_add(bytes);
+                            replay_window_lines = replay_window_lines.saturating_add(1);
+                            retained.push(item);
+                            if bytes > MAX_BATCH_BYTES
+                                || replay_window_bytes >= REPLAY_WINDOW_BYTES
+                                || replay_window_lines >= REPLAY_WINDOW_LINES
+                            {
+                                return ReadControl::StopAfter;
+                            }
+                            return ReadControl::Continue;
+                        }
+                        _ => {
+                            retained.push(item);
+                            return ReadControl::StopAfter;
+                        }
+                    }
                 }
 
                 let candidate = matches!(
@@ -908,7 +1026,7 @@ fn process_source_batch(
                     || adapter_bytes >= MAX_BATCH_BYTES
                     || adapter_lines >= MAX_BATCH_LINES
                     || potential_candidates >= MAX_BATCH_CANDIDATES
-                    || (establishing && ownership_established)
+                    || (establishing && ownership_established && !allow_replay_tail)
                 {
                     ReadControl::StopAfter
                 } else {
@@ -918,18 +1036,19 @@ fn process_source_batch(
         );
         let chunk = match chunk {
             Ok(chunk) => chunk,
-            Err(ChunkReadError::CheckpointGuardMismatch) => {
-                return Ok(UsageReadStep::NeedsRebuild);
-            }
             Err(
-                ChunkReadError::SourceChangedBeforeRead | ChunkReadError::SourceChangedDuringRead,
+                ChunkReadError::CheckpointGuardMismatch
+                | ChunkReadError::SourceChangedBeforeRead
+                | ChunkReadError::SourceChangedDuringRead,
             ) => return Ok(UsageReadStep::NeedsRebuildStop),
             Err(error) => return Err(read_error_code(error)),
         };
         report.observe_usage_read(&chunk, token_records_seen, parsing_started.elapsed());
 
         if unknown_ownership {
-            return Ok(if establishing {
+            return Ok(if invalid_session_data {
+                UsageReadStep::InvalidSessionData
+            } else if establishing {
                 UsageReadStep::AwaitingOwnership
             } else {
                 UsageReadStep::NeedsRebuild
@@ -952,7 +1071,7 @@ fn process_source_batch(
         } else {
             initial_start
         };
-        let pipeline_plan = crate::usage::ledger::pipeline_plan(
+        let mut pipeline_plan = crate::usage::ledger::pipeline_plan(
             scan,
             source,
             file_generation,
@@ -964,6 +1083,7 @@ fn process_source_batch(
             replayed_prefix_lines,
         )
         .map_err(|_| "USAGE_PIPELINE_PLAN_FAILED")?;
+        pipeline_plan.allow_replay_tail = allow_replay_tail;
         let tail = tail_from_read(&chunk);
         let guard = chunk.guard.map(|hash| hash.as_bytes().to_vec());
         let disposition = usage
@@ -1171,6 +1291,38 @@ impl UsageCommitMetrics {
             }
         }
         value
+    }
+}
+
+#[cfg(test)]
+mod resilience_tests {
+    use super::*;
+
+    #[test]
+    fn repeated_shadow_rebuild_data_failure_is_session_scoped_only() {
+        assert_eq!(
+            shadow_session_data_error(PlanAction::BuildFrom, true),
+            Some("USAGE_SESSION_DATA_INVALID")
+        );
+        assert_eq!(
+            shadow_session_data_error(PlanAction::BuildFrom, false),
+            None
+        );
+        for action in [
+            PlanAction::ReadFrom,
+            PlanAction::LocalReplay,
+            PlanAction::AwaitOwningMeta,
+            PlanAction::ResumeOwningLive,
+            PlanAction::VerifyRawTail,
+            PlanAction::CompleteOnly,
+            PlanAction::BeginCarry,
+            PlanAction::ResumeCarry,
+            PlanAction::Skip,
+            PlanAction::BlockedRelationship,
+            PlanAction::RebuildRequired,
+        ] {
+            assert_eq!(shadow_session_data_error(action, true), None, "{action:?}");
+        }
     }
 }
 

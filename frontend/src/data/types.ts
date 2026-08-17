@@ -25,8 +25,16 @@ export type UsageDto = {
   estimated_cost_status: EstimatedCostStatus;
 };
 
+export type SessionHealthDto = {
+  total_sessions: number;
+  complete_sessions: number;
+  incomplete_sessions: number;
+  error_sessions: number;
+};
+
 export type SummaryUsageDto = UsageDto & {
   session_count: number;
+  session_health: SessionHealthDto;
 };
 
 export type SummaryResponse = {
@@ -64,9 +72,11 @@ export type SessionItemDto = {
   last_activity_at_ms: number;
   models_used: string[];
   subagent_count: number;
-  inclusive_usage: UsageDto;
-  self_usage: UsageDto;
-  subagent_usage: UsageDto;
+  inclusive_usage: UsageDto | null;
+  self_usage: UsageDto | null;
+  subagent_usage: UsageDto | null;
+  data_status: "complete" | "incomplete" | "error";
+  error_code: string | null;
 };
 
 export type SessionSortField =
@@ -84,9 +94,11 @@ export type SessionSortIndexItem = {
   last_activity_at_ms: number;
   project_sort_key: string | null;
   model_sort_key: string | null;
-  total_tokens: number;
-  combined_total_tokens: number;
+  total_tokens: number | null;
+  combined_total_tokens: number | null;
   cache_hit_rate: number | null;
+  data_status: "complete" | "incomplete" | "error";
+  error_code: string | null;
 };
 
 export type SessionSnapshotResponse = {

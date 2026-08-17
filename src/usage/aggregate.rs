@@ -257,10 +257,27 @@ impl TokenTotals {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SessionDataStatus {
+    Complete,
+    Incomplete,
+    Error,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SessionHealthSummary {
+    pub total_sessions: i64,
+    pub complete_sessions: i64,
+    pub incomplete_sessions: i64,
+    pub error_sessions: i64,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct UsageSummary {
     pub totals: TokenTotals,
+    /// Healthy sessions contributing usage events. Kept for the existing KPI.
     pub session_count: i64,
+    pub health: SessionHealthSummary,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -275,6 +292,8 @@ pub struct SessionUsageRow {
     pub subagent_count: i64,
     pub last_activity_at_ms: i64,
     pub models_used: Vec<String>,
+    pub data_status: SessionDataStatus,
+    pub error_code: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -292,9 +311,11 @@ pub struct SessionSortIndexItem {
     pub last_activity_at_ms: i64,
     pub project_sort_key: Option<String>,
     pub model_sort_key: Option<String>,
-    pub total_tokens: i64,
-    pub combined_total_tokens: i64,
+    pub total_tokens: Option<i64>,
+    pub combined_total_tokens: Option<i64>,
     pub cache_hit_rate: Option<f64>,
+    pub data_status: SessionDataStatus,
+    pub error_code: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -340,9 +361,11 @@ impl SessionSortAggregate {
                 .clone()
                 .or_else(|| self.project_path.clone()),
             model_sort_key: self.model_sort_key.clone(),
-            total_tokens: self.self_usage.total_tokens,
-            combined_total_tokens: self.inclusive_usage.total_tokens,
+            total_tokens: Some(self.self_usage.total_tokens),
+            combined_total_tokens: Some(self.inclusive_usage.total_tokens),
             cache_hit_rate: self.inclusive_usage.cache_hit_rate,
+            data_status: status_for_totals(&self.inclusive_usage),
+            error_code: None,
         }
     }
 }
@@ -466,7 +489,7 @@ impl<'connection> AggregateReader<'connection> {
         validate_range(range)?;
         let epoch = self.active_epoch()?;
         let (totals, values) = self.aggregate_for_summary(epoch, &query)?;
-        let session_count = self
+        let session_count: i64 = self
             .connection
             .query_row(
                 &format!(
@@ -480,9 +503,38 @@ impl<'connection> AggregateReader<'connection> {
                 |row| row.get(0),
             )
             .map_err(map_sql_error)?;
+        let incomplete_sessions: i64 = self
+            .connection
+            .query_row(
+                &format!(
+                    "SELECT COUNT(DISTINCT ue.root_session_id)
+                     FROM usage_events ue
+                     LEFT JOIN threads root ON root.thread_id=ue.root_session_id
+                     WHERE {} AND ue.estimated_cost_nanos_usd IS NULL",
+                    summary_where_clause(query.filter())
+                ),
+                params_from_iter(values.iter()),
+                |row| row.get(0),
+            )
+            .map_err(map_sql_error)?;
+        let error_sessions =
+            i64::try_from(self.quarantined_roots(epoch, range, query.filter())?.len())
+                .map_err(|_| AggregateError::ArithmeticOverflow)?;
+        let complete_sessions = session_count
+            .checked_sub(incomplete_sessions)
+            .ok_or(AggregateError::InvariantViolation)?;
+        let total_sessions = session_count
+            .checked_add(error_sessions)
+            .ok_or(AggregateError::ArithmeticOverflow)?;
         Ok(UsageSummary {
             totals,
             session_count,
+            health: SessionHealthSummary {
+                total_sessions,
+                complete_sessions,
+                incomplete_sessions,
+                error_sessions,
+            },
         })
     }
 
@@ -558,6 +610,7 @@ impl<'connection> AggregateReader<'connection> {
                 params![epoch, root_session_id, range.start_ms, range.end_ms], |row| row.get(0),
             ).map_err(map_sql_error)?;
             let models_used = self.models_for_root(epoch, range, &root_session_id)?;
+            let data_status = status_for_totals(&inclusive_usage);
             output.push(SessionUsageRow {
                 root_session_id,
                 title,
@@ -569,6 +622,8 @@ impl<'connection> AggregateReader<'connection> {
                 subagent_count,
                 last_activity_at_ms,
                 models_used,
+                data_status,
+                error_code: None,
             });
         }
         let next = has_next
@@ -745,16 +800,25 @@ impl<'connection> AggregateReader<'connection> {
             .iter()
             .map(|aggregate| aggregate.sort_index_item())
             .collect::<Vec<_>>();
-        sort_index.sort_by(|left, right| left.root_session_id.cmp(&right.root_session_id));
-        let mut seed_aggregates = aggregates;
-        seed_aggregates.sort_by(|left, right| {
-            compare_sort_aggregates(left, right, seed_sort_field, seed_sort_order)
+        let quarantined = self.quarantined_roots(epoch, range, filter)?;
+        sort_index.extend(quarantined.iter().map(QuarantinedRoot::sort_index_item));
+        let mut seed_index = sort_index.clone();
+        seed_index.sort_by(|left, right| {
+            compare_sort_index_items(left, right, seed_sort_field, seed_sort_order)
         });
-        seed_aggregates.truncate(MAX_SESSION_ROWS);
-        let seed_rows = seed_aggregates
+        seed_index.truncate(MAX_SESSION_ROWS);
+        let error_roots = quarantined
+            .into_iter()
+            .map(|root| (root.root_session_id.clone(), root))
+            .collect::<BTreeMap<_, _>>();
+        let seed_rows = seed_index
             .iter()
-            .map(|aggregate| self.session_row_for_root(epoch, range, &aggregate.root_session_id))
+            .map(|item| match error_roots.get(&item.root_session_id) {
+                Some(root) => Ok(root.session_row()),
+                None => self.session_row_for_root(epoch, range, &item.root_session_id),
+            })
             .collect::<Result<Vec<_>, _>>()?;
+        sort_index.sort_by(|left, right| left.root_session_id.cmp(&right.root_session_id));
         Ok(SessionSnapshot {
             sort_index,
             rows: seed_rows,
@@ -780,16 +844,27 @@ impl<'connection> AggregateReader<'connection> {
             return Err(AggregateError::InvalidSessionIds);
         }
         let epoch = self.active_epoch()?;
-        let eligible = self
+        let mut eligible = self
             .eligible_roots(epoch, range, filter)?
             .into_iter()
             .collect::<std::collections::BTreeSet<_>>();
+        let error_roots = self
+            .quarantined_roots(epoch, range, filter)?
+            .into_iter()
+            .map(|root| {
+                eligible.insert(root.root_session_id.clone());
+                (root.root_session_id.clone(), root)
+            })
+            .collect::<BTreeMap<_, _>>();
         if root_session_ids.iter().any(|id| !eligible.contains(id)) {
             return Err(AggregateError::InvalidSessionIds);
         }
         root_session_ids
             .iter()
-            .map(|root| self.session_row_for_root(epoch, range, root))
+            .map(|root| match error_roots.get(root) {
+                Some(error) => Ok(error.session_row()),
+                None => self.session_row_for_root(epoch, range, root),
+            })
             .collect()
     }
 
@@ -1247,6 +1322,7 @@ impl<'connection> AggregateReader<'connection> {
             )
             .map_err(map_sql_error)?;
         let models_used = self.models_for_root(epoch, range, root)?;
+        let data_status = status_for_totals(&inclusive_usage);
         Ok(SessionUsageRow {
             root_session_id: root.to_owned(),
             title,
@@ -1258,7 +1334,92 @@ impl<'connection> AggregateReader<'connection> {
             subagent_count,
             last_activity_at_ms,
             models_used,
+            data_status,
+            error_code: None,
         })
+    }
+
+    fn quarantined_roots(
+        &self,
+        epoch: i64,
+        range: TimeRange,
+        filter: &UsageFilter,
+    ) -> Result<Vec<QuarantinedRoot>, AggregateError> {
+        // A quarantined Session has no trustworthy usage/model ledger. Never
+        // guess model-filter membership; under an active model filter it is
+        // intentionally omitted from the scoped denominator/list.
+        if !filter.models.is_empty() {
+            return Ok(Vec::new());
+        }
+        let quarantine_count: i64 = self
+            .connection
+            .query_row(
+                "SELECT COUNT(*) FROM usage_session_quarantine WHERE ledger_epoch=?1",
+                [epoch],
+                |row| row.get(0),
+            )
+            .map_err(map_sql_error)?;
+        if quarantine_count == 0 {
+            return Ok(Vec::new());
+        }
+        let mut clauses = vec![
+            "q.ledger_epoch=?1".to_owned(),
+            "q.last_activity_at_ms>=?2".to_owned(),
+            "q.last_activity_at_ms<?3".to_owned(),
+        ];
+        let mut values = vec![
+            Value::Integer(epoch),
+            Value::Integer(range.start_ms),
+            Value::Integer(range.end_ms),
+        ];
+        let next = 4_usize;
+        let mut projects = Vec::new();
+        if !filter.project_paths.is_empty() {
+            let placeholders = (next..next + filter.project_paths.len())
+                .map(|value| format!("?{value}"))
+                .collect::<Vec<_>>()
+                .join(",");
+            projects.push(format!(
+                "(root.project_kind='project' AND root.project_path IN ({placeholders}))"
+            ));
+            values.extend(filter.project_paths.iter().cloned().map(Value::Text));
+        }
+        if filter.include_projectless {
+            projects.push("root.project_kind='projectless'".to_owned());
+        }
+        if filter.include_unknown_project {
+            projects.push("root.project_kind='unknown'".to_owned());
+        }
+        if !projects.is_empty() {
+            clauses.push(format!("({})", projects.join(" OR ")));
+        }
+        let sql = format!(
+            "SELECT q.root_session_id,q.primary_error_code,q.last_activity_at_ms,
+                    root.title,root.project_name,root.project_path,
+                    (SELECT COUNT(*) FROM threads child
+                     WHERE child.root_session_id=q.root_session_id
+                       AND child.thread_id<>q.root_session_id)
+             FROM usage_session_quarantine q
+             JOIN threads root ON root.thread_id=q.root_session_id
+             WHERE {} ORDER BY q.root_session_id",
+            clauses.join(" AND ")
+        );
+        let mut statement = self.connection.prepare(&sql).map_err(map_sql_error)?;
+        statement
+            .query_map(params_from_iter(values.iter()), |row| {
+                Ok(QuarantinedRoot {
+                    root_session_id: row.get(0)?,
+                    error_code: row.get(1)?,
+                    last_activity_at_ms: row.get(2)?,
+                    title: row.get(3)?,
+                    project_name: row.get(4)?,
+                    project_path: row.get(5)?,
+                    subagent_count: row.get(6)?,
+                })
+            })
+            .map_err(map_sql_error)?
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(map_sql_error)
     }
 
     fn aggregate_for_root(
@@ -1460,6 +1621,116 @@ fn reasoning_effort_summary(groups: &[DetailAggregateRow]) -> ReasoningEffortSum
             .map(|effort| ReasoningEffortSummary::Single(effort.to_owned()))
             .unwrap_or(ReasoningEffortSummary::Unknown)
     }
+}
+
+#[derive(Clone, Debug)]
+struct QuarantinedRoot {
+    root_session_id: String,
+    error_code: String,
+    last_activity_at_ms: i64,
+    title: Option<String>,
+    project_name: Option<String>,
+    project_path: Option<String>,
+    subagent_count: i64,
+}
+
+impl QuarantinedRoot {
+    fn sort_index_item(&self) -> SessionSortIndexItem {
+        SessionSortIndexItem {
+            root_session_id: self.root_session_id.clone(),
+            last_activity_at_ms: self.last_activity_at_ms,
+            project_sort_key: self
+                .project_name
+                .clone()
+                .or_else(|| self.project_path.clone()),
+            model_sort_key: None,
+            total_tokens: None,
+            combined_total_tokens: None,
+            cache_hit_rate: None,
+            data_status: SessionDataStatus::Error,
+            error_code: Some(self.error_code.clone()),
+        }
+    }
+
+    fn session_row(&self) -> SessionUsageRow {
+        SessionUsageRow {
+            root_session_id: self.root_session_id.clone(),
+            title: self.title.clone(),
+            project_name: self.project_name.clone(),
+            project_path: self.project_path.clone(),
+            inclusive_usage: TokenTotals::zero(),
+            self_usage: TokenTotals::zero(),
+            subagent_usage: TokenTotals::zero(),
+            subagent_count: self.subagent_count,
+            last_activity_at_ms: self.last_activity_at_ms,
+            models_used: Vec::new(),
+            data_status: SessionDataStatus::Error,
+            error_code: Some(self.error_code.clone()),
+        }
+    }
+}
+
+fn status_for_totals(totals: &TokenTotals) -> SessionDataStatus {
+    match totals.cost_completeness {
+        CostCompleteness::Partial | CostCompleteness::Unknown => SessionDataStatus::Incomplete,
+        CostCompleteness::Empty | CostCompleteness::Complete => SessionDataStatus::Complete,
+    }
+}
+
+fn compare_sort_index_items(
+    left: &SessionSortIndexItem,
+    right: &SessionSortIndexItem,
+    field: SessionSortField,
+    order: SessionSortOrder,
+) -> std::cmp::Ordering {
+    use std::cmp::Ordering;
+    let text = |left: Option<&str>, right: Option<&str>| match (left, right) {
+        (None, None) => Ordering::Equal,
+        (None, Some(_)) => Ordering::Greater,
+        (Some(_), None) => Ordering::Less,
+        (Some(left), Some(right)) => match order {
+            SessionSortOrder::Asc => left.cmp(right),
+            SessionSortOrder::Desc => right.cmp(left),
+        },
+    };
+    let number = |left: Option<i64>, right: Option<i64>| match (left, right) {
+        (None, None) => Ordering::Equal,
+        (None, Some(_)) => Ordering::Greater,
+        (Some(_), None) => Ordering::Less,
+        (Some(left), Some(right)) => match order {
+            SessionSortOrder::Asc => left.cmp(&right),
+            SessionSortOrder::Desc => right.cmp(&left),
+        },
+    };
+    let ratio = |left: Option<f64>, right: Option<f64>| match (left, right) {
+        (None, None) => Ordering::Equal,
+        (None, Some(_)) => Ordering::Greater,
+        (Some(_), None) => Ordering::Less,
+        (Some(left), Some(right)) => match order {
+            SessionSortOrder::Asc => left.total_cmp(&right),
+            SessionSortOrder::Desc => right.total_cmp(&left),
+        },
+    };
+    let result = match field {
+        SessionSortField::LastActivity => number(
+            Some(left.last_activity_at_ms),
+            Some(right.last_activity_at_ms),
+        ),
+        SessionSortField::Project => text(
+            left.project_sort_key.as_deref(),
+            right.project_sort_key.as_deref(),
+        ),
+        SessionSortField::Model => text(
+            left.model_sort_key.as_deref(),
+            right.model_sort_key.as_deref(),
+        ),
+        SessionSortField::TotalTokens => number(left.total_tokens, right.total_tokens),
+        SessionSortField::CombinedTotalTokens => {
+            number(left.combined_total_tokens, right.combined_total_tokens)
+        }
+        SessionSortField::CacheHitRate => ratio(left.cache_hit_rate, right.cache_hit_rate),
+    };
+    result.then_with(|| left.root_session_id.cmp(&right.root_session_id))
 }
 
 fn compare_sort_aggregates(
@@ -1731,8 +2002,14 @@ mod tests {
             .execute_batch(&format!(
                 "CREATE TABLE app_meta (id INTEGER PRIMARY KEY, usage_active_epoch INTEGER NOT NULL);
                  CREATE TABLE threads (
-                    thread_id TEXT PRIMARY KEY, title TEXT, project_name TEXT, project_path TEXT,
+                    thread_id TEXT PRIMARY KEY, parent_thread_id TEXT, root_session_id TEXT,
+                    agent_role TEXT NOT NULL DEFAULT 'main', title TEXT, project_name TEXT, project_path TEXT,
                     project_kind TEXT NOT NULL DEFAULT 'project'
+                 );
+                 CREATE TABLE IF NOT EXISTS usage_session_quarantine (
+                    ledger_epoch INTEGER NOT NULL, root_session_id TEXT NOT NULL,
+                    primary_error_code TEXT NOT NULL, last_activity_at_ms INTEGER NOT NULL,
+                    first_seen_at_ms INTEGER NOT NULL, updated_at_ms INTEGER NOT NULL
                  );
                  CREATE TABLE usage_events (
                     ledger_epoch INTEGER NOT NULL, event_id TEXT NOT NULL,
@@ -1743,11 +2020,16 @@ mod tests {
                     reasoning_tokens INTEGER NOT NULL, total_tokens INTEGER NOT NULL,
                     reasoning_effort TEXT, estimated_cost_nanos_usd INTEGER
                  );
+                 CREATE TABLE IF NOT EXISTS usage_session_quarantine (
+                    ledger_epoch INTEGER NOT NULL, root_session_id TEXT NOT NULL,
+                    primary_error_code TEXT NOT NULL, last_activity_at_ms INTEGER NOT NULL,
+                    first_seen_at_ms INTEGER NOT NULL, updated_at_ms INTEGER NOT NULL
+                 );
                  INSERT INTO app_meta(id, usage_active_epoch) VALUES (1, 7);
-                 INSERT INTO threads(thread_id,title,project_name,project_path) VALUES
-                    ('root-a','Root A','project-a','{project_a}'),
-                    ('child-a','Child A','project-a','{project_a}'),
-                    ('root-b','Root B','project-b','{project_b}');"
+                 INSERT INTO threads(thread_id,parent_thread_id,root_session_id,agent_role,title,project_name,project_path) VALUES
+                    ('root-a',NULL,'root-a','main','Root A','project-a','{project_a}'),
+                    ('child-a','root-a','root-a','subagent','Child A','project-a','{project_a}'),
+                    ('root-b',NULL,'root-b','main','Root B','project-b','{project_b}');"
             ))
             .unwrap();
         insert_event(
@@ -1861,6 +2143,11 @@ mod tests {
                  CREATE TABLE threads (
                     thread_id TEXT PRIMARY KEY, title TEXT, project_name TEXT, project_path TEXT,
                     project_kind TEXT NOT NULL
+                 );
+                 CREATE TABLE IF NOT EXISTS usage_session_quarantine (
+                    ledger_epoch INTEGER NOT NULL, root_session_id TEXT NOT NULL,
+                    primary_error_code TEXT NOT NULL, last_activity_at_ms INTEGER NOT NULL,
+                    first_seen_at_ms INTEGER NOT NULL, updated_at_ms INTEGER NOT NULL
                  );
                  CREATE TABLE usage_events (
                     ledger_epoch INTEGER NOT NULL, event_id TEXT NOT NULL,
@@ -1985,6 +2272,11 @@ mod tests {
                     agent_role TEXT NOT NULL, title TEXT, project_name TEXT, project_path TEXT,
                     project_kind TEXT NOT NULL
                  );
+                 CREATE TABLE IF NOT EXISTS usage_session_quarantine (
+                    ledger_epoch INTEGER NOT NULL, root_session_id TEXT NOT NULL,
+                    primary_error_code TEXT NOT NULL, last_activity_at_ms INTEGER NOT NULL,
+                    first_seen_at_ms INTEGER NOT NULL, updated_at_ms INTEGER NOT NULL
+                 );
                  CREATE TABLE usage_events (
                     ledger_epoch INTEGER NOT NULL, event_id TEXT NOT NULL,
                     occurred_at_ms INTEGER NOT NULL, thread_id TEXT NOT NULL,
@@ -2108,7 +2400,12 @@ mod tests {
         known.execute_batch(
             "CREATE TABLE app_meta (id INTEGER PRIMARY KEY, usage_active_epoch INTEGER NOT NULL);
              CREATE TABLE threads (thread_id TEXT PRIMARY KEY, project_path TEXT, project_kind TEXT);
-             CREATE TABLE usage_events (ledger_epoch INTEGER,event_id TEXT,occurred_at_ms INTEGER,thread_id TEXT,root_session_id TEXT,model TEXT,input_tokens INTEGER,cached_tokens INTEGER,cache_write_tokens INTEGER,output_tokens INTEGER,reasoning_tokens INTEGER,total_tokens INTEGER,reasoning_effort TEXT,estimated_cost_nanos_usd INTEGER);
+             CREATE TABLE IF NOT EXISTS usage_session_quarantine (
+                    ledger_epoch INTEGER NOT NULL, root_session_id TEXT NOT NULL,
+                    primary_error_code TEXT NOT NULL, last_activity_at_ms INTEGER NOT NULL,
+                    first_seen_at_ms INTEGER NOT NULL, updated_at_ms INTEGER NOT NULL
+                 );
+                 CREATE TABLE usage_events (ledger_epoch INTEGER,event_id TEXT,occurred_at_ms INTEGER,thread_id TEXT,root_session_id TEXT,model TEXT,input_tokens INTEGER,cached_tokens INTEGER,cache_write_tokens INTEGER,output_tokens INTEGER,reasoning_tokens INTEGER,total_tokens INTEGER,reasoning_effort TEXT,estimated_cost_nanos_usd INTEGER);
              INSERT INTO app_meta VALUES (1,7);
              INSERT INTO usage_events(
                  ledger_epoch,event_id,occurred_at_ms,thread_id,root_session_id,model,

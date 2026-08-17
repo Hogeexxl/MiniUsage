@@ -32,10 +32,30 @@ function metricValue(usage: SummaryUsageDto, key: (typeof METRIC_DEFINITIONS)[nu
 }
 
 function metricNotice(usage: SummaryUsageDto, key: (typeof METRIC_DEFINITIONS)[number]["key"]) {
+  if (key === "total_tokens") {
+    const { total_sessions: total, complete_sessions: complete, incomplete_sessions: incomplete, error_sessions: errors } = usage.session_health;
+    if (errors > 0) {
+      const suffix = incomplete > 0 ? `，${incomplete} 个不完整` : "";
+      return {
+        ariaLabel: "总 Token 数据完整性提示",
+        message: `已计算 ${complete}/${total} 个 Session，${errors} 个异常未计入${suffix}`,
+        severity: "error" as const,
+      };
+    }
+    if (incomplete > 0) {
+      return {
+        ariaLabel: "总 Token 数据完整性提示",
+        message: `已计算 ${complete}/${total} 个 Session，${incomplete} 个不完整`,
+        severity: "warning" as const,
+      };
+    }
+    return undefined;
+  }
   if (key !== "estimated_cost" || usage.estimated_cost_status === "complete") return undefined;
   return {
     ariaLabel: "预估费用完整性提示",
     message: usage.estimated_cost_status === "partial" ? "有部分费用不完整" : "当前费用无法完整估算",
+    severity: "warning" as const,
   };
 }
 

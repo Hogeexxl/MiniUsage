@@ -24,13 +24,16 @@ use super::{
     normalized::{NormalizedTokenUsage, USAGE_PARSER_VERSION},
     pipeline::{
         CheckpointExpectation, CheckpointStatus, PipelineDisposition, PipelineError, PlanAction,
-        SourceStateProof, TailStatus, UsagePipeline, UsagePipelinePlan, UsageSourceCommitDto,
+        SourceContinuationState, SourceStateProof, TailStatus, UsagePipeline, UsagePipelinePlan,
+        UsageSourceCommitDto,
     },
     processor::{
         Anomaly, AnomalyCode, ClosedTurn, CompensationBlocks, EventKind, GapKind, TurnEndStatus,
         TurnModelState, TurnReasoningEffortState, TurnState, UsageSourceState,
     },
-    rebuild::{ActivationOutcome, BuildSnapshot, RebuildError, RebuildLedger},
+    rebuild::{
+        ActivationOutcome, ActiveQuarantineState, BuildSnapshot, RebuildError, RebuildLedger,
+    },
 };
 
 type TurnCommon = (
@@ -361,6 +364,29 @@ impl<'a> UsageLedger<'a> {
         Ok(())
     }
 
+    pub fn quarantine_thread(
+        &self,
+        thread_id: &str,
+        error_code: &str,
+        now_ms: i64,
+    ) -> Result<usize, UsageLedgerError> {
+        let mut connection = self.ledger.connection()?;
+        let root: Option<String> = connection
+            .query_row(
+                "SELECT root_session_id FROM threads WHERE thread_id=?1",
+                [thread_id],
+                |row| row.get(0),
+            )
+            .map_err(storage::StorageError::sqlite)?;
+        let root = root.ok_or(UsageLedgerError::Invalid("thread has no root session"))?;
+        Ok(RebuildLedger::new(&mut connection).quarantine_session(&root, error_code, now_ms)?)
+    }
+
+    pub fn active_quarantine_state(&self) -> Result<ActiveQuarantineState, UsageLedgerError> {
+        let mut connection = self.ledger.connection()?;
+        Ok(RebuildLedger::new(&mut connection).active_quarantine_state()?)
+    }
+
     pub fn activate_rebuild(
         &self,
         build_epoch: i64,
@@ -689,6 +715,7 @@ pub(crate) fn pipeline_plan(
         root_session_id: source.root_session_id.clone(),
         checkpoint,
         state: source.state.clone(),
+        allow_replay_tail: false,
         replayed_prefix_bytes_before_chunk,
         replayed_prefix_lines_before_chunk,
     })
@@ -726,6 +753,14 @@ fn source_state_from_storage(
         raw_tail_start_offset: value.raw_tail_start_offset.map(i64_to_u64).transpose()?,
         owning_thread_id: value.owning_thread_id.clone(),
         root_session_id: value.root_session_id.clone(),
+        continuation_state: match value.continuation_state {
+            storage::usage::UsageContinuationState::ReplayedAncestor => {
+                SourceContinuationState::ReplayedAncestor
+            }
+            storage::usage::UsageContinuationState::OwningLive => {
+                SourceContinuationState::OwningLive
+            }
+        },
         processor_state: UsageSourceState {
             chain_state: match value.chain_state {
                 storage::usage::UsageChainState::Continuous => {
@@ -774,6 +809,14 @@ fn source_state_to_storage(
         raw_tail_start_offset: value.raw_tail_start_offset.map(u64_to_i64).transpose()?,
         owning_thread_id: value.owning_thread_id.clone(),
         root_session_id: value.root_session_id.clone(),
+        continuation_state: match value.continuation_state {
+            SourceContinuationState::ReplayedAncestor => {
+                storage::usage::UsageContinuationState::ReplayedAncestor
+            }
+            SourceContinuationState::OwningLive => {
+                storage::usage::UsageContinuationState::OwningLive
+            }
+        },
         previous_total: value.processor_state.previous_total.as_ref().map(snapshot),
         previous_total_offset: value
             .processor_state
@@ -1278,6 +1321,7 @@ mod tests {
             raw_tail_start_offset: None,
             owning_thread_id: "thread".to_owned(),
             root_session_id: "root".to_owned(),
+            continuation_state: SourceContinuationState::OwningLive,
             processor_state: UsageSourceState::default(),
             active_model_offset: None,
             active_reasoning_effort_offset: None,

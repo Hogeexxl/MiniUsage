@@ -22,8 +22,8 @@ pub use aggregate::{
 };
 pub use pipeline::{
     CheckpointExpectation, ClassifiedOversizedUsageLine, ClassifiedUsageItem, ClassifiedUsageLine,
-    FixedViewTail, PipelineDisposition, PipelineError, PlanAction, SourceStateProof, TailStatus,
-    UsagePipeline, UsagePipelinePlan, UsageSourceCommitDto,
+    FixedViewTail, PipelineDisposition, PipelineError, PlanAction, SourceContinuationState,
+    SourceStateProof, TailStatus, UsagePipeline, UsagePipelinePlan, UsageSourceCommitDto,
 };
 pub use processor::{
     Anomaly, AnomalyCode, ClosedTurn, EventKind, GapKind, Occurrence, Ownership, ProcessResult,

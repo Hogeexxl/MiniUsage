@@ -5,6 +5,7 @@ import type { FormattedValue } from "./format";
 type MetricCardNotice = {
   ariaLabel: string;
   message: string;
+  severity?: "warning" | "error";
 };
 
 type MetricCardProps = {
@@ -47,7 +48,7 @@ export function MetricCard({ label, value, updated = false, notice }: MetricCard
         {notice ? (
           <button
             type="button"
-            className="metric-notice-trigger"
+            className={`metric-notice-trigger is-${notice.severity ?? "error"}`}
             aria-label={notice.ariaLabel}
             aria-expanded={noticeOpen}
             aria-controls={noticeId}
@@ -61,7 +62,7 @@ export function MetricCard({ label, value, updated = false, notice }: MetricCard
           </button>
         ) : null}
       </div>
-      {notice && noticeOpen ? <div id={noticeId} className="metric-notice-bubble" role="status">{notice.message}</div> : null}
+      {notice && noticeOpen ? <div id={noticeId} className={`metric-notice-bubble is-${notice.severity ?? "error"}`} role="status">{notice.message}</div> : null}
       <p className={`metric-value${label === "预估费用" ? " is-cost" : ""}`} title={value.title} aria-label={`${label}：${value.accessibleName}`}>
         {value.text}
       </p>

@@ -75,6 +75,8 @@ const row: SessionItemDto = {
   inclusive_usage: detail.main.inclusive_usage,
   self_usage: detail.main.self_usage,
   subagent_usage: usage,
+  data_status: "complete",
+  error_code: null,
 };
 
 function view(overrides: Partial<SessionDetailControllerViewModel> = {}): SessionDetailControllerViewModel {
