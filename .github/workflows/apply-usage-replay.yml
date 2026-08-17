@@ -56,29 +56,19 @@ jobs:
 
           path = Path('src/storage/usage.rs')
           text = path.read_text(encoding='utf-8')
-          old = '''            owning_thread_id: thread_id.to_owned(),
-              root_session_id: root_id.to_owned(),
-              previous_total: Some(UsageSnapshot {'''
-          new = '''            owning_thread_id: thread_id.to_owned(),
-              root_session_id: root_id.to_owned(),
-              continuation_state: UsageContinuationState::OwningLive,
-              previous_total: Some(UsageSnapshot {'''
-          if old not in text:
+          marker = '            root_session_id: root_id.to_owned(),\n            previous_total: Some(UsageSnapshot {'
+          replacement = '            root_session_id: root_id.to_owned(),\n            continuation_state: UsageContinuationState::OwningLive,\n            previous_total: Some(UsageSnapshot {'
+          if marker not in text:
               raise SystemExit('storage usage fixture shape not found')
-          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          path.write_text(text.replace(marker, replacement, 1), encoding='utf-8')
 
           path = Path('src/usage/ledger.rs')
           text = path.read_text(encoding='utf-8')
-          old = '''            owning_thread_id: "thread".to_owned(),
-              root_session_id: "root".to_owned(),
-              processor_state: UsageSourceState::default(),'''
-          new = '''            owning_thread_id: "thread".to_owned(),
-              root_session_id: "root".to_owned(),
-              continuation_state: SourceContinuationState::OwningLive,
-              processor_state: UsageSourceState::default(),'''
-          if old not in text:
+          marker = '            root_session_id: "root".to_owned(),\n            processor_state: UsageSourceState::default(),'
+          replacement = '            root_session_id: "root".to_owned(),\n            continuation_state: SourceContinuationState::OwningLive,\n            processor_state: UsageSourceState::default(),'
+          if marker not in text:
               raise SystemExit('usage ledger fixture shape not found')
-          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          path.write_text(text.replace(marker, replacement, 1), encoding='utf-8')
           PY
       - name: Format
         run: cargo fmt
