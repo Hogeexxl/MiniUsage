@@ -1,0 +1,130 @@
+name: Fix Spec04 resilience regressions
+
+on:
+  push:
+    branches:
+      - fix/windows-fork-session-resilience
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: "${{ github.event.head_commit.message == 'chore: fix spec04 resilience regressions' }}"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/windows-fork-session-resilience
+          fetch-depth: 0
+      - name: Apply focused regression fixes
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new, label):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected 1 match, got {count}')
+              p.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          # Awaiting ownership is a valid transient state even inside a build.
+          # Only an actual repeated trust/rebuild failure is quarantinable.
+          replace_once(
+              'src/scanner/usage_consumer.rs',
+              '''                UsageReadStep::AwaitingOwnership => {
+                              // First-import/live sources may legitimately be waiting for
+                              // owning evidence. A BuildFrom read, however, is already the
+                              // shadow-rebuild attempt. If that fixed view still cannot
+                              // establish trustworthy Session ownership, isolate the whole
+                              // Session Tree instead of leaving the global build pending.
+                              if cancelled(cancellation) {
+                                  return UsageThreadOutcome::Completed;
+                              }
+                              if discovery_complete {
+                                  if let Some(error_code) = repeated_shadow_data_error(plan.action) {
+                                      return UsageThreadOutcome::SessionDataError(error_code);
+                                  }
+                              }
+                              return UsageThreadOutcome::Completed;
+                          }
+          ''',
+              '''                UsageReadStep::AwaitingOwnership => {
+                              // The long replay prefix remains memory-only until owning
+                              // evidence is found; zero prepared source commits may leak.
+                              // Awaiting ownership is not itself bad Session data, including
+                              // while a shadow build is open.
+                              return UsageThreadOutcome::Completed;
+                          }
+          ''',
+              'awaiting ownership quarantine boundary',
+          )
+
+          path = 'tests/spec04_usage_integration.rs'
+          replace_once(
+              path,
+              '''    assert_eq!(user_version, 7);''',
+              '''    assert_eq!(user_version, 8);''',
+              'full incident schema version',
+          )
+          replace_once(
+              path,
+              '''    // Opening a schema-v5 database performs v6/v7 migration and the
+              // independent cost backfill before scanner metadata/usage rebuilds run.''',
+              '''    // Opening a schema-v5 database performs v6/v7/v8 migration and the
+              // independent cost backfill before scanner metadata/usage rebuilds run.''',
+              'v5 migration comment',
+          )
+          replace_once(
+              path,
+              '''        7
+                  );''',
+              '''        8
+                  );''',
+              'v5 upgrade schema version',
+          )
+          replace_once(
+              path,
+              '''    assert_eq!(after, (2, baseline.1, 1, 1, 0, 6));''',
+              '''    assert_eq!(
+                  after,
+                  (
+                      2,
+                      baseline.1,
+                      1,
+                      1,
+                      0,
+                      mini_usage::usage::USAGE_PARSER_VERSION,
+                  )
+              );''',
+              'usage parser version expectation',
+          )
+          replace_once(
+              path,
+              '''    assert_eq!((usage_only.2, usage_only.3, usage_only.4), (1, 2, 3));''',
+              '''    assert_eq!((usage_only.2, usage_only.3), (1, 2));
+                  assert_eq!(usage_only.4, mini_usage::codex::METADATA_PARSER_VERSION);''',
+              'metadata parser version expectation',
+          )
+          PY
+      - name: Format
+        run: cargo fmt
+      - name: Focused gates
+        run: |
+          cargo check --locked
+          cargo test --locked --test spec04_usage_integration
+          cargo test --locked scanner::usage_consumer::resilience_tests
+          cargo test --locked scanner::tests::repeated_shadow_rebuild_data_failure_quarantines_the_session_tree
+          cargo test --locked scanner::tests::ordinary_usage_group_error_does_not_block_the_next_thread
+      - name: Commit and remove helper workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -f .github/workflows/fix-spec04-resilience-regressions.yml
+          git add -A
+          git commit -m "fix: preserve transient ownership during Session rebuild"
+          git push origin HEAD:fix/windows-fork-session-resilience
