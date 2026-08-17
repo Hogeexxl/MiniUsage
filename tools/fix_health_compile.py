@@ -31,14 +31,15 @@ if old not in s:
     raise SystemExit('session_row status anchor missing')
 s = s.replace(old, new, 1)
 s = s.replace('            data_status: status_for_totals(&inclusive_usage),\n', '            data_status,\n', 1)
-# Only the quarantine helper has no later bind groups after project paths.
-old = '''        let mut next = 4_usize;
-        let mut projects = Vec::new();'''
-new = '''        let next = 4_usize;
-        let mut projects = Vec::new();'''
-if old not in s:
-    raise SystemExit('quarantine next binding shape missing')
-s = s.replace(old, new, 1)
+
+# Scope bind-index cleanup strictly to the newly inserted quarantine helper.
+start = s.index('    fn quarantined_roots(')
+end = s.index('    fn aggregate_for_root', start)
+helper = s[start:end]
+old = '        let mut next = 4_usize;\n'
+if old not in helper:
+    raise SystemExit('quarantine next binding missing')
+helper = helper.replace(old, '        let next = 4_usize;\n', 1)
 old = '''            values.extend(filter.project_paths.iter().cloned().map(Value::Text));
             next += filter.project_paths.len();
         }
@@ -46,7 +47,8 @@ old = '''            values.extend(filter.project_paths.iter().cloned().map(Valu
 new = '''            values.extend(filter.project_paths.iter().cloned().map(Value::Text));
         }
         if filter.include_projectless {'''
-if old not in s:
-    raise SystemExit('quarantine project bind increment shape missing')
-s = s.replace(old, new, 1)
+if old not in helper:
+    raise SystemExit('quarantine project bind increment missing')
+helper = helper.replace(old, new, 1)
+s = s[:start] + helper + s[end:]
 p.write_text(s, encoding='utf-8')
