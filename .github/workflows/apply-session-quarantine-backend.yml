@@ -1,0 +1,39 @@
+name: Apply session quarantine backend
+
+on:
+  push:
+    branches:
+      - fix/windows-fork-session-resilience
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: "${{ github.event.head_commit.message == 'chore: run session quarantine backend' }}"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/windows-fork-session-resilience
+          fetch-depth: 0
+      - name: Apply guarded backend patch
+        run: python tools/apply_session_quarantine_backend.py
+      - name: Format
+        run: cargo fmt
+      - name: Compile and run backend gates
+        run: |
+          cargo check --locked
+          cargo test --locked usage::rebuild::tests
+          cargo test --locked storage::migrations::tests
+          cargo test --locked scanner::tests
+      - name: Commit production changes
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -f .github/workflows/apply-session-quarantine-backend.yml
+          rm -f tools/apply_session_quarantine_backend.py
+          git add -A
+          git commit -m "fix: isolate failed Session Trees during usage rebuild"
+          git push origin HEAD:fix/windows-fork-session-resilience
