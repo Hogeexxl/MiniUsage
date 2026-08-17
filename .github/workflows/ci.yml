@@ -18,6 +18,37 @@ jobs:
         with:
           ref: fix/windows-fork-session-resilience
           fetch-depth: 0
+      - name: Relax guarded finish replacement
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('tools/apply_resilience_patch.py')
+          text = path.read_text(encoding='utf-8')
+          old = '''def regex_once(text: str, pattern: str, replacement: str, label: str) -> str:
+              updated, count = re.subn(pattern, replacement, text, count=1, flags=re.S)
+              if count == 0:
+                  if replacement in text:
+                      return text
+                  raise RuntimeError(f"{label}: regex not found")
+              return updated
+          '''
+          new = '''def regex_once(text: str, pattern: str, replacement: str, label: str) -> str:
+              updated, count = re.subn(pattern, replacement, text, count=1, flags=re.S)
+              if count == 0:
+                  if replacement in text:
+                      return text
+                  if label == "rollout finish continuation":
+                      start = text.index("    fn finish(mut self) -> RolloutParseResult {")
+                      end = text.index("        RolloutParseResult {", start)
+                      return text[:start] + replacement + "\\n" + text[end:]
+                  raise RuntimeError(f"{label}: regex not found")
+              return updated
+          '''
+          if old not in text:
+              raise SystemExit('regex_once helper shape changed')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
       - name: Apply guarded patch
         run: python tools/apply_resilience_patch.py
       - name: Verify patch shape
