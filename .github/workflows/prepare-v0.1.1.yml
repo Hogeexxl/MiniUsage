@@ -1,0 +1,57 @@
+name: Prepare v0.1.1 version
+
+on:
+  push:
+    branches:
+      - release/v0.1.1
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    if: "${{ github.event.head_commit.message == 'chore: prepare v0.1.1 version bump' }}"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release/v0.1.1
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Bump Cargo package and lock version
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          cargo = Path('Cargo.toml')
+          text = cargo.read_text(encoding='utf-8')
+          old = 'name = "mini-usage"\nversion = "0.1.0"'
+          new = 'name = "mini-usage"\nversion = "0.1.1"'
+          if text.count(old) != 1:
+              raise SystemExit(f'Cargo.toml version anchor count={text.count(old)}')
+          cargo.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          lock = Path('Cargo.lock')
+          text = lock.read_text(encoding='utf-8')
+          old = '[[package]]\nname = "mini-usage"\nversion = "0.1.0"'
+          new = '[[package]]\nname = "mini-usage"\nversion = "0.1.1"'
+          if text.count(old) != 1:
+              raise SystemExit(f'Cargo.lock root version anchor count={text.count(old)}')
+          lock.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+      - name: Verify locked build metadata
+        run: |
+          cargo metadata --locked --no-deps --format-version 1 | python3 -c 'import json,sys; d=json.load(sys.stdin); p=next(p for p in d["packages"] if p["name"]=="mini-usage"); assert p["version"]=="0.1.1", p["version"]'
+          cargo check --locked
+      - name: Commit clean version bump and remove helper
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -f .github/workflows/prepare-v0.1.1.yml
+          git add Cargo.toml Cargo.lock .github/workflows/prepare-v0.1.1.yml
+          git commit -m "release: prepare v0.1.1"
+          git push origin HEAD:release/v0.1.1
