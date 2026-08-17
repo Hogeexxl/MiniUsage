@@ -25,12 +25,16 @@ jobs:
           from pathlib import Path
           p = Path('src/storage/migrations.rs')
           s = p.read_text(encoding='utf-8')
-          s = s.replace(
-              'assert_eq!(migrate(&mut upgraded, 7).unwrap(), 7);',
-              'assert_eq!(migrate(&mut upgraded, 8).unwrap(), 8);',
-          )
+          old = 'assert_eq!(migrate(&mut upgraded, 7).unwrap(), 7);'
+          new = 'assert_eq!(migrate(&mut upgraded, 8).unwrap(), 8);'
+          if old not in s:
+              raise SystemExit('upgraded schema idempotence assertion was not found')
+          s = s.replace(old, new, 1)
+          if old in s:
+              raise SystemExit('stale upgraded schema assertion remains')
           p.write_text(s, encoding='utf-8')
           PY
+          grep -n "migrate(&mut upgraded" src/storage/migrations.rs
       - name: Format
         run: cargo fmt
       - name: Run affected Rust tests
