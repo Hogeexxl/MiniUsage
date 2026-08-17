@@ -36,6 +36,23 @@ jobs:
           PY
       - name: Apply guarded patch
         run: python tools/apply_usage_replay_patch.py
+      - name: Export continuation state
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('src/usage/mod.rs')
+          text = path.read_text(encoding='utf-8')
+          old = '''    FixedViewTail, PipelineDisposition, PipelineError, PlanAction, SourceStateProof, TailStatus,
+              UsagePipeline, UsagePipelinePlan, UsageSourceCommitDto,
+          };'''
+          new = '''    FixedViewTail, PipelineDisposition, PipelineError, PlanAction, SourceContinuationState,
+              SourceStateProof, TailStatus, UsagePipeline, UsagePipelinePlan, UsageSourceCommitDto,
+          };'''
+          if old not in text:
+              raise SystemExit('usage pipeline export shape not found')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
       - name: Format
         run: cargo fmt
       - name: Compile and run focused tests
