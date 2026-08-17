@@ -128,7 +128,12 @@ async fn t_dist_008_status_dto_is_fixed_and_does_not_check_provider() {
 
 #[tokio::test]
 async fn t_dist_008_check_requires_active_header_and_maps_success_or_failure_safely() {
-    let provider = Arc::new(FixtureProvider::success(semver::Version::new(0, 1, 1)));
+    let mut latest = semver::Version::parse(env!("CARGO_PKG_VERSION")).unwrap();
+    latest.patch = latest.patch.checked_add(1).unwrap();
+    let expected_latest = latest.to_string();
+    let expected_url =
+        format!("https://github.com/Hogeexxl/MiniUsage/releases/tag/v{expected_latest}");
+    let provider = Arc::new(FixtureProvider::success(latest));
     let service = fixed_service(Arc::clone(&provider) as Arc<dyn ReleaseProvider>);
     let fixture = support::ApiFixture::with_updates(
         "dist-008-check-success",
@@ -150,12 +155,12 @@ async fn t_dist_008_check_requires_active_header_and_maps_success_or_failure_saf
     assert_eq!(accepted.status(), StatusCode::OK);
     let body = json_body(accepted).await;
     assert_eq!(body["current_version"], env!("CARGO_PKG_VERSION"));
-    assert_eq!(body["latest_version"], "0.1.1");
-    assert_eq!(body["update_available"], true);
     assert_eq!(
-        body["release_url"],
-        "https://github.com/Hogeexxl/MiniUsage/releases/tag/v0.1.1"
+        body["latest_version"].as_str(),
+        Some(expected_latest.as_str())
     );
+    assert_eq!(body["update_available"], true);
+    assert_eq!(body["release_url"].as_str(), Some(expected_url.as_str()));
     assert_eq!(body["checking"], false);
     assert_eq!(body["last_checked_at_ms"], 1_234);
     assert_eq!(provider.calls.load(Ordering::SeqCst), 1);
@@ -241,6 +246,9 @@ async fn t_dist_008_concurrent_check_requests_share_one_provider_call() {
 #[tokio::test]
 async fn t_dist_008_open_release_requires_valid_state_and_preserves_state_on_browser_failure() {
     let current = semver::Version::parse(env!("CARGO_PKG_VERSION")).unwrap();
+    let mut latest = current.clone();
+    latest.patch = latest.patch.checked_add(1).unwrap();
+    let expected_url = format!("https://github.com/Hogeexxl/MiniUsage/releases/tag/v{latest}");
     let no_update_provider = Arc::new(FixtureProvider::success(current));
     let no_update_browser = Arc::new(RecordingBrowser::default());
     let fixture = support::ApiFixture::with_updates(
@@ -263,7 +271,7 @@ async fn t_dist_008_open_release_requires_valid_state_and_preserves_state_on_bro
     assert!(no_update_browser.0.lock().unwrap().is_empty());
     fixture.scanner.shutdown().unwrap();
 
-    let provider = Arc::new(FixtureProvider::success(semver::Version::new(0, 1, 1)));
+    let provider = Arc::new(FixtureProvider::success(latest.clone()));
     let browser = Arc::new(RecordingBrowser::default());
     let fixture = support::ApiFixture::with_updates(
         "dist-008-open-success",
@@ -288,11 +296,11 @@ async fn t_dist_008_open_release_requires_valid_state_and_preserves_state_on_bro
     assert_eq!(opened.status(), StatusCode::NO_CONTENT);
     assert_eq!(
         browser.0.lock().unwrap().as_slice(),
-        ["https://github.com/Hogeexxl/MiniUsage/releases/tag/v0.1.1"]
+        [expected_url.as_str()]
     );
     fixture.scanner.shutdown().unwrap();
 
-    let provider = Arc::new(FixtureProvider::success(semver::Version::new(0, 1, 1)));
+    let provider = Arc::new(FixtureProvider::success(latest.clone()));
     let service = fixed_service(provider as Arc<dyn ReleaseProvider>);
     let fixture = support::ApiFixture::with_updates(
         "dist-008-open-browser-failure",
@@ -322,10 +330,7 @@ async fn t_dist_008_open_release_requires_valid_state_and_preserves_state_on_bro
     let status = fixture.call(Method::GET, "/api/update/status", &[]).await;
     let status = json_body(status).await;
     assert_eq!(status["update_available"], true);
-    assert_eq!(
-        status["release_url"],
-        "https://github.com/Hogeexxl/MiniUsage/releases/tag/v0.1.1"
-    );
+    assert_eq!(status["release_url"].as_str(), Some(expected_url.as_str()));
     fixture.scanner.shutdown().unwrap();
 }
 
