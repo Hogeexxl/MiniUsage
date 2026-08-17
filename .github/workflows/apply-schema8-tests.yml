@@ -1,0 +1,41 @@
+name: Apply schema8 test updates
+
+on:
+  push:
+    branches:
+      - fix/windows-fork-session-resilience
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: "${{ github.event.head_commit.message == 'chore: apply schema8 test updates' }}"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/windows-fork-session-resilience
+          fetch-depth: 0
+      - name: Update schema expectations
+        run: python tools/update_schema8_expectations.py
+      - name: Format
+        run: cargo fmt
+      - name: Run affected Rust tests
+        run: |
+          cargo test --locked scanner::tests::stale_guardian_fact_replays_from_zero_and_leaves_usage_checkpoint_untouched
+          cargo test --locked scanner::tests::failed_stale_guardian_replay_does_not_upgrade_fact_or_checkpoint_parser
+          cargo test --locked storage::migrations::tests
+          cargo test --locked storage::tests::opens_nested_database_and_verifies_pragmas
+          cargo test --locked storage::tests::reopening_preserves_binding_and_schema
+          cargo test --locked storage::tests::newer_schema_is_rejected_without_deleting_database
+      - name: Commit updates
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -f .github/workflows/apply-schema8-tests.yml
+          rm -f tools/update_schema8_expectations.py
+          git add -A
+          git commit -m "test: align resilience schema v8 expectations"
+          git push origin HEAD:fix/windows-fork-session-resilience
