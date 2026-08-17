@@ -80,10 +80,16 @@ jobs:
           )
           replace_once(
               path,
-              '''        7
-                  );''',
-              '''        8
-                  );''',
+              '''    assert_eq!(
+                  db.query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
+                      .unwrap(),
+                  7
+              );''',
+              '''    assert_eq!(
+                  db.query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
+                      .unwrap(),
+                  8
+              );''',
               'v5 upgrade schema version',
           )
           replace_once(
