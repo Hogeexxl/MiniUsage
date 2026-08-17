@@ -1,1 +1,0 @@
-Temporary branch validation trigger. This file is deleted by the next commit.
