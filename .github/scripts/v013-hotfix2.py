@@ -26,3 +26,14 @@ storage_path = root / "src/storage/mod.rs"
 value = storage_path.read_text(encoding="utf-8")
 value = re.sub(r"assert_eq!\((\w+)\.schema_version\(\)\.unwrap\(\), 8\);", r"assert_eq!(\1.schema_version().unwrap(), 9);", value)
 storage_path.write_text(value, encoding="utf-8")
+
+# Integration fixtures that open a legacy database must observe the new latest
+# schema after migration. Keep their historical seed versions unchanged.
+spec04_path = root / "tests/spec04_usage_integration.rs"
+value = spec04_path.read_text(encoding="utf-8")
+value = value.replace("assert_eq!(user_version, 8);", "assert_eq!(user_version, 9);")
+value = value.replace(
+    '''        db.query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))\n            .unwrap(),\n        8\n    );''',
+    '''        db.query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))\n            .unwrap(),\n        9\n    );''',
+)
+spec04_path.write_text(value, encoding="utf-8")
