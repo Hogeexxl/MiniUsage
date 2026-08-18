@@ -4,7 +4,7 @@ v0.1.3 implementation applied
 ===== hotfix2 =====
 ===== rustfmt =====
 
-added 178 packages, and audited 179 packages in 3s
+added 178 packages, and audited 179 packages in 8s
 
 31 packages are looking for funding
   run `npm fund` for details
@@ -22,39 +22,39 @@ Run `npm audit` for details.
 
 [1m[30m[46m RUN [49m[39m[22m [36mv4.1.10 [39m[90m/home/runner/work/MiniUsage/MiniUsage/frontend[39m
 
- [32m✓[39m src/data/miniUsageClient.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 41[2mms[22m[39m
- [32m✓[39m src/dashboard/session/useSessionTableController.test.tsx [2m([22m[2m5 tests[22m[2m)[22m[33m 477[2mms[22m[39m
- [32m✓[39m src/dashboard/useDashboardController.test.tsx [2m([22m[2m32 tests[22m[2m)[22m[33m 1110[2mms[22m[39m
- [32m✓[39m src/dashboard/session/useSessionDetailController.test.tsx [2m([22m[2m3 tests[22m[2m)[22m[32m 75[2mms[22m[39m
- [32m✓[39m src/dashboard/session/SessionDetailDrawer.test.tsx [2m([22m[2m6 tests[22m[2m)[22m[33m 1110[2mms[22m[39m
-     [33m[2m✓[22m[39m T-S09-001/T-MU03-C06 renders model-effort blocks and one independent Subagent block for single, unknown, and mixed effort [33m 572[2mms[22m[39m
- [32m✓[39m src/dashboard/DashboardPage.test.tsx [2m([22m[2m15 tests[22m[2m)[22m[33m 3223[2mms[22m[39m
-     [33m[2m✓[22m[39m keeps a range's own snapshot and renders the Session section without navigation/charts [33m 334[2mms[22m[39m
-     [33m[2m✓[22m[39m maps refresh HTTP errors 403/FORBIDDEN to 无法发起同步 [33m 325[2mms[22m[39m
-     [33m[2m✓[22m[39m renders tracking failure separately and offers only status retry [33m 384[2mms[22m[39m
- [32m✓[39m src/dashboard/MetricGrid.test.tsx [2m([22m[2m5 tests[22m[2m)[22m[33m 611[2mms[22m[39m
-     [33m[2m✓[22m[39m T-S08-001 renders the KPI card matrix without dropping source fields [33m 470[2mms[22m[39m
- [32m✓[39m src/dashboard/session/SessionSection.test.tsx [2m([22m[2m5 tests[22m[2m)[22m[33m 939[2mms[22m[39m
-     [33m[2m✓[22m[39m T-S07-001 renders the eight-column Session table and full integer values [33m 680[2mms[22m[39m
+ [32m✓[39m src/data/miniUsageClient.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 37[2mms[22m[39m
+ [32m✓[39m src/dashboard/session/useSessionTableController.test.tsx [2m([22m[2m5 tests[22m[2m)[22m[33m 501[2mms[22m[39m
+ [32m✓[39m src/dashboard/useDashboardController.test.tsx [2m([22m[2m32 tests[22m[2m)[22m[33m 1141[2mms[22m[39m
+ [32m✓[39m src/dashboard/session/useSessionDetailController.test.tsx [2m([22m[2m3 tests[22m[2m)[22m[32m 91[2mms[22m[39m
+ [32m✓[39m src/dashboard/session/SessionDetailDrawer.test.tsx [2m([22m[2m6 tests[22m[2m)[22m[33m 1361[2mms[22m[39m
+     [33m[2m✓[22m[39m T-S09-001/T-MU03-C06 renders model-effort blocks and one independent Subagent block for single, unknown, and mixed effort [33m 679[2mms[22m[39m
+ [32m✓[39m src/dashboard/DashboardPage.test.tsx [2m([22m[2m15 tests[22m[2m)[22m[33m 3494[2mms[22m[39m
+     [33m[2m✓[22m[39m keeps a range's own snapshot and renders the Session section without navigation/charts [33m 403[2mms[22m[39m
+     [33m[2m✓[22m[39m maps a failed load to fixed text and retains a stable snapshot [33m 378[2mms[22m[39m
+     [33m[2m✓[22m[39m renders tracking failure separately and offers only status retry [33m 356[2mms[22m[39m
+ [32m✓[39m src/dashboard/MetricGrid.test.tsx [2m([22m[2m5 tests[22m[2m)[22m[33m 673[2mms[22m[39m
+     [33m[2m✓[22m[39m T-S08-001 renders the KPI card matrix without dropping source fields [33m 553[2mms[22m[39m
+ [32m✓[39m src/dashboard/session/SessionSection.test.tsx [2m([22m[2m5 tests[22m[2m)[22m[33m 1072[2mms[22m[39m
+     [33m[2m✓[22m[39m T-S07-001 renders the eight-column Session table and full integer values [33m 768[2mms[22m[39m
  [32m✓[39m src/data/revisionFeed.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 15[2mms[22m[39m
- [32m✓[39m src/dashboard/session/SessionTableRow.test.tsx [2m([22m[2m3 tests[22m[2m)[22m[33m 366[2mms[22m[39m
-     [33m[2m✓[22m[39m T-MU04-D01 keeps complete costs in the normal cell [33m 302[2mms[22m[39m
- [32m✓[39m src/dashboard/useUpdateController.test.tsx [2m([22m[2m5 tests[22m[2m)[22m[33m 587[2mms[22m[39m
-     [33m[2m✓[22m[39m starts from status, checks manually, and keeps other controls enabled [33m 325[2mms[22m[39m
- [32m✓[39m src/dashboard/session/sessionFormat.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 17[2mms[22m[39m
+ [32m✓[39m src/dashboard/session/SessionTableRow.test.tsx [2m([22m[2m3 tests[22m[2m)[22m[33m 452[2mms[22m[39m
+     [33m[2m✓[22m[39m T-MU04-D01 keeps complete costs in the normal cell [33m 379[2mms[22m[39m
+ [32m✓[39m src/dashboard/useUpdateController.test.tsx [2m([22m[2m5 tests[22m[2m)[22m[33m 641[2mms[22m[39m
+     [33m[2m✓[22m[39m starts from status, checks manually, and keeps other controls enabled [33m 430[2mms[22m[39m
+ [32m✓[39m src/dashboard/session/sessionFormat.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 18[2mms[22m[39m
  [32m✓[39m src/data/updateClient.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 13[2mms[22m[39m
- [32m✓[39m src/dashboard/ServiceButton.test.tsx [2m([22m[2m2 tests[22m[2m)[22m[33m 350[2mms[22m[39m
-     [33m[2m✓[22m[39m shows the red stop action while running and becomes terminal after shutdown is accepted [33m 304[2mms[22m[39m
- [32m✓[39m src/dashboard/format.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 10[2mms[22m[39m
- [32m✓[39m src/data/serviceClient.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 13[2mms[22m[39m
+ [32m✓[39m src/dashboard/ServiceButton.test.tsx [2m([22m[2m2 tests[22m[2m)[22m[33m 380[2mms[22m[39m
+     [33m[2m✓[22m[39m shows the red stop action while running and becomes terminal after shutdown is accepted [33m 325[2mms[22m[39m
+ [32m✓[39m src/dashboard/format.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m src/data/serviceClient.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 12[2mms[22m[39m
  [32m✓[39m src/dashboard/charts/distribution.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 7[2mms[22m[39m
- [32m✓[39m src/dashboard/scope.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m src/dashboard/scope.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 5[2mms[22m[39m
  [32m✓[39m src/dashboard/RangeSelector.test.tsx [2m([22m[2m1 test[22m[2m)[22m[32m 180[2mms[22m[39m
 
 [2m Test Files [22m [1m[32m19 passed[39m[22m[90m (19)[39m
 [2m      Tests [22m [1m[32m109 passed[39m[22m[90m (109)[39m
-[2m   Start at [22m 22:19:55
-[2m   Duration [22m 10.81s[2m (transform 1.02s, setup 3.60s, import 1.61s, tests 9.15s, environment 13.78s)[22m
+[2m   Start at [22m 22:25:32
+[2m   Duration [22m 11.33s[2m (transform 1.10s, setup 3.77s, import 1.64s, tests 10.10s, environment 13.88s)[22m
 
 
 > mini-usage-frontend@0.1.0 check
@@ -75,292 +75,292 @@ computing gzip size...
 [2mdist/[22m[2massets/[22m[32mJetBrainsMono-Bold-D4WEaHbo.woff2     [39m[1m[2m 94.59 kB[22m[1m[22m
 [2mdist/[22m[2massets/[22m[35mindex-B33OOZJ3.css                    [39m[1m[2m 30.99 kB[22m[1m[22m[2m │ gzip:  6.94 kB[22m
 [2mdist/[22m[2massets/[22m[36mindex-Dv8jy4XX.js                     [39m[1m[2m282.71 kB[22m[1m[22m[2m │ gzip: 84.88 kB[22m
-[32m✓ built in 1.21s[39m
+[32m✓ built in 1.22s[39m
 ===== cargo-check =====
 [1m[92m    Updating[0m crates.io index
 [1m[92m Downloading[0m crates ...
-[1m[92m  Downloaded[0m futures-core v0.3.33
-[1m[92m  Downloaded[0m arrayref v0.3.9
-[1m[92m  Downloaded[0m slab v0.4.12
-[1m[92m  Downloaded[0m stable_deref_trait v1.2.1
-[1m[92m  Downloaded[0m ahash v0.8.12
-[1m[92m  Downloaded[0m fallible-iterator v0.3.0
-[1m[92m  Downloaded[0m http-body-util v0.1.4
-[1m[92m  Downloaded[0m rand_pcg v0.10.2
-[1m[92m  Downloaded[0m writeable v0.6.3
-[1m[92m  Downloaded[0m try-lock v0.2.5
-[1m[92m  Downloaded[0m tinystr v0.8.3
-[1m[92m  Downloaded[0m mime v0.3.17
-[1m[92m  Downloaded[0m tokio-util v0.7.19
-[1m[92m  Downloaded[0m http v1.4.2
-[1m[92m  Downloaded[0m uuid v1.24.0
-[1m[92m  Downloaded[0m smallvec v1.15.2
-[1m[92m  Downloaded[0m option-ext v0.2.0
-[1m[92m  Downloaded[0m shlex v2.0.1
-[1m[92m  Downloaded[0m idna v1.1.0
-[1m[92m  Downloaded[0m lru-slab v0.1.2
-[1m[92m  Downloaded[0m hashlink v0.9.1
-[1m[92m  Downloaded[0m thiserror v2.0.20
-[1m[92m  Downloaded[0m ipnet v2.12.1
-[1m[92m  Downloaded[0m hashbrown v0.14.5
-[1m[92m  Downloaded[0m httparse v1.10.1
-[1m[92m  Downloaded[0m percent-encoding v2.3.2
-[1m[92m  Downloaded[0m tower-service v0.3.3
-[1m[92m  Downloaded[0m rustc-hash v2.1.3
-[1m[92m  Downloaded[0m http-range-header v0.4.2
-[1m[92m  Downloaded[0m httpdate v1.0.3
-[1m[92m  Downloaded[0m itoa v1.0.18
-[1m[92m  Downloaded[0m autocfg v1.5.1
-[1m[92m  Downloaded[0m tinyvec v1.12.0
-[1m[92m  Downloaded[0m url v2.5.8
-[1m[92m  Downloaded[0m yoke-derive v0.8.2
-[1m[92m  Downloaded[0m hyper-util v0.1.20
-[1m[92m  Downloaded[0m pin-project-lite v0.2.17
-[1m[92m  Downloaded[0m tracing-core v0.1.36
-[1m[92m  Downloaded[0m zerovec-derive v0.11.3
-[1m[92m  Downloaded[0m num-traits v0.2.19
-[1m[92m  Downloaded[0m tinyvec_macros v0.1.1
-[1m[92m  Downloaded[0m zerofrom v0.1.8
-[1m[92m  Downloaded[0m zeroize v1.9.0
-[1m[92m  Downloaded[0m cpufeatures v0.3.0
-[1m[92m  Downloaded[0m utf8_iter v1.0.4
-[1m[92m  Downloaded[0m version_check v0.9.5
-[1m[92m  Downloaded[0m webbrowser v1.2.4
 [1m[92m  Downloaded[0m http-body v1.1.0
-[1m[92m  Downloaded[0m litemap v0.8.2
-[1m[92m  Downloaded[0m memchr v2.8.3
-[1m[92m  Downloaded[0m mime_guess v2.0.5
-[1m[92m  Downloaded[0m quinn v0.11.11
-[1m[92m  Downloaded[0m socket2 v0.6.5
-[1m[92m  Downloaded[0m untrusted v0.9.0
-[1m[92m  Downloaded[0m want v0.3.1
-[1m[92m  Downloaded[0m synstructure v0.13.2
-[1m[92m  Downloaded[0m tokio-rustls v0.26.4
-[1m[92m  Downloaded[0m directories v6.0.0
 [1m[92m  Downloaded[0m generic-array v0.14.7
-[1m[92m  Downloaded[0m log v0.4.33
-[1m[92m  Downloaded[0m sync_wrapper v1.0.2
-[1m[92m  Downloaded[0m tower-layer v0.3.3
-[1m[92m  Downloaded[0m subtle v2.6.1
-[1m[92m  Downloaded[0m bytes v1.12.1
-[1m[92m  Downloaded[0m icu_provider v2.2.0
-[1m[92m  Downloaded[0m quote v1.0.47
-[1m[92m  Downloaded[0m unicode-ident v1.0.24
-[1m[92m  Downloaded[0m zerofrom-derive v0.1.7
+[1m[92m  Downloaded[0m arrayref v0.3.9
 [1m[92m  Downloaded[0m atomic-waker v1.1.2
-[1m[92m  Downloaded[0m bitflags v2.13.1
-[1m[92m  Downloaded[0m digest v0.10.7
-[1m[92m  Downloaded[0m icu_collections v2.2.0
-[1m[92m  Downloaded[0m icu_locale_core v2.2.0
-[1m[92m  Downloaded[0m icu_normalizer v2.2.0
-[1m[92m  Downloaded[0m serde v1.0.229
-[1m[92m  Downloaded[0m once_cell v1.21.4
-[1m[92m  Downloaded[0m reqwest v0.12.28
-[1m[92m  Downloaded[0m serde_path_to_error v0.1.20
-[1m[92m  Downloaded[0m sha2 v0.10.9
-[1m[92m  Downloaded[0m yoke v0.8.3
-[1m[92m  Downloaded[0m zmij v1.0.23
-[1m[92m  Downloaded[0m axum v0.8.9
-[1m[92m  Downloaded[0m cpufeatures v0.2.17
-[1m[92m  Downloaded[0m futures-channel v0.3.33
-[1m[92m  Downloaded[0m icu_properties v2.2.0
-[1m[92m  Downloaded[0m idna_adapter v1.2.2
-[1m[92m  Downloaded[0m potential_utf v0.1.5
-[1m[92m  Downloaded[0m thiserror-impl v2.0.20
-[1m[92m  Downloaded[0m displaydoc v0.2.7
-[1m[92m  Downloaded[0m find-msvc-tools v0.1.10
-[1m[92m  Downloaded[0m hyper v1.11.0
-[1m[92m  Downloaded[0m tower v0.5.3
-[1m[92m  Downloaded[0m zerovec v0.11.6
-[1m[92m  Downloaded[0m hyper-rustls v0.27.9
-[1m[92m  Downloaded[0m icu_properties_data v2.2.0
-[1m[92m  Downloaded[0m unicase v2.9.0
-[1m[92m  Downloaded[0m crypto-common v0.1.7
-[1m[92m  Downloaded[0m fallible-streaming-iterator v0.1.9
-[1m[92m  Downloaded[0m rand_core v0.10.1
-[1m[92m  Downloaded[0m typenum v1.20.1
-[1m[92m  Downloaded[0m zerotrie v0.2.4
-[1m[92m  Downloaded[0m proc-macro2 v1.0.107
-[1m[92m  Downloaded[0m serde_core v1.0.229
-[1m[92m  Downloaded[0m block-buffer v0.10.4
-[1m[92m  Downloaded[0m cc v1.4.1
-[1m[92m  Downloaded[0m chrono v0.4.45
-[1m[92m  Downloaded[0m quinn-udp v0.5.15
-[1m[92m  Downloaded[0m rustls-pki-types v1.15.1
-[1m[92m  Downloaded[0m serde_urlencoded v0.7.1
-[1m[92m  Downloaded[0m tokio-macros v2.7.1
-[1m[92m  Downloaded[0m matchit v0.8.4
-[1m[92m  Downloaded[0m semver v1.0.28
-[1m[92m  Downloaded[0m cfg-if v1.0.4
-[1m[92m  Downloaded[0m constant_time_eq v0.4.2
+[1m[92m  Downloaded[0m smallvec v1.15.2
 [1m[92m  Downloaded[0m futures-task v0.3.33
-[1m[92m  Downloaded[0m rand v0.10.2
-[1m[92m  Downloaded[0m rustls-webpki v0.103.14
-[1m[92m  Downloaded[0m serde_derive v1.0.229
-[1m[92m  Downloaded[0m tower-http v0.6.11
-[1m[92m  Downloaded[0m arrayvec v0.7.8
-[1m[92m  Downloaded[0m axum-core v0.5.6
-[1m[92m  Downloaded[0m futures-util v0.3.33
-[1m[92m  Downloaded[0m mio v1.2.2
-[1m[92m  Downloaded[0m getrandom v0.4.3
-[1m[92m  Downloaded[0m pkg-config v0.3.33
-[1m[92m  Downloaded[0m chacha20 v0.10.1
-[1m[92m  Downloaded[0m rustls v0.23.43
-[1m[92m  Downloaded[0m vcpkg v0.2.15
-[1m[92m  Downloaded[0m webpki-roots v1.0.9
-[1m[92m  Downloaded[0m rusqlite v0.32.1
-[1m[92m  Downloaded[0m syn v2.0.119
-[1m[92m  Downloaded[0m syn v3.0.3
-[1m[92m  Downloaded[0m quinn-proto v0.11.16
-[1m[92m  Downloaded[0m tracing v0.1.44
-[1m[92m  Downloaded[0m zerocopy v0.8.56
-[1m[92m  Downloaded[0m libc v0.2.189
-[1m[92m  Downloaded[0m base64 v0.22.1
-[1m[92m  Downloaded[0m icu_normalizer_data v2.2.0
-[1m[92m  Downloaded[0m ryu v1.0.23
-[1m[92m  Downloaded[0m serde_json v1.0.151
-[1m[92m  Downloaded[0m getrandom v0.2.17
-[1m[92m  Downloaded[0m dirs-sys v0.5.0
-[1m[92m  Downloaded[0m futures-sink v0.3.33
+[1m[92m  Downloaded[0m block-buffer v0.10.4
+[1m[92m  Downloaded[0m stable_deref_trait v1.2.1
+[1m[92m  Downloaded[0m slab v0.4.12
+[1m[92m  Downloaded[0m socket2 v0.6.5
+[1m[92m  Downloaded[0m lru-slab v0.1.2
+[1m[92m  Downloaded[0m mime v0.3.17
+[1m[92m  Downloaded[0m percent-encoding v2.3.2
+[1m[92m  Downloaded[0m shlex v2.0.1
+[1m[92m  Downloaded[0m tokio-macros v2.7.1
+[1m[92m  Downloaded[0m fallible-streaming-iterator v0.1.9
+[1m[92m  Downloaded[0m autocfg v1.5.1
+[1m[92m  Downloaded[0m crypto-common v0.1.7
+[1m[92m  Downloaded[0m digest v0.10.7
+[1m[92m  Downloaded[0m untrusted v0.9.0
+[1m[92m  Downloaded[0m cfg-if v1.0.4
 [1m[92m  Downloaded[0m cfg_aliases v0.2.2
+[1m[92m  Downloaded[0m cpufeatures v0.2.17
+[1m[92m  Downloaded[0m futures-sink v0.3.33
+[1m[92m  Downloaded[0m rand_pcg v0.10.2
+[1m[92m  Downloaded[0m thiserror-impl v2.0.20
+[1m[92m  Downloaded[0m uuid v1.24.0
+[1m[92m  Downloaded[0m zeroize v1.9.0
+[1m[92m  Downloaded[0m dirs-sys v0.5.0
 [1m[92m  Downloaded[0m form_urlencoded v1.2.2
-[1m[92m  Downloaded[0m blake3 v1.8.6
-[1m[92m  Downloaded[0m ring v0.17.14
+[1m[92m  Downloaded[0m http-range-header v0.4.2
+[1m[92m  Downloaded[0m tinystr v0.8.3
+[1m[92m  Downloaded[0m tower-service v0.3.3
+[1m[92m  Downloaded[0m cpufeatures v0.3.0
+[1m[92m  Downloaded[0m axum-core v0.5.6
+[1m[92m  Downloaded[0m find-msvc-tools v0.1.10
+[1m[92m  Downloaded[0m http-body-util v0.1.4
+[1m[92m  Downloaded[0m quote v1.0.47
+[1m[92m  Downloaded[0m sync_wrapper v1.0.2
+[1m[92m  Downloaded[0m try-lock v0.2.5
+[1m[92m  Downloaded[0m chacha20 v0.10.1
+[1m[92m  Downloaded[0m tower-layer v0.3.3
+[1m[92m  Downloaded[0m utf8_iter v1.0.4
+[1m[92m  Downloaded[0m want v0.3.1
+[1m[92m  Downloaded[0m ahash v0.8.12
+[1m[92m  Downloaded[0m directories v6.0.0
+[1m[92m  Downloaded[0m displaydoc v0.2.7
+[1m[92m  Downloaded[0m fallible-iterator v0.3.0
+[1m[92m  Downloaded[0m pkg-config v0.3.33
+[1m[92m  Downloaded[0m futures-core v0.3.33
+[1m[92m  Downloaded[0m sha2 v0.10.9
+[1m[92m  Downloaded[0m webbrowser v1.2.4
+[1m[92m  Downloaded[0m zerofrom-derive v0.1.7
+[1m[92m  Downloaded[0m serde_urlencoded v0.7.1
+[1m[92m  Downloaded[0m idna_adapter v1.2.2
+[1m[92m  Downloaded[0m yoke-derive v0.8.2
+[1m[92m  Downloaded[0m hashlink v0.9.1
+[1m[92m  Downloaded[0m tinyvec v1.12.0
+[1m[92m  Downloaded[0m zerovec-derive v0.11.3
+[1m[92m  Downloaded[0m semver v1.0.28
+[1m[92m  Downloaded[0m constant_time_eq v0.4.2
+[1m[92m  Downloaded[0m hyper-rustls v0.27.9
+[1m[92m  Downloaded[0m synstructure v0.13.2
+[1m[92m  Downloaded[0m subtle v2.6.1
+[1m[92m  Downloaded[0m futures-channel v0.3.33
+[1m[92m  Downloaded[0m yoke v0.8.3
+[1m[92m  Downloaded[0m arrayvec v0.7.8
+[1m[92m  Downloaded[0m thiserror v2.0.20
+[1m[92m  Downloaded[0m version_check v0.9.5
+[1m[92m  Downloaded[0m writeable v0.6.3
+[1m[92m  Downloaded[0m unicode-ident v1.0.24
+[1m[92m  Downloaded[0m vcpkg v0.2.15
+[1m[92m  Downloaded[0m tinyvec_macros v0.1.1
+[1m[92m  Downloaded[0m unicase v2.9.0
+[1m[92m  Downloaded[0m zerofrom v0.1.8
+[1m[92m  Downloaded[0m option-ext v0.2.0
+[1m[92m  Downloaded[0m pin-project-lite v0.2.17
+[1m[92m  Downloaded[0m potential_utf v0.1.5
+[1m[92m  Downloaded[0m rustls-pki-types v1.15.1
+[1m[92m  Downloaded[0m serde_path_to_error v0.1.20
+[1m[92m  Downloaded[0m httpdate v1.0.3
+[1m[92m  Downloaded[0m zerotrie v0.2.4
+[1m[92m  Downloaded[0m zmij v1.0.23
+[1m[92m  Downloaded[0m tokio-rustls v0.26.4
+[1m[92m  Downloaded[0m getrandom v0.2.17
+[1m[92m  Downloaded[0m tracing-core v0.1.36
+[1m[92m  Downloaded[0m url v2.5.8
+[1m[92m  Downloaded[0m num-traits v0.2.19
+[1m[92m  Downloaded[0m serde_core v1.0.229
+[1m[92m  Downloaded[0m icu_provider v2.2.0
+[1m[92m  Downloaded[0m tokio-util v0.7.19
+[1m[92m  Downloaded[0m rustc-hash v2.1.3
+[1m[92m  Downloaded[0m itoa v1.0.18
+[1m[92m  Downloaded[0m getrandom v0.4.3
+[1m[92m  Downloaded[0m httparse v1.10.1
+[1m[92m  Downloaded[0m mime_guess v2.0.5
+[1m[92m  Downloaded[0m once_cell v1.21.4
+[1m[92m  Downloaded[0m base64 v0.22.1
+[1m[92m  Downloaded[0m icu_properties v2.2.0
+[1m[92m  Downloaded[0m litemap v0.8.2
+[1m[92m  Downloaded[0m tower v0.5.3
+[1m[92m  Downloaded[0m tower-http v0.6.11
+[1m[92m  Downloaded[0m typenum v1.20.1
+[1m[92m  Downloaded[0m ipnet v2.12.1
+[1m[92m  Downloaded[0m bitflags v2.13.1
+[1m[92m  Downloaded[0m zerovec v0.11.6
+[1m[92m  Downloaded[0m quinn-udp v0.5.15
+[1m[92m  Downloaded[0m bytes v1.12.1
+[1m[92m  Downloaded[0m quinn v0.11.11
+[1m[92m  Downloaded[0m rand_core v0.10.1
+[1m[92m  Downloaded[0m webpki-roots v1.0.9
+[1m[92m  Downloaded[0m icu_normalizer v2.2.0
+[1m[92m  Downloaded[0m proc-macro2 v1.0.107
+[1m[92m  Downloaded[0m syn v2.0.119
+[1m[92m  Downloaded[0m log v0.4.33
+[1m[92m  Downloaded[0m cc v1.4.1
+[1m[92m  Downloaded[0m icu_locale_core v2.2.0
+[1m[92m  Downloaded[0m matchit v0.8.4
+[1m[92m  Downloaded[0m rustls-webpki v0.103.14
+[1m[92m  Downloaded[0m ryu v1.0.23
+[1m[92m  Downloaded[0m syn v3.0.3
+[1m[92m  Downloaded[0m zerocopy v0.8.56
+[1m[92m  Downloaded[0m http v1.4.2
+[1m[92m  Downloaded[0m icu_normalizer_data v2.2.0
+[1m[92m  Downloaded[0m serde_derive v1.0.229
+[1m[92m  Downloaded[0m hashbrown v0.14.5
+[1m[92m  Downloaded[0m hyper-util v0.1.20
+[1m[92m  Downloaded[0m icu_collections v2.2.0
+[1m[92m  Downloaded[0m memchr v2.8.3
+[1m[92m  Downloaded[0m serde v1.0.229
+[1m[92m  Downloaded[0m mio v1.2.2
+[1m[92m  Downloaded[0m tracing v0.1.44
+[1m[92m  Downloaded[0m rand v0.10.2
+[1m[92m  Downloaded[0m rusqlite v0.32.1
+[1m[92m  Downloaded[0m futures-util v0.3.33
+[1m[92m  Downloaded[0m idna v1.1.0
+[1m[92m  Downloaded[0m axum v0.8.9
+[1m[92m  Downloaded[0m reqwest v0.12.28
+[1m[92m  Downloaded[0m serde_json v1.0.151
 [1m[92m  Downloaded[0m tokio v1.53.1
+[1m[92m  Downloaded[0m hyper v1.11.0
+[1m[92m  Downloaded[0m icu_properties_data v2.2.0
+[1m[92m  Downloaded[0m blake3 v1.8.6
+[1m[92m  Downloaded[0m chrono v0.4.45
+[1m[92m  Downloaded[0m quinn-proto v0.11.16
+[1m[92m  Downloaded[0m rustls v0.23.43
+[1m[92m  Downloaded[0m libc v0.2.189
+[1m[92m  Downloaded[0m ring v0.17.14
 [1m[92m  Downloaded[0m libsqlite3-sys v0.30.1
 [1m[92m   Compiling[0m proc-macro2 v1.0.107
 [1m[92m   Compiling[0m quote v1.0.47
 [1m[92m   Compiling[0m unicode-ident v1.0.24
 [1m[92m   Compiling[0m libc v0.2.189
-[1m[92m   Compiling[0m find-msvc-tools v0.1.10
 [1m[92m   Compiling[0m shlex v2.0.1
+[1m[92m   Compiling[0m find-msvc-tools v0.1.10
+[1m[92m   Compiling[0m cc v1.4.1
 [1m[92m    Checking[0m stable_deref_trait v1.2.1
 [1m[92m    Checking[0m once_cell v1.21.4
-[1m[92m   Compiling[0m cc v1.4.1
-[1m[92m    Checking[0m bytes v1.12.1
 [1m[92m    Checking[0m pin-project-lite v0.2.17
-[1m[92m    Checking[0m itoa v1.0.18
-[1m[92m   Compiling[0m syn v2.0.119
-[1m[92m   Compiling[0m syn v3.0.3
-[1m[92m    Checking[0m cfg-if v1.0.4
-[1m[92m    Checking[0m futures-core v0.3.33
+[1m[92m    Checking[0m bytes v1.12.1
 [1m[92m   Compiling[0m version_check v0.9.5
+[1m[92m    Checking[0m itoa v1.0.18
+[1m[92m    Checking[0m futures-core v0.3.33
+[1m[92m    Checking[0m cfg-if v1.0.4
 [1m[92m    Checking[0m smallvec v1.15.2
-[1m[92m    Checking[0m mio v1.2.2
-[1m[92m    Checking[0m socket2 v0.6.5
 [1m[92m    Checking[0m litemap v0.8.2
 [1m[92m    Checking[0m writeable v0.6.3
 [1m[92m    Checking[0m http v1.4.2
-[1m[92m    Checking[0m percent-encoding v2.3.2
-[1m[92m    Checking[0m log v0.4.33
+[1m[92m   Compiling[0m icu_normalizer_data v2.2.0
 [1m[92m   Compiling[0m icu_properties_data v2.2.0
 [1m[92m    Checking[0m utf8_iter v1.0.4
-[1m[92m   Compiling[0m icu_normalizer_data v2.2.0
+[1m[92m    Checking[0m log v0.4.33
+[1m[92m    Checking[0m percent-encoding v2.3.2
 [1m[92m    Checking[0m http-body v1.1.0
-[1m[92m   Compiling[0m ring v0.17.14
 [1m[92m    Checking[0m tracing-core v0.1.36
+[1m[92m   Compiling[0m ring v0.17.14
 [1m[92m   Compiling[0m serde_core v1.0.229
 [1m[92m    Checking[0m tracing v0.1.44
-[1m[92m    Checking[0m futures-task v0.3.33
-[1m[92m   Compiling[0m displaydoc v0.2.7
-[1m[92m    Checking[0m tower-service v0.3.3
-[1m[92m   Compiling[0m httparse v1.10.1
 [1m[92m    Checking[0m zeroize v1.9.0
+[1m[92m    Checking[0m futures-task v0.3.33
+[1m[92m    Checking[0m tower-service v0.3.3
+[1m[92m   Compiling[0m syn v2.0.119
+[1m[92m   Compiling[0m syn v3.0.3
+[1m[92m    Checking[0m socket2 v0.6.5
+[1m[92m    Checking[0m mio v1.2.2
+[1m[92m   Compiling[0m httparse v1.10.1
 [1m[92m    Checking[0m slab v0.4.12
 [1m[92m    Checking[0m futures-util v0.3.33
-[1m[92m    Checking[0m rustls-pki-types v1.15.1
+[1m[92m   Compiling[0m displaydoc v0.2.7
 [1m[92m   Compiling[0m synstructure v0.13.2
+[1m[92m    Checking[0m getrandom v0.2.17
+[1m[92m    Checking[0m rustls-pki-types v1.15.1
 [1m[92m    Checking[0m form_urlencoded v1.2.2
 [1m[92m   Compiling[0m generic-array v0.14.7
-[1m[92m    Checking[0m getrandom v0.2.17
+[1m[92m    Checking[0m try-lock v0.2.5
+[1m[92m    Checking[0m untrusted v0.9.0
+[1m[92m    Checking[0m httpdate v1.0.3
+[1m[92m   Compiling[0m zerocopy v0.8.56
+[1m[92m    Checking[0m want v0.3.1
 [1m[92m   Compiling[0m zerofrom-derive v0.1.7
 [1m[92m   Compiling[0m yoke-derive v0.8.2
 [1m[92m   Compiling[0m zerovec-derive v0.11.3
-[1m[92m   Compiling[0m tokio-macros v2.7.1
-[1m[92m    Checking[0m untrusted v0.9.0
 [1m[92m    Checking[0m zerofrom v0.1.8
-[1m[92m   Compiling[0m zerocopy v0.8.56
+[1m[92m   Compiling[0m tokio-macros v2.7.1
 [1m[92m    Checking[0m yoke v0.8.3
-[1m[92m    Checking[0m httpdate v1.0.3
-[1m[92m    Checking[0m zerovec v0.11.6
 [1m[92m    Checking[0m zerotrie v0.2.4
-[1m[92m    Checking[0m try-lock v0.2.5
-[1m[92m    Checking[0m want v0.3.1
+[1m[92m    Checking[0m futures-channel v0.3.33
+[1m[92m    Checking[0m sync_wrapper v1.0.2
 [1m[92m    Checking[0m tokio v1.53.1
 [1m[92m   Compiling[0m ahash v0.8.12
-[1m[92m    Checking[0m tinystr v0.8.3
-[1m[92m    Checking[0m potential_utf v0.1.5
-[1m[92m    Checking[0m icu_locale_core v2.2.0
-[1m[92m    Checking[0m icu_collections v2.2.0
-[1m[92m    Checking[0m sync_wrapper v1.0.2
-[1m[92m    Checking[0m futures-channel v0.3.33
-[1m[92m    Checking[0m mime v0.3.17
-[1m[92m    Checking[0m icu_provider v2.2.0
-[1m[92m   Compiling[0m zmij v1.0.23
+[1m[92m    Checking[0m zerovec v0.11.6
+[1m[92m   Compiling[0m unicase v2.9.0
 [1m[92m   Compiling[0m rustls v0.23.43
 [1m[92m    Checking[0m atomic-waker v1.1.2
-[1m[92m    Checking[0m icu_normalizer v2.2.0
-[1m[92m    Checking[0m icu_properties v2.2.0
-[1m[92m   Compiling[0m unicase v2.9.0
+[1m[92m   Compiling[0m zmij v1.0.23
+[1m[92m    Checking[0m tinystr v0.8.3
+[1m[92m    Checking[0m potential_utf v0.1.5
+[1m[92m    Checking[0m icu_collections v2.2.0
+[1m[92m    Checking[0m icu_locale_core v2.2.0
+[1m[92m    Checking[0m mime v0.3.17
+[1m[92m    Checking[0m tower-layer v0.3.3
 [1m[92m   Compiling[0m serde v1.0.229
 [1m[92m    Checking[0m typenum v1.20.1
-[1m[92m    Checking[0m tower-layer v0.3.3
+[1m[92m    Checking[0m icu_provider v2.2.0
+[1m[92m    Checking[0m icu_normalizer v2.2.0
+[1m[92m    Checking[0m icu_properties v2.2.0
 [1m[92m   Compiling[0m mime_guess v2.0.5
-[1m[92m    Checking[0m rustls-webpki v0.103.14
 [1m[92m    Checking[0m idna_adapter v1.2.2
 [1m[92m    Checking[0m idna v1.1.0
 [1m[92m   Compiling[0m serde_derive v1.0.229
-[1m[92m    Checking[0m http-body-util v0.1.4
-[1m[92m   Compiling[0m vcpkg v0.2.15
 [1m[92m    Checking[0m hyper v1.11.0
-[1m[92m    Checking[0m base64 v0.22.1
-[1m[92m    Checking[0m ipnet v2.12.1
-[1m[92m    Checking[0m subtle v2.6.1
-[1m[92m   Compiling[0m autocfg v1.5.1
-[1m[92m   Compiling[0m serde_json v1.0.151
+[1m[92m    Checking[0m http-body-util v0.1.4
 [1m[92m   Compiling[0m pkg-config v0.3.33
-[1m[92m   Compiling[0m num-traits v0.2.19
+[1m[92m   Compiling[0m vcpkg v0.2.15
+[1m[92m    Checking[0m subtle v2.6.1
+[1m[92m    Checking[0m base64 v0.22.1
+[1m[92m   Compiling[0m serde_json v1.0.151
+[1m[92m    Checking[0m ipnet v2.12.1
+[1m[92m   Compiling[0m autocfg v1.5.1
 [1m[92m    Checking[0m hyper-util v0.1.20
+[1m[92m   Compiling[0m num-traits v0.2.19
 [1m[92m   Compiling[0m libsqlite3-sys v0.30.1
 [1m[92m    Checking[0m tower v0.5.3
 [1m[92m    Checking[0m url v2.5.8
-[1m[92m    Checking[0m ryu v1.0.23
-[1m[92m    Checking[0m memchr v2.8.3
 [1m[92m    Checking[0m futures-sink v0.3.33
+[1m[92m    Checking[0m memchr v2.8.3
+[1m[92m    Checking[0m ryu v1.0.23
 [1m[92m    Checking[0m bitflags v2.13.1
-[1m[92m    Checking[0m tokio-util v0.7.19
 [1m[92m    Checking[0m serde_urlencoded v0.7.1
+[1m[92m    Checking[0m tokio-util v0.7.19
 [1m[92m    Checking[0m hashbrown v0.14.5
 [1m[92m    Checking[0m crypto-common v0.1.7
 [1m[92m    Checking[0m block-buffer v0.10.4
 [1m[92m    Checking[0m webpki-roots v1.0.9
 [1m[92m   Compiling[0m blake3 v1.8.6
-[1m[92m    Checking[0m tokio-rustls v0.26.4
 [1m[92m    Checking[0m option-ext v0.2.0
 [1m[92m    Checking[0m http-range-header v0.4.2
 [1m[92m    Checking[0m tower-http v0.6.11
-[1m[92m    Checking[0m hyper-rustls v0.27.9
+[1m[92m    Checking[0m rustls-webpki v0.103.14
 [1m[92m    Checking[0m dirs-sys v0.5.0
 [1m[92m    Checking[0m digest v0.10.7
 [1m[92m    Checking[0m hashlink v0.9.1
 [1m[92m    Checking[0m axum-core v0.5.6
 [1m[92m    Checking[0m serde_path_to_error v0.1.20
-[1m[92m    Checking[0m matchit v0.8.4
-[1m[92m    Checking[0m cpufeatures v0.3.0
 [1m[92m    Checking[0m arrayvec v0.7.8
 [1m[92m    Checking[0m arrayref v0.3.9
 [1m[92m    Checking[0m constant_time_eq v0.4.2
-[1m[92m    Checking[0m fallible-iterator v0.3.0
 [1m[92m    Checking[0m fallible-streaming-iterator v0.1.9
+[1m[92m    Checking[0m matchit v0.8.4
 [1m[92m    Checking[0m cpufeatures v0.2.17
+[1m[92m    Checking[0m fallible-iterator v0.3.0
+[1m[92m    Checking[0m cpufeatures v0.3.0
+[1m[92m    Checking[0m axum v0.8.9
 [1m[92m    Checking[0m sha2 v0.10.9
 [1m[92m    Checking[0m chrono v0.4.45
+[1m[92m    Checking[0m tokio-rustls v0.26.4
+[1m[92m    Checking[0m hyper-rustls v0.27.9
 [1m[92m    Checking[0m reqwest v0.12.28
-[1m[92m    Checking[0m axum v0.8.9
 [1m[92m    Checking[0m directories v6.0.0
 [1m[92m    Checking[0m webbrowser v1.2.4
-[1m[92m    Checking[0m uuid v1.24.0
 [1m[92m    Checking[0m semver v1.0.28
+[1m[92m    Checking[0m uuid v1.24.0
 [1m[92m    Checking[0m rusqlite v0.32.1
 [1m[92m    Checking[0m mini-usage v0.1.3 (/home/runner/work/MiniUsage/MiniUsage)
 [1m[33mwarning[0m[1m: unused imports: `CostEstimateError`, `CostEstimationError`, and `EstimatedCost`[0m
@@ -418,28 +418,28 @@ computing gzip size...
      [1m[94m|[0m    [1m[33m^^^^^^^^^^^^^^^^^^^^^^^[0m
 
 [1m[33mwarning[0m: `mini-usage` (lib) generated 7 warnings (run `cargo fix --lib -p mini-usage` to apply 2 suggestions)
-[1m[92m    Finished[0m `dev` profile [unoptimized + debuginfo] target(s) in 25.91s
+[1m[92m    Finished[0m `dev` profile [unoptimized + debuginfo] target(s) in 42.23s
 ===== cargo-test =====
 [1m[92m Downloading[0m crates ...
-[1m[92m  Downloaded[0m phf_shared v0.12.1
 [1m[92m  Downloaded[0m phf v0.12.1
-[1m[92m  Downloaded[0m siphasher v1.0.3
 [1m[92m  Downloaded[0m chrono-tz v0.10.4
+[1m[92m  Downloaded[0m phf_shared v0.12.1
+[1m[92m  Downloaded[0m siphasher v1.0.3
 [1m[92m   Compiling[0m libc v0.2.189
 [1m[92m   Compiling[0m stable_deref_trait v1.2.1
 [1m[92m   Compiling[0m zerofrom v0.1.8
 [1m[92m   Compiling[0m once_cell v1.21.4
-[1m[92m   Compiling[0m bytes v1.12.1
-[1m[92m   Compiling[0m yoke v0.8.3
 [1m[92m   Compiling[0m pin-project-lite v0.2.17
+[1m[92m   Compiling[0m yoke v0.8.3
+[1m[92m   Compiling[0m bytes v1.12.1
+[1m[92m   Compiling[0m cfg-if v1.0.4
 [1m[92m   Compiling[0m zerovec v0.11.6
 [1m[92m   Compiling[0m futures-core v0.3.33
 [1m[92m   Compiling[0m itoa v1.0.18
-[1m[92m   Compiling[0m cfg-if v1.0.4
 [1m[92m   Compiling[0m smallvec v1.15.2
 [1m[92m   Compiling[0m writeable v0.6.3
-[1m[92m   Compiling[0m litemap v0.8.2
 [1m[92m   Compiling[0m tinystr v0.8.3
+[1m[92m   Compiling[0m litemap v0.8.2
 [1m[92m   Compiling[0m potential_utf v0.1.5
 [1m[92m   Compiling[0m http v1.4.2
 [1m[92m   Compiling[0m zerotrie v0.2.4
@@ -447,8 +447,8 @@ computing gzip size...
 [1m[92m   Compiling[0m mio v1.2.2
 [1m[92m   Compiling[0m socket2 v0.6.5
 [1m[92m   Compiling[0m tokio v1.53.1
-[1m[92m   Compiling[0m log v0.4.33
 [1m[92m   Compiling[0m utf8_iter v1.0.4
+[1m[92m   Compiling[0m log v0.4.33
 [1m[92m   Compiling[0m percent-encoding v2.3.2
 [1m[92m   Compiling[0m icu_collections v2.2.0
 [1m[92m   Compiling[0m icu_provider v2.2.0
@@ -456,36 +456,36 @@ computing gzip size...
 [1m[92m   Compiling[0m tracing-core v0.1.36
 [1m[92m   Compiling[0m icu_properties_data v2.2.0
 [1m[92m   Compiling[0m icu_normalizer_data v2.2.0
-[1m[92m   Compiling[0m futures-task v0.3.33
-[1m[92m   Compiling[0m zeroize v1.9.0
-[1m[92m   Compiling[0m tower-service v0.3.3
-[1m[92m   Compiling[0m tracing v0.1.44
 [1m[92m   Compiling[0m slab v0.4.12
-[1m[92m   Compiling[0m futures-util v0.3.33
+[1m[92m   Compiling[0m zeroize v1.9.0
+[1m[92m   Compiling[0m tracing v0.1.44
+[1m[92m   Compiling[0m tower-service v0.3.3
+[1m[92m   Compiling[0m futures-task v0.3.33
 [1m[92m   Compiling[0m rustls-pki-types v1.15.1
 [1m[92m   Compiling[0m icu_normalizer v2.2.0
+[1m[92m   Compiling[0m futures-util v0.3.33
 [1m[92m   Compiling[0m icu_properties v2.2.0
 [1m[92m   Compiling[0m serde_core v1.0.229
 [1m[92m   Compiling[0m form_urlencoded v1.2.2
 [1m[92m   Compiling[0m getrandom v0.2.17
 [1m[92m   Compiling[0m untrusted v0.9.0
-[1m[92m   Compiling[0m try-lock v0.2.5
 [1m[92m   Compiling[0m httpdate v1.0.3
+[1m[92m   Compiling[0m try-lock v0.2.5
 [1m[92m   Compiling[0m want v0.3.1
 [1m[92m   Compiling[0m ring v0.17.14
 [1m[92m   Compiling[0m idna_adapter v1.2.2
 [1m[92m   Compiling[0m httparse v1.10.1
 [1m[92m   Compiling[0m sync_wrapper v1.0.2
 [1m[92m   Compiling[0m futures-channel v0.3.33
-[1m[92m   Compiling[0m typenum v1.20.1
 [1m[92m   Compiling[0m tower-layer v0.3.3
-[1m[92m   Compiling[0m unicase v2.9.0
+[1m[92m   Compiling[0m typenum v1.20.1
 [1m[92m   Compiling[0m atomic-waker v1.1.2
 [1m[92m   Compiling[0m mime v0.3.17
+[1m[92m   Compiling[0m unicase v2.9.0
+[1m[92m   Compiling[0m mime_guess v2.0.5
 [1m[92m   Compiling[0m generic-array v0.14.7
 [1m[92m   Compiling[0m rustls-webpki v0.103.14
 [1m[92m   Compiling[0m hyper v1.11.0
-[1m[92m   Compiling[0m mime_guess v2.0.5
 [1m[92m   Compiling[0m idna v1.1.0
 [1m[92m   Compiling[0m zerocopy v0.8.56
 [1m[92m   Compiling[0m http-body-util v0.1.4
@@ -498,51 +498,51 @@ computing gzip size...
 [1m[92m   Compiling[0m url v2.5.8
 [1m[92m   Compiling[0m zmij v1.0.23
 [1m[92m   Compiling[0m tower v0.5.3
-[1m[92m   Compiling[0m futures-sink v0.3.33
 [1m[92m   Compiling[0m bitflags v2.13.1
-[1m[92m   Compiling[0m ryu v1.0.23
 [1m[92m   Compiling[0m memchr v2.8.3
-[1m[92m   Compiling[0m serde_urlencoded v0.7.1
-[1m[92m   Compiling[0m tokio-util v0.7.19
 [1m[92m   Compiling[0m ahash v0.8.12
+[1m[92m   Compiling[0m futures-sink v0.3.33
+[1m[92m   Compiling[0m ryu v1.0.23
 [1m[92m   Compiling[0m hashbrown v0.14.5
-[1m[92m   Compiling[0m serde_json v1.0.151
-[1m[92m   Compiling[0m num-traits v0.2.19
+[1m[92m   Compiling[0m serde_urlencoded v0.7.1
 [1m[92m   Compiling[0m tokio-rustls v0.26.4
-[1m[92m   Compiling[0m crypto-common v0.1.7
+[1m[92m   Compiling[0m serde_json v1.0.151
+[1m[92m   Compiling[0m tokio-util v0.7.19
+[1m[92m   Compiling[0m num-traits v0.2.19
 [1m[92m   Compiling[0m block-buffer v0.10.4
+[1m[92m   Compiling[0m crypto-common v0.1.7
 [1m[92m   Compiling[0m webpki-roots v1.0.9
-[1m[92m   Compiling[0m option-ext v0.2.0
 [1m[92m   Compiling[0m http-range-header v0.4.2
+[1m[92m   Compiling[0m option-ext v0.2.0
 [1m[92m   Compiling[0m dirs-sys v0.5.0
+[1m[92m   Compiling[0m chrono v0.4.45
 [1m[92m   Compiling[0m tower-http v0.6.11
 [1m[92m   Compiling[0m hyper-rustls v0.27.9
 [1m[92m   Compiling[0m digest v0.10.7
 [1m[92m   Compiling[0m libsqlite3-sys v0.30.1
-[1m[92m   Compiling[0m chrono v0.4.45
 [1m[92m   Compiling[0m hashlink v0.9.1
 [1m[92m   Compiling[0m axum-core v0.5.6
 [1m[92m   Compiling[0m serde_path_to_error v0.1.20
-[1m[92m   Compiling[0m cpufeatures v0.3.0
-[1m[92m   Compiling[0m fallible-iterator v0.3.0
-[1m[92m   Compiling[0m fallible-streaming-iterator v0.1.9
-[1m[92m   Compiling[0m matchit v0.8.4
-[1m[92m   Compiling[0m cpufeatures v0.2.17
 [1m[92m   Compiling[0m arrayref v0.3.9
-[1m[92m   Compiling[0m siphasher v1.0.3
+[1m[92m   Compiling[0m fallible-iterator v0.3.0
+[1m[92m   Compiling[0m matchit v0.8.4
 [1m[92m   Compiling[0m constant_time_eq v0.4.2
+[1m[92m   Compiling[0m cpufeatures v0.2.17
 [1m[92m   Compiling[0m arrayvec v0.7.8
+[1m[92m   Compiling[0m siphasher v1.0.3
+[1m[92m   Compiling[0m cpufeatures v0.3.0
+[1m[92m   Compiling[0m fallible-streaming-iterator v0.1.9
+[1m[92m   Compiling[0m rusqlite v0.32.1
 [1m[92m   Compiling[0m phf_shared v0.12.1
 [1m[92m   Compiling[0m blake3 v1.8.6
 [1m[92m   Compiling[0m axum v0.8.9
 [1m[92m   Compiling[0m sha2 v0.10.9
-[1m[92m   Compiling[0m rusqlite v0.32.1
 [1m[92m   Compiling[0m reqwest v0.12.28
 [1m[92m   Compiling[0m directories v6.0.0
 [1m[92m   Compiling[0m webbrowser v1.2.4
+[1m[92m   Compiling[0m chrono-tz v0.10.4
 [1m[92m   Compiling[0m semver v1.0.28
 [1m[92m   Compiling[0m uuid v1.24.0
-[1m[92m   Compiling[0m chrono-tz v0.10.4
 [1m[92m   Compiling[0m phf v0.12.1
 [1m[92m   Compiling[0m mini-usage v0.1.3 (/home/runner/work/MiniUsage/MiniUsage)
 [1m[33mwarning[0m[1m: unused imports: `CostEstimateError`, `CostEstimationError`, and `EstimatedCost`[0m
@@ -560,14 +560,6 @@ computing gzip size...
    [1m[94m|[0m     [1m[33m^^^^^^^^^^^^^^^^^^^^^^^[0m                            [1m[33m^^^^^^^^^^^^^^^^^^^^[0m  [1m[33m^^^^^^^^^^^^^^^^^^^[0m
 [1m[94m10[0m [1m[94m|[0m     GPT_5_6_TERRA_PRICING, LongContextPolicy, ModelPricing, PricingRepository, TokenRates,
    [1m[94m|[0m     [1m[33m^^^^^^^^^^^^^^^^^^^^^[0m  [1m[33m^^^^^^^^^^^^^^^^^[0m                [1m[33m^^^^^^^^^^^^^^^^^[0m  [1m[33m^^^^^^^^^^[0m
-
-[1m[33mwarning[0m[1m: unused imports: `BUNDLED_PRICING_CATALOG`, `GPT_5_6_LUNA_PRICING`, `GPT_5_6_SOL_PRICING`, `GPT_5_6_TERRA_PRICING`, `LongContextPolicy`, and `PricingRepository`[0m
-  [1m[94m--> [0msrc/cost/mod.rs:9:5
-   [1m[94m|[0m
-[1m[94m 9[0m [1m[94m|[0m     BUNDLED_PRICING_CATALOG, BundledPricingRepository, GPT_5_6_LUNA_PRICING, GPT_5_6_SOL_PRICING,
-   [1m[94m|[0m     [1m[33m^^^^^^^^^^^^^^^^^^^^^^^[0m                            [1m[33m^^^^^^^^^^^^^^^^^^^^[0m  [1m[33m^^^^^^^^^^^^^^^^^^^[0m
-[1m[94m10[0m [1m[94m|[0m     GPT_5_6_TERRA_PRICING, LongContextPolicy, ModelPricing, PricingRepository, TokenRates,
-   [1m[94m|[0m     [1m[33m^^^^^^^^^^^^^^^^^^^^^[0m  [1m[33m^^^^^^^^^^^^^^^^^[0m                [1m[33m^^^^^^^^^^^^^^^^^[0m
 
 [1m[33mwarning[0m[1m: type alias `CostEstimateError` is never used[0m
   [1m[94m--> [0msrc/cost/estimator.rs:43:10
@@ -607,6 +599,14 @@ computing gzip size...
 [1m[94m1736[0m [1m[94m|[0m fn compare_sort_aggregates(
      [1m[94m|[0m    [1m[33m^^^^^^^^^^^^^^^^^^^^^^^[0m
 
+[1m[33mwarning[0m[1m: unused imports: `BUNDLED_PRICING_CATALOG`, `GPT_5_6_LUNA_PRICING`, `GPT_5_6_SOL_PRICING`, `GPT_5_6_TERRA_PRICING`, `LongContextPolicy`, and `PricingRepository`[0m
+  [1m[94m--> [0msrc/cost/mod.rs:9:5
+   [1m[94m|[0m
+[1m[94m 9[0m [1m[94m|[0m     BUNDLED_PRICING_CATALOG, BundledPricingRepository, GPT_5_6_LUNA_PRICING, GPT_5_6_SOL_PRICING,
+   [1m[94m|[0m     [1m[33m^^^^^^^^^^^^^^^^^^^^^^^[0m                            [1m[33m^^^^^^^^^^^^^^^^^^^^[0m  [1m[33m^^^^^^^^^^^^^^^^^^^[0m
+[1m[94m10[0m [1m[94m|[0m     GPT_5_6_TERRA_PRICING, LongContextPolicy, ModelPricing, PricingRepository, TokenRates,
+   [1m[94m|[0m     [1m[33m^^^^^^^^^^^^^^^^^^^^^[0m  [1m[33m^^^^^^^^^^^^^^^^^[0m                [1m[33m^^^^^^^^^^^^^^^^^[0m
+
 [1m[33mwarning[0m[1m: variant `Delay` is never constructed[0m
    [1m[94m--> [0msrc/scanner/coordinator.rs:893:9
     [1m[94m|[0m
@@ -620,7 +620,7 @@ computing gzip size...
 
 [1m[33mwarning[0m: `mini-usage` (lib) generated 7 warnings (run `cargo fix --lib -p mini-usage` to apply 2 suggestions)
 [1m[33mwarning[0m: `mini-usage` (lib test) generated 8 warnings (6 duplicates) (run `cargo fix --lib -p mini-usage --tests` to apply 1 suggestion)
-[1m[92m    Finished[0m `test` profile [unoptimized + debuginfo] target(s) in 40.30s
+[1m[92m    Finished[0m `test` profile [unoptimized + debuginfo] target(s) in 38.74s
 [1m[92m     Running[0m unittests src/lib.rs (target/debug/deps/mini_usage-6dd413d6c66705de)
 
 running 281 tests
@@ -629,51 +629,49 @@ test api::query::tests::t_mu04_c03_api_cost_status_contract ... ok
 test api::query::tests::t_s05_008_idle_running_queued_and_first_import_projection_matrix ... ok
 test api::query::tests::t_s05_004_006_dto_mapping_preserves_cache_semantics_cost_and_model_sort ... ok
 test api::query::tests::t_s05_008_status_mapping_covers_projection_followup_target_and_nullable_fields ... ok
-test api::live::tests::refresh_validates_before_request_and_maps_durable_ack_without_waiting_for_scan ... ok
 test api::query::tests::t_s05_019_busy_overflow_and_internal_failures_collapse_to_safe_api_codes ... ok
+test api::live::tests::refresh_validates_before_request_and_maps_durable_ack_without_waiting_for_scan ... ok
 test api::query::tests::t_s06_001_summary_query_parser_matrix ... ok
-test api::tests::listen_contract_is_fixed_loopback_only ... ok
 test api::live::tests::refresh_maps_all_safe_coordinator_failures ... ok
+test api::tests::listen_contract_is_fixed_loopback_only ... ok
 test api::tests::health_exposes_exact_launcher_markers ... ok
 test api::tests::spec05_p2::t_s05_016_sse_slow_receiver_coalesces_and_disconnects_stay_bounded ... ignored, Spec05 P2 SSE pressure gate; run explicitly with --ignored
-test api::tests::spec05_concurrency::t_s05_021_blocked_sqlite_query_does_not_block_tokio_executor ... ok
 test api::tests::service_control_stops_the_scanner_and_requests_full_process_shutdown ... ok
+test api::tests::spec05_concurrency::t_s05_021_blocked_sqlite_query_does_not_block_tokio_executor ... ok
 test api::tests::spec05_concurrency::t_s05_019_real_sqlite_busy_refresh_returns_only_safe_code ... ok
 test api::tests::t_dist_008_concurrent_check_requests_share_one_provider_call ... ok
 test api::tests::t_dist_008_status_dto_is_fixed_and_does_not_check_provider ... ok
-test api::tests::t_dist_008_check_requires_active_header_and_maps_success_or_failure_safely ... ok
 test api::tests::t_dist_008_update_routes_keep_existing_http_security_guard ... ok
 test codex::global_state::tests::t_s02_001_global_state_matrix_is_typed_and_privacy_safe ... ok
 test codex::global_state::tests::t_s02_001_missing_and_unreadable_sources_are_distinct ... ok
-test codex::metadata::tests::a_self_loop_is_conflict_and_never_produces_a_root ... ok
 test codex::metadata::tests::a_late_parent_recomputes_the_child_root ... ok
+test codex::metadata::tests::a_self_loop_is_conflict_and_never_produces_a_root ... ok
 test codex::metadata::tests::direct_rollout_parent_resolves_without_a_state_spawn_edge ... ok
 test codex::metadata::tests::fixed_source_priority_and_null_keep_are_deterministic ... ok
-test api::tests::t_s06_002_http_compatibility_and_filter_boundary_matrix ... ok
 test codex::metadata::tests::missing_parent_multi_parent_cycle_and_unknown_are_safe ... ok
 test codex::metadata::tests::newer_and_provenance_ranked_facts_are_stable_conflicting_and_private ... ok
 test codex::metadata::tests::state_edge_and_direct_parent_same_value_are_consistent ... ok
 test codex::metadata::tests::state_edge_wins_over_conflicting_direct_parent_but_marks_conflict ... ok
 test codex::metadata::tests::state_edge_wins_over_rollout_hint_and_role_conflict_is_unknown ... ok
-test codex::metadata::tests::t_mu03_a02_main_never_uses_agent_path_title ... ok
 test codex::metadata::tests::state_title_unavailable_keep_and_unchanged_output_are_deterministic ... ok
+test codex::metadata::tests::t_mu03_a02_agent_path_title_format_and_priority ... ok
+test codex::metadata::tests::t_mu03_a02_main_never_uses_agent_path_title ... ok
 test codex::metadata::tests::t_mu03_a02_unavailable_state_preserves_existing_title_but_allows_subagent_fallback ... ok
 test codex::metadata::tests::t_s03_001_project_kind_resolution_matrix_uses_only_global_state_identity ... ok
-test codex::metadata::tests::t_mu03_a02_agent_path_title_format_and_priority ... ok
+test codex::metadata::tests::t_s03_002_global_state_unavailable_preserves_existing_and_recovers_idempotently ... ok
 test codex::metadata::tests::two_level_subagent_chain_resolves_one_root ... ok
 test codex::metadata::tests::unavailable_relationships_require_explicit_main_evidence ... ok
-test codex::metadata::tests::t_s03_002_global_state_unavailable_preserves_existing_and_recovers_idempotently ... ok
-test codex::rollout::tests::conflicting_state_path_and_filename_candidates_require_rebuild ... ok
 test codex::rollout::tests::agent_path_safe_fact_conversion_preserves_provenance_and_offset ... ok
+test codex::rollout::tests::conflicting_state_path_and_filename_candidates_require_rebuild ... ok
 test codex::rollout::tests::direct_and_fork_conflict_keeps_direct_winner_and_marks_conflict ... ok
-test codex::rollout::tests::direct_and_nested_same_parent_is_consistent ... ok
 test codex::rollout::tests::direct_and_nested_conflict_keeps_direct_winner_and_marks_conflict ... ok
+test codex::rollout::tests::direct_and_nested_same_parent_is_consistent ... ok
 test codex::rollout::tests::eof_in_replayed_ancestor_is_stable_resumable_continuation ... ok
 test codex::rollout::tests::guardian_direct_parent_and_other_source_are_safe_facts ... ok
-test codex::rollout::tests::missing_owning_meta_and_external_id_keeps_records_unknown ... ok
 test codex::rollout::tests::ignored_unknown_and_malformed_records_never_leak_body_sentinel ... ok
-test codex::rollout::tests::nonzero_replayed_ancestor_resume_stays_replay_until_owning_boundary ... ok
+test codex::rollout::tests::missing_owning_meta_and_external_id_keeps_records_unknown ... ok
 test codex::rollout::tests::multiple_turn_models_choose_latest_and_equal_time_later_offset_conflicts ... ok
+test codex::rollout::tests::nonzero_replayed_ancestor_resume_stays_replay_until_owning_boundary ... ok
 test codex::rollout::tests::nonzero_resume_with_late_foreign_meta_requires_rebuild ... ok
 test codex::rollout::tests::normal_nonzero_owning_live_resume_restores_model_ordering_seam ... ok
 test codex::rollout::tests::normalize_agent_path_is_lexical_root_namespace_only ... ok
@@ -681,9 +679,9 @@ test codex::rollout::tests::parent_candidates_use_priority_but_preserve_every_co
 test codex::rollout::tests::parses_main_rollout_whitelist_and_envelopes ... ok
 test codex::rollout::tests::repeated_direct_parent_conflict_keeps_first_trusted_value ... ok
 test codex::rollout::tests::session_meta_agent_path_uses_priority_and_marks_conflict ... ok
+test codex::rollout::tests::subagent_replay_switches_only_at_uuid7_owning_turn_boundary ... ok
 test codex::rollout::tests::thread_spawn_agent_path_is_retained_with_thread_spawn_provenance ... ok
 test codex::session_index::tests::empty_title_and_invalid_json_do_not_block_a_later_valid_row ... ok
-test codex::rollout::tests::subagent_replay_switches_only_at_uuid7_owning_turn_boundary ... ok
 test codex::session_index::tests::newer_name_wins_and_a_later_older_row_cannot_replace_it ... ok
 test codex::session_index::tests::oversized_line_and_oversized_title_are_rejected_without_truncation ... ok
 test codex::session_index::tests::parses_and_trims_thread_name_with_rfc3339_time ... ok
@@ -691,11 +689,13 @@ test codex::session_index::tests::same_timestamp_conflict_uses_the_later_row_and
 test codex::session_index::tests::trailing_half_line_is_not_a_fact ... ok
 test codex::skill_usage::tests::t_013_003_skill_listing_message_and_missing_timestamp_are_not_usage ... ok
 test codex::skill_usage::tests::t_013_003_skill_locator_is_cross_platform_and_deduplicated_per_call ... ok
-test codex::state_index::tests::id_only_and_missing_optional_columns_degrade_without_guessing ... ok
-test codex::state_index::tests::complete_schema_reads_only_allowlisted_thread_and_edge_facts ... ok
+test api::tests::t_dist_008_check_requires_active_header_and_maps_success_or_failure_safely ... ok
 test codex::state_index::tests::absent_spawn_table_allows_rollout_parent_but_never_infers_main ... ok
-test codex::state_index::tests::missing_threads_table_or_id_marks_the_source_unavailable ... ok
+test codex::state_index::tests::complete_schema_reads_only_allowlisted_thread_and_edge_facts ... ok
+test api::tests::t_s06_002_http_compatibility_and_filter_boundary_matrix ... ok
+test codex::state_index::tests::id_only_and_missing_optional_columns_degrade_without_guessing ... ok
 test codex::state_index::tests::query_columns_are_allowlisted_and_adapter_connection_is_read_only ... ok
+test codex::state_index::tests::missing_threads_table_or_id_marks_the_source_unavailable ... ok
 test codex::state_index::tests::reads_optional_agent_path_only_when_schema_exposes_it ... ok
 test codex::usage::tests::t_dc_011_to_017_parser_boundary_and_two_state_mapping ... ok
 test codex::usage::tests::t_dc_014_required_raw_invalid_matrix ... ok
@@ -707,13 +707,13 @@ test cost::pricing::tests::t_mu03_b01_pricing_catalog_contract ... ok
 test cost::pricing::tests::t_mu04_a01_pricing_alias_matrix ... ok
 test domain::tests::agent_path_safe_fact_requires_complete_non_negative_provenance ... ok
 test domain::tests::canonical_algorithm_and_usage_epoch_are_versioned ... ok
+test codex::state_index::tests::seconds_and_milliseconds_are_normalized_with_milliseconds_preferred ... ok
 test domain::tests::clear_requires_full_resolution_and_role_cannot_clear ... ok
 test domain::tests::internal_metadata_validation_path_is_platform_absolute ... ok
 test domain::tests::metadata_checkpoint_advance_checks_source_id_argument ... ok
 test domain::tests::metadata_group_rejects_empty_patch_only_group ... ok
-test codex::state_index::tests::seconds_and_milliseconds_are_normalized_with_milliseconds_preferred ... ok
-test domain::tests::persisted_error_codes_reject_text_and_privacy_sentinels ... ok
 test domain::tests::replacement_can_report_unchanged_when_usage_build_is_absent ... ok
+test domain::tests::persisted_error_codes_reject_text_and_privacy_sentinels ... ok
 test domain::tests::safe_fact_requires_all_provenance_columns ... ok
 test domain::tests::scan_run_state_checks_terminal_fields ... ok
 test domain::tests::scan_state_enforces_projection_invariants ... ok
@@ -722,11 +722,10 @@ test domain::tests::source_and_checkpoint_reject_invalid_boundaries ... ok
 test domain::tests::source_observation_batch_requires_both_region_proofs ... ok
 test domain::tests::source_observation_rejects_negative_file_times ... ok
 test launcher::tests::bind_first_returns_listener_without_starting_workers ... ok
-test api::tests::t_dist_008_open_release_requires_valid_state_and_preserves_state_on_browser_failure ... ok
+test launcher::tests::exact_health_marker_identifies_existing_mini_usage ... ok
 test launcher::tests::production_listener_is_loopback_not_unspecified ... ok
 test platform::browser::tests::dashboard_open_uses_fixed_loopback_url ... ok
 test platform::file_identity::tests::t_dist_003_identity_is_stable_and_does_not_use_path ... ok
-test launcher::tests::exact_health_marker_identifies_existing_mini_usage ... ok
 test platform::file_identity::tests::t_dist_003_replacement_gets_a_new_identity ... ok
 test platform::paths::tests::t_dist_002_default_database_path_keeps_historical_suffix ... ok
 test platform::paths::tests::t_dist_002_explicit_env_default_precedence_and_empty_env ... ok
@@ -734,21 +733,22 @@ test platform::paths::tests::t_dist_002_unicode_and_parent_components_are_preser
 test range::spec05_p2::t_s05_002_skipped_date_and_rare_tzdb_boundaries_are_deterministic ... ok
 test range::tests::embedded_loader_rejects_invalid_timezone_names ... ok
 test range::tests::embedded_provider_resolves_named_dst_boundaries_without_tzif_files ... ok
+test range::tests::named_range_matrix_covers_calendar_boundaries_and_transition_rules ... ok
 test range::tests::timezone_provider_validates_injected_system_names ... ok
 test scanner::chunk_reader::tests::fixed_view_does_not_expand_for_an_append_after_discovery ... ok
 test scanner::chunk_reader::tests::guard_matches_an_append_and_rejects_a_seam_rewrite ... ok
 test scanner::chunk_reader::tests::guard_window_has_an_exact_4096_byte_boundary ... ok
-test range::tests::named_range_matrix_covers_calendar_boundaries_and_transition_rules ... ok
+test codex::usage::tests::parser_lifecycle_aliases_unknown_records_and_boundaries_are_safe ... ok
 test scanner::chunk_reader::tests::plan_validation_and_checkpoint_bounds_matrix ... ok
 test scanner::chunk_reader::tests::spec04_p2::t_s04_052_one_gib_bounded_reader_keeps_batches_and_process_memory_bounded ... ignored, P2 final resource test: writes and reads an actual 1 GiB rollout
 test scanner::chunk_reader::tests::t_dist_003_replacement_and_truncation_races_never_return_success ... ok
-test codex::usage::tests::parser_lifecycle_aliases_unknown_records_and_boundaries_are_safe ... ok
+test api::tests::t_dist_008_open_release_requires_valid_state_and_preserves_state_on_browser_failure ... ok
 test scanner::coordinator::tests::concurrent_requests_share_one_durable_followup_and_ack ... ok
 test scanner::chunk_reader::tests::usage_line_limits_keep_four_to_eight_mib_legal_and_stream_oversized_body ... ok
-test scanner::chunk_reader::tests::line_reader_combines_lf_crlf_half_line_and_oversized_cases ... ok
 test launcher::tests::occupied_non_mini_usage_port_is_an_explicit_error ... ok
+test scanner::chunk_reader::tests::line_reader_combines_lf_crlf_half_line_and_oversized_cases ... ok
 test scanner::coordinator::tests::recovery_prefers_queued_and_shutdown_persists_both_terminal_states ... ok
-test scanner::coordinator::tests::real_timer_skips_missed_ticks_growth_does_not_self_enqueue_and_empty_completion_is_status_only ... ok
+test scanner::coordinator::tests::followup_start_busy_and_terminal_failure_matrix_preserve_the_durable_slot ... ok
 test scanner::coordinator::tests::request_commit_error_matrix_and_failed_state_manual_start_are_linearized ... ok
 test scanner::discovery::tests::missing_roots_are_complete_and_an_unreadable_root_is_unavailable ... ok
 test scanner::discovery::tests::physical_alias_choice_and_output_order_are_deterministic ... ok
@@ -756,7 +756,7 @@ test scanner::discovery::tests::recursively_discovers_both_areas_filters_entries
 test scanner::discovery::tests::t_dist_004_discovery_uses_real_identity_without_reading_body ... ok
 test scanner::pipeline::tests::crash_windows_read_old_checkpoint_until_commit_then_skip ... ok
 test scanner::pipeline::tests::error_and_nonzero_resume_require_guard_binding_and_stable_owning_fact ... ok
-test scanner::coordinator::tests::followup_start_busy_and_terminal_failure_matrix_preserve_the_durable_slot ... ok
+test scanner::coordinator::tests::real_timer_skips_missed_ticks_growth_does_not_self_enqueue_and_empty_completion_is_status_only ... ok
 test scanner::pipeline::tests::planning_matrix_rebuilds_out_of_range_versions_pending_and_unstable_state ... ok
 test scanner::coordinator::tests::startup_is_immediate_timer_is_not_and_interval_is_validated ... ok
 test scanner::pipeline::tests::identity_lifecycle_matrix_preserves_moves_and_rebuilds_content_generations ... ok
@@ -775,13 +775,13 @@ test scanner::tests::stable_usage_round_loads_only_the_empty_worklist ... ok
 test scanner::tests::stale_guardian_fact_replays_from_zero_and_leaves_usage_checkpoint_untouched ... ok
 test scanner::usage_consumer::resilience_tests::repeated_shadow_rebuild_data_failure_is_session_scoped_only ... ok
 test storage::cost::tests::event_granularity_matches_persisted_kinds ... ok
-test scanner::tests::worker_does_not_commit_unconfirmed_source_and_marks_unavailable_snapshots_failed ... ok
 test scanner::tests::usage_round_honors_the_frozen_discovery_boundary ... ok
+test scanner::tests::worker_does_not_commit_unconfirmed_source_and_marks_unavailable_snapshots_failed ... ok
 test storage::lifecycle::tests::direct_start_and_target_snapshot_share_started_revision ... ok
-test storage::lifecycle::tests::failed_cas_and_duplicate_scan_id_roll_back_row_and_projection_together ... ok
-test scanner::tests::worker_imports_both_regions_and_keeps_metadata_checkpoint_isolated ... ok
 test storage::lifecycle::tests::failed_scan_accepts_cancelled_and_interrupted_codes_and_preserves_history ... ok
+test storage::lifecycle::tests::failed_cas_and_duplicate_scan_id_roll_back_row_and_projection_together ... ok
 test storage::lifecycle::tests::followup_reservation_coalesces_without_revision_or_id_churn ... ok
+test scanner::tests::worker_imports_both_regions_and_keeps_metadata_checkpoint_isolated ... ok
 test storage::lifecycle::tests::source_changed_and_invalid_start_failure_do_not_write_lifecycle_state ... ok
 test storage::lifecycle::tests::stale_target_cannot_complete_new_active_scan_and_failed_status_does_not_change_data_revision ... ok
 test storage::lifecycle::tests::start_failed_is_terminal_but_direct_start_clears_only_the_projection_slot ... ok
@@ -793,8 +793,8 @@ test storage::metadata::tests::generation_id_and_provenance_conflicts_are_reject
 test storage::metadata::tests::keep_set_and_full_resolution_clear_have_expected_effects ... ok
 test storage::metadata::tests::patch_only_creates_and_reapplies_a_thread_without_sources ... ok
 test storage::metadata::tests::source_changed_codex_home_blocks_metadata_writes ... ok
-test storage::metadata::tests::multiple_sources_commit_as_one_group_and_rollback_together ... ok
 test storage::metadata::tests::source_only_repeat_does_not_advance_data_revision ... ok
+test storage::metadata::tests::multiple_sources_commit_as_one_group_and_rollback_together ... ok
 test storage::metadata::tests::spec04_first_binding_reconciles_build_in_same_metadata_transaction ... ok
 test storage::metadata::tests::stale_patch_rolls_back_source_and_checkpoint ... ok
 test storage::metadata::tests::t_s01_002_project_kind_is_stable_metadata_and_preserves_project_facts ... ok
@@ -804,15 +804,15 @@ test storage::metadata::tests::usage_checkpoint_is_not_modified_by_metadata_comm
 test storage::migrations::tests::m4_03_failed_v3_to_v4_migration_rolls_back_atomically ... ok
 test storage::migrations::tests::m4_02_v3_to_v4_preserves_real_shaped_metadata_and_usage_state ... ok
 test storage::migrations::tests::t_dc_028_failed_migration_rolls_back_to_v2_schema_and_version ... ok
-test storage::migrations::tests::s4_s5_runtime_reads_upgraded_v3_database_without_dead_column_errors ... ok
 test storage::migrations::tests::t_dc_026_fresh_schema_is_v8_and_has_only_canonical_columns ... ok
 test storage::migrations::tests::t_dc_027_v2_rows_migrate_without_losing_canonical_values_or_occurrences ... ok
+test storage::migrations::tests::s4_s5_runtime_reads_upgraded_v3_database_without_dead_column_errors ... ok
 test storage::migrations::tests::t_dc_029_v2_parser_and_canonical_versions_are_not_promoted ... ok
 test storage::migrations::tests::t_s01_001_project_kind_migration_backfills_and_rejects_invalid_values ... ok
 test storage::migrations::tests::usage_epoch_checkpoint_and_canonical_constraints_matrix ... ok
 test storage::migrations::tests::v1_upgrade_preserves_metadata_and_installs_v8_resilience_schema ... ok
-test storage::source::tests::complete_region_marks_only_unobserved_present_sources_missing ... ok
 test storage::source::tests::checkpoint_rebuild_isolated_to_requested_consumer ... ok
+test storage::source::tests::complete_region_marks_only_unobserved_present_sources_missing ... ok
 test storage::migrations::tests::t_mu03_s01_v7_features_survive_v8_upgrade_idempotence_and_rollback ... ok
 test storage::source::tests::metadata_fact_matching_and_stale_states_are_explicit ... ok
 test storage::source::tests::missing_source_restores_by_identity_at_new_path_without_reset ... ok
@@ -822,8 +822,8 @@ test storage::source::tests::rebuild_rejects_missing_consumer_checkpoint ... ok
 test storage::source::tests::safe_fact_record_offsets_cannot_exceed_resolved_offset ... ok
 test storage::source::tests::source_changed_rejects_source_observation_write ... ok
 test storage::source::tests::spec04_build_observation_dispositions_are_atomic_and_preserve_required_boundary ... ok
-test storage::source::tests::spec04_source_observation_and_build_replacement_roll_back_together ... ok
 test storage::source::tests::two_sources_can_swap_paths_by_physical_identity ... ok
+test storage::source::tests::spec04_source_observation_and_build_replacement_roll_back_together ... ok
 test storage::tests::corrupt_database_is_not_removed ... ok
 test storage::tests::migration_failure_rolls_back_schema_and_version ... ok
 test storage::source::tests::unavailable_region_preserves_existing_source_status ... ok
@@ -906,7 +906,7 @@ test usage::rebuild::tests::replacement_preserves_unaffected_build_progress_and_
 test storage::usage::tests::spec04_p2::t_s04_050_carry_four_phase_mismatch_replaces_only_affected_member ... ok
 test storage::usage::tests::spec04_p2::t_s04_051_durable_carry_pages_resume_after_reopen_and_finalize_only_at_end ... ok
 
-test result: ok. 279 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 43.83s
+test result: ok. 279 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 44.76s
 
 [1m[92m     Running[0m unittests src/main.rs (target/debug/deps/mini_usage-e095dcf9ed19c1f7)
 
@@ -928,8 +928,8 @@ test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 
 running 3 tests
 test t_dist_011_ci_workflow_does_not_publish_release_assets ... ok
-test t_dist_011_ci_workflow_excludes_unsupported_macos_intel_targets ... ok
 test t_dist_011_ci_workflow_covers_required_matrix_and_commands ... ok
+test t_dist_011_ci_workflow_excludes_unsupported_macos_intel_targets ... ok
 
 test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
@@ -939,25 +939,125 @@ running 1 test
 test t_dist_006_launcher_lifecycle_matrix has been running for over 60 seconds
 test t_dist_006_launcher_lifecycle_matrix ... ok
 
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 111.47s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 107.10s
 
 [1m[92m     Running[0m tests/distribution_public_repo_guard.rs (target/debug/deps/distribution_public_repo_guard-a58969286ad64059)
 
 running 1 test
-test t_dist_010_public_repository_static_guard ... FAILED
+test t_dist_010_public_repository_static_guard ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.20s
+
+[1m[92m     Running[0m tests/distribution_release_guard.rs (target/debug/deps/distribution_release_guard-24c1e084f60cd7a5)
+
+running 5 tests
+test packager_metadata_uses_cargo_identity_without_runtime_resources_or_signing ... ok
+test t_dist_012_release_jobs_build_only_supported_assets ... ok
+test t_dist_012_release_workflow_is_tag_gated_and_allows_explicit_dispatch ... ok
+test t_dist_014_macos_release_has_arm64_clean_runtime_smoke ... ok
+test t_dist_013_windows_release_has_static_runtime_and_install_smoke ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+[1m[92m     Running[0m tests/distribution_runtime_integration.rs (target/debug/deps/distribution_runtime_integration-9028413b3b347230)
+
+running 1 test
+test t_dist_005_release_binary_serves_embedded_frontend_outside_repository ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 29.39s
+
+[1m[92m     Running[0m tests/replayed_ancestor_regression.rs (target/debug/deps/replayed_ancestor_regression-e4924d8523937464)
+
+running 3 tests
+test unstable_nonzero_metadata_checkpoint_stays_rejected ... ok
+test replayed_ancestor_nonzero_metadata_checkpoint_is_storage_legal ... ok
+test startup_replay_tail_scan_completes_and_activates_usage ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.30s
+
+[1m[92m     Running[0m tests/spec01_storage_integration.rs (target/debug/deps/spec01_storage_integration-03d077dd0182f509)
+
+running 9 tests
+test t_mu03_a01_agent_path_safe_fact_provenance_round_trip_and_offset_bound ... ok
+test t_s01_002_source_identity_database_constraints_matrix ... ok
+test t_s01_001_v1_schema_initial_state_pragmas_and_reopen_matrix ... ok
+test t_s01_005_safe_fact_reuse_mismatch_matrix ... ok
+test t_s01_011_generation_change_deletes_persisted_safe_fact ... ok
+test t_s01_013_deleting_source_cascades_all_consumer_checkpoints ... ok
+test t_s01_008_batch_metadata_state_is_one_sqlite_snapshot ... ok
+test t_s01_009_metadata_transaction_rollback_survives_reopen ... ok
+test t_s01_025_schema_and_test_fixtures_enforce_privacy_boundary ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.27s
+
+[1m[92m     Running[0m tests/spec02_metadata_integration.rs (target/debug/deps/spec02_metadata_integration-986840cd54128ed5)
+
+running 4 tests
+test t_s02_018_scanner_does_not_require_access_to_project_files ... ok
+test t_s02_019_late_foreign_meta_marks_metadata_rebuild ... ok
+test t_s02_014_present_rollout_missing_fact_blocks_patch_only_commit ... ok
+test t_s02_019_reopen_resumes_from_persisted_nonzero_safe_fact ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.52s
+
+[1m[92m     Running[0m tests/spec03_scanner_integration.rs (target/debug/deps/spec03_scanner_integration-1d8137669ba2afc3)
+
+running 4 tests
+test t_s03_019_state_unavailable_never_infers_main_without_explicit_evidence ... ok
+test t_s03_016_real_scanner_preserves_child_fact_across_parent_replay_until_owning_live ... ok
+test t_s03_017_missing_and_stale_safe_facts_force_real_worker_rebuild_from_zero ... ok
+test t_s03_009_real_ledger_crash_windows_resume_from_last_committed_offset ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.73s
+
+[1m[92m     Running[0m tests/spec04_mu04_integration.rs (target/debug/deps/spec04_mu04_integration-cabca7e7a61ddd18)
+
+running 2 tests
+test t_mu04_f01_single_fixture_closes_scanner_db_aggregate_api_contract ... ok
+test t_mu04_f02_parser4_pricing1_reprice_and_shadow_rebuild_stay_independent ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.25s
+
+[1m[92m     Running[0m tests/spec04_usage_integration.rs (target/debug/deps/spec04_usage_integration-4aab5965770bf9a2)
+
+running 14 tests
+test t_dc_030_runtime_canonical_crud_duplicate_and_reopen ... ok
+test t_mu03_f02_v5_upgrade_rebuilds_metadata_usage_and_cost_without_loss ... FAILED
+test t_mu03_s02_version_upgrades_remain_independent ... ok
+test t_hf_re04_shadow_rebuild_cross_batch_none_to_single_completes ... ok
+test t_mu03_s03_usage_v3_to_v5_rebuild_uses_rollout_effort_and_preserves_tokens ... ok
+test t_s04_010_026_035_046_047_real_scanner_builds_active_usage_and_dedupes_archive_copy ... ok
+test t_s04_007_008_009_013_014_031_032_043_045_047_incremental_recovery_half_line_and_queries ... ok
+test t_s04_018_t_s02_020_real_scanner_excludes_parent_replay_and_counts_child_after_owning_live ... ok
+test t_s04_019_root_unconfirmed_blocks_usage_then_parent_resolution_replays_once ... ok
+test t_s04_019_t_s02_020_late_foreign_meta_discards_preceding_usage_and_starts_rebuild ... ok
+test t_s04_053_full_incident_replays_guardian_repairs_blocked_build_and_activates_atomically ... FAILED
+test t_s04_033_036_037_040_042_missing_source_carries_active_facts_and_reactivates_atomically ... ok
+test t_s04_024_long_subagent_replay_prefix_persists_safe_resume_without_parent_usage ... ok
+test t_s04_030_041_buildfrom_multibatch_and_localreplay_over_budget_promotes_to_shadow_build ... ok
 
 failures:
 
----- t_dist_010_public_repository_static_guard stdout ----
+---- t_mu03_f02_v5_upgrade_rebuilds_metadata_usage_and_cost_without_loss stdout ----
 
-thread 't_dist_010_public_repository_static_guard' (8770) panicked at tests/distribution_public_repo_guard.rs:35:55:
-read /home/runner/work/MiniUsage/MiniUsage/.github/v013-failure.log: No such file or directory (os error 2)
+thread 't_mu03_f02_v5_upgrade_rebuilds_metadata_usage_and_cost_without_loss' (9071) panicked at tests/spec04_usage_integration.rs:718:5:
+assertion `left == right` failed
+  left: 9
+ right: 8
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 
+---- t_s04_053_full_incident_replays_guardian_repairs_blocked_build_and_activates_atomically stdout ----
+
+thread 't_s04_053_full_incident_replays_guardian_repairs_blocked_build_and_activates_atomically' (9115) panicked at tests/spec04_usage_integration.rs:396:5:
+assertion `left == right` failed
+  left: 9
+ right: 8
+
 
 failures:
-    t_dist_010_public_repository_static_guard
+    t_mu03_f02_v5_upgrade_rebuilds_metadata_usage_and_cost_without_loss
+    t_s04_053_full_incident_replays_guardian_repairs_blocked_build_and_activates_atomically
 
-test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+test result: FAILED. 12 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.00s
 
-[1m[91merror[0m: test failed, to rerun pass `--test distribution_public_repo_guard`
+[1m[91merror[0m: test failed, to rerun pass `--test spec04_usage_integration`
