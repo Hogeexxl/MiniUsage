@@ -1,6 +1,297 @@
 ===== hotfix =====
 ===== implement =====
-Traceback (most recent call last):
-  File "/home/runner/work/MiniUsage/MiniUsage/.github/scripts/v013-implement.py", line 508, in <module>
-    raise RuntimeError("pipeline: not all commit_dto calls received skill_events")
-RuntimeError: pipeline: not all commit_dto calls received skill_events
+v0.1.3 implementation applied
+===== rustfmt =====
+
+added 178 packages, and audited 179 packages in 3s
+
+31 packages are looking for funding
+  run `npm fund` for details
+
+2 vulnerabilities (1 moderate, 1 high)
+
+To address all issues, run:
+  npm audit fix
+
+Run `npm audit` for details.
+
+> mini-usage-frontend@0.1.0 test
+> vitest run
+
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.10 [39m[90m/home/runner/work/MiniUsage/MiniUsage/frontend[39m
+
+ [32m✓[39m src/data/miniUsageClient.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 51[2mms[22m[39m
+ [32m✓[39m src/dashboard/session/useSessionTableController.test.tsx [2m([22m[2m5 tests[22m[2m)[22m[33m 555[2mms[22m[39m
+ [32m✓[39m src/dashboard/useDashboardController.test.tsx [2m([22m[2m32 tests[22m[2m)[22m[33m 1182[2mms[22m[39m
+ [32m✓[39m src/dashboard/session/SessionDetailDrawer.test.tsx [2m([22m[2m6 tests[22m[2m)[22m[33m 1428[2mms[22m[39m
+     [33m[2m✓[22m[39m T-S09-001/T-MU03-C06 renders model-effort blocks and one independent Subagent block for single, unknown, and mixed effort [33m 820[2mms[22m[39m
+ [31m❯[39m src/dashboard/DashboardPage.test.tsx [2m([22m[2m15 tests[22m[2m | [22m[31m15 failed[39m[2m)[22m[33m 622[2mms[22m[39m
+[31m     [31m×[31m shows the last completed sync time with seconds[39m[32m 109[2mms[22m[39m
+[31m     [31m×[31m uses the existing empty-state dash before a sync has completed[39m[32m 46[2mms[22m[39m
+[31m     [31m×[31m keeps one shared revision transport active across StrictMode remounts[39m[32m 39[2mms[22m[39m
+[31m     [31m×[31m keeps a range's own snapshot and renders the Session section without navigation/charts[39m[32m 37[2mms[22m[39m
+[31m     [31m×[31m maps a failed load to fixed text and retains a stable snapshot[39m[32m 39[2mms[22m[39m
+[31m     [31m×[31m maps refresh HTTP errors 403/FORBIDDEN to 无法发起同步[39m[32m 37[2mms[22m[39m
+[31m     [31m×[31m maps refresh HTTP errors 409/SOURCE_CHANGED to 数据源已变化[39m[32m 47[2mms[22m[39m
+[31m     [31m×[31m maps refresh HTTP errors 500/SCAN_START_FAILED to 同步失败[39m[32m 64[2mms[22m[39m
+[31m     [31m×[31m renders tracking failure separately and offers only status retry[39m[32m 43[2mms[22m[39m
+[31m     [31m×[31m disables sync when status failed while summary remains available, then recovers via retry_load[39m[32m 27[2mms[22m[39m
+[31m     [31m×[31m keeps status-not-ready as the stable button priority when dependencies fail (status then summary)[39m[32m 33[2mms[22m[39m
+[31m     [31m×[31m keeps status-not-ready as the stable button priority when dependencies fail (summary then status)[39m[32m 28[2mms[22m[39m
+[31m     [31m×[31m keeps status-not-ready as the stable button priority when dependencies fail (status then revision)[39m[32m 21[2mms[22m[39m
+[31m     [31m×[31m keeps status-not-ready as the stable button priority when dependencies fail (revision then status)[39m[32m 23[2mms[22m[39m
+[31m     [31m×[31m enables sync after status retry while a summary failure remains visible[39m[32m 25[2mms[22m[39m
+ [32m✓[39m src/dashboard/session/useSessionDetailController.test.tsx [2m([22m[2m3 tests[22m[2m)[22m[32m 56[2mms[22m[39m
+ [32m✓[39m src/dashboard/useUpdateController.test.tsx [2m([22m[2m5 tests[22m[2m)[22m[33m 662[2mms[22m[39m
+     [33m[2m✓[22m[39m starts from status, checks manually, and keeps other controls enabled [33m 437[2mms[22m[39m
+ [32m✓[39m src/dashboard/MetricGrid.test.tsx [2m([22m[2m5 tests[22m[2m)[22m[33m 769[2mms[22m[39m
+     [33m[2m✓[22m[39m T-S08-001 renders the KPI card matrix without dropping source fields [33m 671[2mms[22m[39m
+ [32m✓[39m src/dashboard/session/SessionSection.test.tsx [2m([22m[2m5 tests[22m[2m)[22m[33m 1064[2mms[22m[39m
+     [33m[2m✓[22m[39m T-S07-001 renders the eight-column Session table and full integer values [33m 778[2mms[22m[39m
+ [32m✓[39m src/data/revisionFeed.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 15[2mms[22m[39m
+ [32m✓[39m src/dashboard/session/sessionFormat.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 16[2mms[22m[39m
+ [32m✓[39m src/dashboard/session/SessionTableRow.test.tsx [2m([22m[2m3 tests[22m[2m)[22m[33m 478[2mms[22m[39m
+     [33m[2m✓[22m[39m T-MU04-D01 keeps complete costs in the normal cell [33m 382[2mms[22m[39m
+ [32m✓[39m src/data/updateClient.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 38[2mms[22m[39m
+ [32m✓[39m src/dashboard/format.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+ [32m✓[39m src/dashboard/ServiceButton.test.tsx [2m([22m[2m2 tests[22m[2m)[22m[33m 410[2mms[22m[39m
+     [33m[2m✓[22m[39m shows the red stop action while running and becomes terminal after shutdown is accepted [33m 360[2mms[22m[39m
+ [32m✓[39m src/data/serviceClient.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 13[2mms[22m[39m
+ [32m✓[39m src/dashboard/charts/distribution.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m src/dashboard/scope.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 6[2mms[22m[39m
+ [31m❯[39m src/dashboard/RangeSelector.test.tsx [2m([22m[2m1 test[22m[2m | [22m[31m1 failed[39m[2m)[22m[32m 206[2mms[22m[39m
+[31m     [31m×[31m exposes the range group and pressed state[39m[32m 205[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 16 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m src/dashboard/DashboardPage.test.tsx[2m > [22mDashboardPage[2m > [22mshows the last completed sync time with seconds
+[41m[1m FAIL [22m[49m src/dashboard/DashboardPage.test.tsx[2m > [22mDashboardPage[2m > [22muses the existing empty-state dash before a sync has completed
+[41m[1m FAIL [22m[49m src/dashboard/DashboardPage.test.tsx[2m > [22mDashboardPage[2m > [22mkeeps a range's own snapshot and renders the Session section without navigation/charts
+[41m[1m FAIL [22m[49m src/dashboard/DashboardPage.test.tsx[2m > [22mDashboardPage[2m > [22mmaps a failed load to fixed text and retains a stable snapshot
+[41m[1m FAIL [22m[49m src/dashboard/DashboardPage.test.tsx[2m > [22mDashboardPage[2m > [22mmaps refresh HTTP errors 403/FORBIDDEN to 无法发起同步
+[41m[1m FAIL [22m[49m src/dashboard/DashboardPage.test.tsx[2m > [22mDashboardPage[2m > [22mmaps refresh HTTP errors 409/SOURCE_CHANGED to 数据源已变化
+[41m[1m FAIL [22m[49m src/dashboard/DashboardPage.test.tsx[2m > [22mDashboardPage[2m > [22mmaps refresh HTTP errors 500/SCAN_START_FAILED to 同步失败
+[41m[1m FAIL [22m[49m src/dashboard/DashboardPage.test.tsx[2m > [22mDashboardPage[2m > [22mrenders tracking failure separately and offers only status retry
+[41m[1m FAIL [22m[49m src/dashboard/DashboardPage.test.tsx[2m > [22mDashboardPage[2m > [22mdisables sync when status failed while summary remains available, then recovers via retry_load
+[41m[1m FAIL [22m[49m src/dashboard/DashboardPage.test.tsx[2m > [22mDashboardPage[2m > [22mkeeps status-not-ready as the stable button priority when dependencies fail (status then summary)
+[41m[1m FAIL [22m[49m src/dashboard/DashboardPage.test.tsx[2m > [22mDashboardPage[2m > [22mkeeps status-not-ready as the stable button priority when dependencies fail (summary then status)
+[41m[1m FAIL [22m[49m src/dashboard/DashboardPage.test.tsx[2m > [22mDashboardPage[2m > [22mkeeps status-not-ready as the stable button priority when dependencies fail (status then revision)
+[41m[1m FAIL [22m[49m src/dashboard/DashboardPage.test.tsx[2m > [22mDashboardPage[2m > [22mkeeps status-not-ready as the stable button priority when dependencies fail (revision then status)
+[41m[1m FAIL [22m[49m src/dashboard/DashboardPage.test.tsx[2m > [22mDashboardPage[2m > [22menables sync after status retry while a summary failure remains visible
+[31m[1mTypeError[22m: client.modelDistribution is not a function[39m
+[36m [2m❯[22m src/dashboard/charts/useDashboardChartsController.ts:[2m30:14[22m[39m
+    [90m 28|[39m     setView((current) => ({ ...current, loading: true, error: false })…
+    [90m 29|[39m     [35mvoid[39m [33mPromise[39m[33m.[39m[34mall[39m([
+    [90m 30|[39m       client.modelDistribution(modelScope.range, modelScope.filters, c…
+    [90m   |[39m              [31m^[39m
+    [90m 31|[39m       client.projectDistribution(projectScope.range, projectScope.filt…
+    [90m 32|[39m       client.skillsUsage(skillsScope.range, skillsScope.filters, contr…
+[90m [2m❯[22m Object.react_stack_bottom_frame node_modules/react-dom/cjs/react-dom-client.development.js:[2m25989:20[22m[39m
+[90m [2m❯[22m runWithFiberInDEV node_modules/react-dom/cjs/react-dom-client.development.js:[2m874:13[22m[39m
+[90m [2m❯[22m commitHookEffectListMount node_modules/react-dom/cjs/react-dom-client.development.js:[2m13249:29[22m[39m
+[90m [2m❯[22m commitHookPassiveMountEffects node_modules/react-dom/cjs/react-dom-client.development.js:[2m13336:11[22m[39m
+[90m [2m❯[22m commitPassiveMountOnFiber node_modules/react-dom/cjs/react-dom-client.development.js:[2m15484:13[22m[39m
+[90m [2m❯[22m recursivelyTraversePassiveMountEffects node_modules/react-dom/cjs/react-dom-client.development.js:[2m15439:11[22m[39m
+[90m [2m❯[22m commitPassiveMountOnFiber node_modules/react-dom/cjs/react-dom-client.development.js:[2m15519:11[22m[39m
+[90m [2m❯[22m flushPassiveEffects node_modules/react-dom/cjs/react-dom-client.development.js:[2m18432:9[22m[39m
+[90m [2m❯[22m node_modules/react-dom/cjs/react-dom-client.development.js:[2m17923:15[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/17]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/dashboard/DashboardPage.test.tsx[2m > [22mDashboardPage[2m > [22mkeeps one shared revision transport active across StrictMode remounts
+[31m[1mTypeError[22m: client.modelDistribution is not a function[39m
+[36m [2m❯[22m src/dashboard/charts/useDashboardChartsController.ts:[2m30:14[22m[39m
+    [90m 28|[39m     setView((current) => ({ ...current, loading: true, error: false })…
+    [90m 29|[39m     [35mvoid[39m [33mPromise[39m[33m.[39m[34mall[39m([
+    [90m 30|[39m       client.modelDistribution(modelScope.range, modelScope.filters, c…
+    [90m   |[39m              [31m^[39m
+    [90m 31|[39m       client.projectDistribution(projectScope.range, projectScope.filt…
+    [90m 32|[39m       client.skillsUsage(skillsScope.range, skillsScope.filters, contr…
+[90m [2m❯[22m Object.react_stack_bottom_frame node_modules/react-dom/cjs/react-dom-client.development.js:[2m25989:20[22m[39m
+[90m [2m❯[22m runWithFiberInDEV node_modules/react-dom/cjs/react-dom-client.development.js:[2m874:13[22m[39m
+[90m [2m❯[22m commitHookEffectListMount node_modules/react-dom/cjs/react-dom-client.development.js:[2m13249:29[22m[39m
+[90m [2m❯[22m commitHookPassiveMountEffects node_modules/react-dom/cjs/react-dom-client.development.js:[2m13336:11[22m[39m
+[90m [2m❯[22m commitPassiveMountOnFiber node_modules/react-dom/cjs/react-dom-client.development.js:[2m15484:13[22m[39m
+[90m [2m❯[22m recursivelyTraversePassiveMountEffects node_modules/react-dom/cjs/react-dom-client.development.js:[2m15439:11[22m[39m
+[90m [2m❯[22m commitPassiveMountOnFiber node_modules/react-dom/cjs/react-dom-client.development.js:[2m15718:11[22m[39m
+[90m [2m❯[22m recursivelyTraversePassiveMountEffects node_modules/react-dom/cjs/react-dom-client.development.js:[2m15439:11[22m[39m
+[90m [2m❯[22m commitPassiveMountOnFiber node_modules/react-dom/cjs/react-dom-client.development.js:[2m15519:11[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/17]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/dashboard/DashboardPage.test.tsx[2m > [22mDashboardPage[2m > [22mkeeps one shared revision transport active across StrictMode remounts
+[31m[1mTypeError[22m: client.modelDistribution is not a function[39m
+[36m [2m❯[22m src/dashboard/charts/useDashboardChartsController.ts:[2m30:14[22m[39m
+    [90m 28|[39m     setView((current) => ({ ...current, loading: true, error: false })…
+    [90m 29|[39m     [35mvoid[39m [33mPromise[39m[33m.[39m[34mall[39m([
+    [90m 30|[39m       client.modelDistribution(modelScope.range, modelScope.filters, c…
+    [90m   |[39m              [31m^[39m
+    [90m 31|[39m       client.projectDistribution(projectScope.range, projectScope.filt…
+    [90m 32|[39m       client.skillsUsage(skillsScope.range, skillsScope.filters, contr…
+[90m [2m❯[22m Object.react_stack_bottom_frame node_modules/react-dom/cjs/react-dom-client.development.js:[2m25989:20[22m[39m
+[90m [2m❯[22m runWithFiberInDEV node_modules/react-dom/cjs/react-dom-client.development.js:[2m874:13[22m[39m
+[90m [2m❯[22m commitHookEffectListMount node_modules/react-dom/cjs/react-dom-client.development.js:[2m13249:29[22m[39m
+[90m [2m❯[22m commitHookPassiveMountEffects node_modules/react-dom/cjs/react-dom-client.development.js:[2m13336:11[22m[39m
+[90m [2m❯[22m reconnectPassiveEffects node_modules/react-dom/cjs/react-dom-client.development.js:[2m15832:11[22m[39m
+[90m [2m❯[22m recursivelyTraverseReconnectPassiveEffects node_modules/react-dom/cjs/react-dom-client.development.js:[2m15784:9[22m[39m
+[90m [2m❯[22m reconnectPassiveEffects node_modules/react-dom/cjs/react-dom-client.development.js:[2m15885:11[22m[39m
+[90m [2m❯[22m doubleInvokeEffectsOnFiber node_modules/react-dom/cjs/react-dom-client.development.js:[2m18703:11[22m[39m
+[90m [2m❯[22m runWithFiberInDEV node_modules/react-dom/cjs/react-dom-client.development.js:[2m874:13[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/17]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/dashboard/RangeSelector.test.tsx[2m > [22mRangeSelector[2m > [22mexposes the range group and pressed state
+[31m[1mTestingLibraryElementError[22m: Unable to find an accessible element with the role "button" and name "本月"
+
+Here are the accessible roles:
+
+  group:
+
+  Name "时间范围":
+  [36m<div[31m
+    [33maria-label[31m=[32m"时间范围"[31m
+    [33mclass[31m=[32m"range-selector"[31m
+    [33mrole[31m=[32m"group"[31m
+  [36m/>[31m
+
+  --------------------------------------------------
+  button:
+
+  Name "今天":
+  [36m<button[31m
+    [33maria-pressed[31m=[32m"true"[31m
+    [33mclass[31m=[32m"range-option is-selected"[31m
+    [33mtype[31m=[32m"button"[31m
+  [36m/>[31m
+
+  Name "昨天":
+  [36m<button[31m
+    [33maria-pressed[31m=[32m"false"[31m
+    [33mclass[31m=[32m"range-option"[31m
+    [33mtype[31m=[32m"button"[31m
+  [36m/>[31m
+
+  Name "7天":
+  [36m<button[31m
+    [33maria-pressed[31m=[32m"false"[31m
+    [33mclass[31m=[32m"range-option"[31m
+    [33mtype[31m=[32m"button"[31m
+  [36m/>[31m
+
+  Name "30天":
+  [36m<button[31m
+    [33maria-pressed[31m=[32m"false"[31m
+    [33mclass[31m=[32m"range-option"[31m
+    [33mtype[31m=[32m"button"[31m
+  [36m/>[31m
+
+  Name "今年":
+  [36m<button[31m
+    [33maria-pressed[31m=[32m"false"[31m
+    [33mclass[31m=[32m"range-option"[31m
+    [33mtype[31m=[32m"button"[31m
+  [36m/>[31m
+
+  --------------------------------------------------
+
+Ignored nodes: comments, script, style
+[36m<body>[31m
+  [36m<div>[31m
+    [36m<div[31m
+      [33maria-label[31m=[32m"时间范围"[31m
+      [33mclass[31m=[32m"range-selector"[31m
+      [33mrole[31m=[32m"group"[31m
+    [36m>[31m
+      [36m<button[31m
+        [33maria-pressed[31m=[32m"true"[31m
+        [33mclass[31m=[32m"range-option is-selected"[31m
+        [33mtype[31m=[32m"button"[31m
+      [36m>[31m
+        [0m今天[0m
+      [36m</button>[31m
+      [36m<button[31m
+        [33maria-pressed[31m=[32m"false"[31m
+        [33mclass[31m=[32m"range-option"[31m
+        [33mtype[31m=[32m"button"[31m
+      [36m>[31m
+        [0m昨天[0m
+      [36m</button>[31m
+      [36m<button[31m
+        [33maria-pressed[31m=[32m"false"[31m
+        [33mclass[31m=[32m"range-option"[31m
+        [33mtype[31m=[32m"button"[31m
+      [36m>[31m
+        [0m7天[0m
+      [36m</button>[31m
+      [36m<button[31m
+        [33maria-pressed[31m=[32m"false"[31m
+        [33mclass[31m=[32m"range-option"[31m
+        [33mtype[31m=[32m"button"[31m
+      [36m>[31m
+        [0m30天[0m
+      [36m</button>[31m
+      [36m<button[31m
+        [33maria-pressed[31m=[32m"false"[31m
+        [33mclass[31m=[32m"range-option"[31m
+        [33mtype[31m=[32m"button"[31m
+      [36m>[31m
+        [0m今年[0m
+      [36m</button>[31m
+    [36m</div>[31m
+  [36m</div>[31m
+[36m</body>[31m[39m
+[90m [2m❯[22m Object.getElementError node_modules/@testing-library/dom/dist/config.js:[2m37:19[22m[39m
+[90m [2m❯[22m node_modules/@testing-library/dom/dist/query-helpers.js:[2m76:38[22m[39m
+[90m [2m❯[22m node_modules/@testing-library/dom/dist/query-helpers.js:[2m52:17[22m[39m
+[90m [2m❯[22m node_modules/@testing-library/dom/dist/query-helpers.js:[2m95:19[22m[39m
+[36m [2m❯[22m src/dashboard/RangeSelector.test.tsx:[2m12:28[22m[39m
+    [90m 10|[39m     expect(screen.getByRole("group", { name: "时间范围" })).toBeInTheDocum…
+    [90m 11|[39m     expect(screen.getByRole("button", { name: "今天" })).toHaveAttribute…
+    [90m 12|[39m     fireEvent[33m.[39m[34mclick[39m(screen[33m.[39m[34mgetByRole[39m([32m"button"[39m[33m,[39m { name[33m:[39m [32m"本月"[39m }))[33m;[39m
+    [90m   |[39m                            [31m^[39m
+    [90m 13|[39m     [34mexpect[39m(onChange)[33m.[39m[34mtoHaveBeenCalledWith[39m([32m"30d"[39m)[33m;[39m
+    [90m 14|[39m   })[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/17]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m2 failed[39m[22m[2m | [22m[1m[32m17 passed[39m[22m[90m (19)[39m
+[2m      Tests [22m [1m[31m16 failed[39m[22m[2m | [22m[1m[32m93 passed[39m[22m[90m (109)[39m
+[2m   Start at [22m 20:47:03
+[2m   Duration [22m 11.60s[2m (transform 1.20s, setup 4.50s, import 1.99s, tests 7.59s, environment 14.43s)[22m
+
+
+::error file=/home/runner/work/MiniUsage/MiniUsage/frontend/src/dashboard/charts/useDashboardChartsController.ts,title=src/dashboard/DashboardPage.test.tsx > DashboardPage > shows the last completed sync time with seconds,line=30,column=14::TypeError: client.modelDistribution is not a function%0A ❯ src/dashboard/charts/useDashboardChartsController.ts:30:14%0A ❯ Object.react_stack_bottom_frame node_modules/react-dom/cjs/react-dom-client.development.js:25989:20%0A ❯ runWithFiberInDEV node_modules/react-dom/cjs/react-dom-client.development.js:874:13%0A ❯ commitHookEffectListMount node_modules/react-dom/cjs/react-dom-client.development.js:13249:29%0A ❯ commitHookPassiveMountEffects node_modules/react-dom/cjs/react-dom-client.development.js:13336:11%0A ❯ commitPassiveMountOnFiber node_modules/react-dom/cjs/react-dom-client.development.js:15484:13%0A ❯ recursivelyTraversePassiveMountEffects node_modules/react-dom/cjs/react-dom-client.development.js:15439:11%0A ❯ commitPassiveMountOnFiber node_modules/react-dom/cjs/react-dom-client.development.js:15519:11%0A ❯ flushPassiveEffects node_modules/react-dom/cjs/react-dom-client.development.js:18432:9%0A ❯ node_modules/react-dom/cjs/react-dom-client.development.js:17923:15%0A%0A
+
+::error file=/home/runner/work/MiniUsage/MiniUsage/frontend/src/dashboard/charts/useDashboardChartsController.ts,title=src/dashboard/DashboardPage.test.tsx > DashboardPage > uses the existing empty-state dash before a sync has completed,line=30,column=14::TypeError: client.modelDistribution is not a function%0A ❯ src/dashboard/charts/useDashboardChartsController.ts:30:14%0A ❯ Object.react_stack_bottom_frame node_modules/react-dom/cjs/react-dom-client.development.js:25989:20%0A ❯ runWithFiberInDEV node_modules/react-dom/cjs/react-dom-client.development.js:874:13%0A ❯ commitHookEffectListMount node_modules/react-dom/cjs/react-dom-client.development.js:13249:29%0A ❯ commitHookPassiveMountEffects node_modules/react-dom/cjs/react-dom-client.development.js:13336:11%0A ❯ commitPassiveMountOnFiber node_modules/react-dom/cjs/react-dom-client.development.js:15484:13%0A ❯ recursivelyTraversePassiveMountEffects node_modules/react-dom/cjs/react-dom-client.development.js:15439:11%0A ❯ commitPassiveMountOnFiber node_modules/react-dom/cjs/react-dom-client.development.js:15519:11%0A ❯ flushPassiveEffects node_modules/react-dom/cjs/react-dom-client.development.js:18432:9%0A ❯ node_modules/react-dom/cjs/react-dom-client.development.js:17923:15%0A%0A
+
+::error file=/home/runner/work/MiniUsage/MiniUsage/frontend/src/dashboard/charts/useDashboardChartsController.ts,title=src/dashboard/DashboardPage.test.tsx > DashboardPage > keeps one shared revision transport active across StrictMode remounts,line=30,column=14::TypeError: client.modelDistribution is not a function%0A ❯ src/dashboard/charts/useDashboardChartsController.ts:30:14%0A ❯ Object.react_stack_bottom_frame node_modules/react-dom/cjs/react-dom-client.development.js:25989:20%0A ❯ runWithFiberInDEV node_modules/react-dom/cjs/react-dom-client.development.js:874:13%0A ❯ commitHookEffectListMount node_modules/react-dom/cjs/react-dom-client.development.js:13249:29%0A ❯ commitHookPassiveMountEffects node_modules/react-dom/cjs/react-dom-client.development.js:13336:11%0A ❯ commitPassiveMountOnFiber node_modules/react-dom/cjs/react-dom-client.development.js:15484:13%0A ❯ recursivelyTraversePassiveMountEffects node_modules/react-dom/cjs/react-dom-client.development.js:15439:11%0A ❯ commitPassiveMountOnFiber node_modules/react-dom/cjs/react-dom-client.development.js:15718:11%0A ❯ recursivelyTraversePassiveMountEffects node_modules/react-dom/cjs/react-dom-client.development.js:15439:11%0A ❯ commitPassiveMountOnFiber node_modules/react-dom/cjs/react-dom-client.development.js:15519:11%0A%0A
+
+::error file=/home/runner/work/MiniUsage/MiniUsage/frontend/src/dashboard/charts/useDashboardChartsController.ts,title=src/dashboard/DashboardPage.test.tsx > DashboardPage > keeps one shared revision transport active across StrictMode remounts,line=30,column=14::TypeError: client.modelDistribution is not a function%0A ❯ src/dashboard/charts/useDashboardChartsController.ts:30:14%0A ❯ Object.react_stack_bottom_frame node_modules/react-dom/cjs/react-dom-client.development.js:25989:20%0A ❯ runWithFiberInDEV node_modules/react-dom/cjs/react-dom-client.development.js:874:13%0A ❯ commitHookEffectListMount node_modules/react-dom/cjs/react-dom-client.development.js:13249:29%0A ❯ commitHookPassiveMountEffects node_modules/react-dom/cjs/react-dom-client.development.js:13336:11%0A ❯ reconnectPassiveEffects node_modules/react-dom/cjs/react-dom-client.development.js:15832:11%0A ❯ recursivelyTraverseReconnectPassiveEffects node_modules/react-dom/cjs/react-dom-client.development.js:15784:9%0A ❯ reconnectPassiveEffects node_modules/react-dom/cjs/react-dom-client.development.js:15885:11%0A ❯ doubleInvokeEffectsOnFiber node_modules/react-dom/cjs/react-dom-client.development.js:18703:11%0A ❯ runWithFiberInDEV node_modules/react-dom/cjs/react-dom-client.development.js:874:13%0A%0A
+
+::error file=/home/runner/work/MiniUsage/MiniUsage/frontend/src/dashboard/charts/useDashboardChartsController.ts,title=src/dashboard/DashboardPage.test.tsx > DashboardPage > keeps a range's own snapshot and renders the Session section without navigation/charts,line=30,column=14::TypeError: client.modelDistribution is not a function%0A ❯ src/dashboard/charts/useDashboardChartsController.ts:30:14%0A ❯ Object.react_stack_bottom_frame node_modules/react-dom/cjs/react-dom-client.development.js:25989:20%0A ❯ runWithFiberInDEV node_modules/react-dom/cjs/react-dom-client.development.js:874:13%0A ❯ commitHookEffectListMount node_modules/react-dom/cjs/react-dom-client.development.js:13249:29%0A ❯ commitHookPassiveMountEffects node_modules/react-dom/cjs/react-dom-client.development.js:13336:11%0A ❯ commitPassiveMountOnFiber node_modules/react-dom/cjs/react-dom-client.development.js:15484:13%0A ❯ recursivelyTraversePassiveMountEffects node_modules/react-dom/cjs/react-dom-client.development.js:15439:11%0A ❯ commitPassiveMountOnFiber node_modules/react-dom/cjs/react-dom-client.development.js:15519:11%0A ❯ flushPassiveEffects node_modules/react-dom/cjs/react-dom-client.development.js:18432:9%0A ❯ node_modules/react-dom/cjs/react-dom-client.development.js:17923:15%0A%0A
+
+::error file=/home/runner/work/MiniUsage/MiniUsage/frontend/src/dashboard/charts/useDashboardChartsController.ts,title=src/dashboard/DashboardPage.test.tsx > DashboardPage > maps a failed load to fixed text and retains a stable snapshot,line=30,column=14::TypeError: client.modelDistribution is not a function%0A ❯ src/dashboard/charts/useDashboardChartsController.ts:30:14%0A ❯ Object.react_stack_bottom_frame node_modules/react-dom/cjs/react-dom-client.development.js:25989:20%0A ❯ runWithFiberInDEV node_modules/react-dom/cjs/react-dom-client.development.js:874:13%0A ❯ commitHookEffectListMount node_modules/react-dom/cjs/react-dom-client.development.js:13249:29%0A ❯ commitHookPassiveMountEffects node_modules/react-dom/cjs/react-dom-client.development.js:13336:11%0A ❯ commitPassiveMountOnFiber node_modules/react-dom/cjs/react-dom-client.development.js:15484:13%0A ❯ recursivelyTraversePassiveMountEffects node_modules/react-dom/cjs/react-dom-client.development.js:15439:11%0A ❯ commitPassiveMountOnFiber node_modules/react-dom/cjs/react-dom-client.development.js:15519:11%0A ❯ flushPassiveEffects node_modules/react-dom/cjs/react-dom-client.development.js:18432:9%0A ❯ node_modules/react-dom/cjs/react-dom-client.development.js:17923:15%0A%0A
+
+::error file=/home/runner/work/MiniUsage/MiniUsage/frontend/src/dashboard/charts/useDashboardChartsController.ts,title=src/dashboard/DashboardPage.test.tsx > DashboardPage > maps refresh HTTP errors 403/FORBIDDEN to 无法发起同步,line=30,column=14::TypeError: client.modelDistribution is not a function%0A ❯ src/dashboard/charts/useDashboardChartsController.ts:30:14%0A ❯ Object.react_stack_bottom_frame node_modules/react-dom/cjs/react-dom-client.development.js:25989:20%0A ❯ runWithFiberInDEV node_modules/react-dom/cjs/react-dom-client.development.js:874:13%0A ❯ commitHookEffectListMount node_modules/react-dom/cjs/react-dom-client.development.js:13249:29%0A ❯ commitHookPassiveMountEffects node_modules/react-dom/cjs/react-dom-client.development.js:13336:11%0A ❯ commitPassiveMountOnFiber node_modules/react-dom/cjs/react-dom-client.development.js:15484:13%0A ❯ recursivelyTraversePassiveMountEffects node_modules/react-dom/cjs/react-dom-client.development.js:15439:11%0A ❯ commitPassiveMountOnFiber node_modules/react-dom/cjs/react-dom-client.development.js:15519:11%0A ❯ flushPassiveEffects node_modules/react-dom/cjs/react-dom-client.development.js:18432:9%0A ❯ node_modules/react-dom/cjs/react-dom-client.development.js:17923:15%0A%0A
+
+::error file=/home/runner/work/MiniUsage/MiniUsage/frontend/src/dashboard/charts/useDashboardChartsController.ts,title=src/dashboard/DashboardPage.test.tsx > DashboardPage > maps refresh HTTP errors 409/SOURCE_CHANGED to 数据源已变化,line=30,column=14::TypeError: client.modelDistribution is not a function%0A ❯ src/dashboard/charts/useDashboardChartsController.ts:30:14%0A ❯ Object.react_stack_bottom_frame node_modules/react-dom/cjs/react-dom-client.development.js:25989:20%0A ❯ runWithFiberInDEV node_modules/react-dom/cjs/react-dom-client.development.js:874:13%0A ❯ commitHookEffectListMount node_modules/react-dom/cjs/react-dom-client.development.js:13249:29%0A ❯ commitHookPassiveMountEffects node_modules/react-dom/cjs/react-dom-client.development.js:13336:11%0A ❯ commitPassiveMountOnFiber node_modules/react-dom/cjs/react-dom-client.development.js:15484:13%0A ❯ recursivelyTraversePassiveMountEffects node_modules/react-dom/cjs/react-dom-client.development.js:15439:11%0A ❯ commitPassiveMountOnFiber node_modules/react-dom/cjs/react-dom-client.development.js:15519:11%0A ❯ flushPassiveEffects node_modules/react-dom/cjs/react-dom-client.development.js:18432:9%0A ❯ node_modules/react-dom/cjs/react-dom-client.development.js:17923:15%0A%0A
+
+::error file=/home/runner/work/MiniUsage/MiniUsage/frontend/src/dashboard/charts/useDashboardChartsController.ts,title=src/dashboard/DashboardPage.test.tsx > DashboardPage > maps refresh HTTP errors 500/SCAN_START_FAILED to 同步失败,line=30,column=14::TypeError: client.modelDistribution is not a function%0A ❯ src/dashboard/charts/useDashboardChartsController.ts:30:14%0A ❯ Object.react_stack_bottom_frame node_modules/react-dom/cjs/react-dom-client.development.js:25989:20%0A ❯ runWithFiberInDEV node_modules/react-dom/cjs/react-dom-client.development.js:874:13%0A ❯ commitHookEffectListMount node_modules/react-dom/cjs/react-dom-client.development.js:13249:29%0A ❯ commitHookPassiveMountEffects node_modules/react-dom/cjs/react-dom-client.development.js:13336:11%0A ❯ commitPassiveMountOnFiber node_modules/react-dom/cjs/react-dom-client.development.js:15484:13%0A ❯ recursivelyTraversePassiveMountEffects node_modules/react-dom/cjs/react-dom-client.development.js:15439:11%0A ❯ commitPassiveMountOnFiber node_modules/react-dom/cjs/react-dom-client.development.js:15519:11%0A ❯ flushPassiveEffects node_modules/react-dom/cjs/react-dom-client.development.js:18432:9%0A ❯ node_modules/react-dom/cjs/react-dom-client.development.js:17923:15%0A%0A
+
+::error file=/home/runner/work/MiniUsage/MiniUsage/frontend/src/dashboard/charts/useDashboardChartsController.ts,title=src/dashboard/DashboardPage.test.tsx > DashboardPage > renders tracking failure separately and offers only status retry,line=30,column=14::TypeError: client.modelDistribution is not a function%0A ❯ src/dashboard/charts/useDashboardChartsController.ts:30:14%0A ❯ Object.react_stack_bottom_frame node_modules/react-dom/cjs/react-dom-client.development.js:25989:20%0A ❯ runWithFiberInDEV node_modules/react-dom/cjs/react-dom-client.development.js:874:13%0A ❯ commitHookEffectListMount node_modules/react-dom/cjs/react-dom-client.development.js:13249:29%0A ❯ commitHookPassiveMountEffects node_modules/react-dom/cjs/react-dom-client.development.js:13336:11%0A ❯ commitPassiveMountOnFiber node_modules/react-dom/cjs/react-dom-client.development.js:15484:13%0A ❯ recursivelyTraversePassiveMountEffects node_modules/react-dom/cjs/react-dom-client.development.js:15439:11%0A ❯ commitPassiveMountOnFiber node_modules/react-dom/cjs/react-dom-client.development.js:15519:11%0A ❯ flushPassiveEffects node_modules/react-dom/cjs/react-dom-client.development.js:18432:9%0A ❯ node_modules/react-dom/cjs/react-dom-client.development.js:17923:15%0A%0A
+
+::error file=/home/runner/work/MiniUsage/MiniUsage/frontend/src/dashboard/charts/useDashboardChartsController.ts,title=src/dashboard/DashboardPage.test.tsx > DashboardPage > disables sync when status failed while summary remains available%2C then recovers via retry_load,line=30,column=14::TypeError: client.modelDistribution is not a function%0A ❯ src/dashboard/charts/useDashboardChartsController.ts:30:14%0A ❯ Object.react_stack_bottom_frame node_modules/react-dom/cjs/react-dom-client.development.js:25989:20%0A ❯ runWithFiberInDEV node_modules/react-dom/cjs/react-dom-client.development.js:874:13%0A ❯ commitHookEffectListMount node_modules/react-dom/cjs/react-dom-client.development.js:13249:29%0A ❯ commitHookPassiveMountEffects node_modules/react-dom/cjs/react-dom-client.development.js:13336:11%0A ❯ commitPassiveMountOnFiber node_modules/react-dom/cjs/react-dom-client.development.js:15484:13%0A ❯ recursivelyTraversePassiveMountEffects node_modules/react-dom/cjs/react-dom-client.development.js:15439:11%0A ❯ commitPassiveMountOnFiber node_modules/react-dom/cjs/react-dom-client.development.js:15519:11%0A ❯ flushPassiveEffects node_modules/react-dom/cjs/react-dom-client.development.js:18432:9%0A ❯ node_modules/react-dom/cjs/react-dom-client.development.js:17923:15%0A%0A
+
+::error file=/home/runner/work/MiniUsage/MiniUsage/frontend/src/dashboard/charts/useDashboardChartsController.ts,title=src/dashboard/DashboardPage.test.tsx > DashboardPage > keeps status-not-ready as the stable button priority when dependencies fail (status then summary),line=30,column=14::TypeError: client.modelDistribution is not a function%0A ❯ src/dashboard/charts/useDashboardChartsController.ts:30:14%0A ❯ Object.react_stack_bottom_frame node_modules/react-dom/cjs/react-dom-client.development.js:25989:20%0A ❯ runWithFiberInDEV node_modules/react-dom/cjs/react-dom-client.development.js:874:13%0A ❯ commitHookEffectListMount node_modules/react-dom/cjs/react-dom-client.development.js:13249:29%0A ❯ commitHookPassiveMountEffects node_modules/react-dom/cjs/react-dom-client.development.js:13336:11%0A ❯ commitPassiveMountOnFiber node_modules/react-dom/cjs/react-dom-client.development.js:15484:13%0A ❯ recursivelyTraversePassiveMountEffects node_modules/react-dom/cjs/react-dom-client.development.js:15439:11%0A ❯ commitPassiveMountOnFiber node_modules/react-dom/cjs/react-dom-client.development.js:15519:11%0A ❯ flushPassiveEffects node_modules/react-dom/cjs/react-dom-client.development.js:18432:9%0A ❯ node_modules/react-dom/cjs/react-dom-client.development.js:17923:15%0A%0A
+
+::error file=/home/runner/work/MiniUsage/MiniUsage/frontend/src/dashboard/charts/useDashboardChartsController.ts,title=src/dashboard/DashboardPage.test.tsx > DashboardPage > keeps status-not-ready as the stable button priority when dependencies fail (summary then status),line=30,column=14::TypeError: client.modelDistribution is not a function%0A ❯ src/dashboard/charts/useDashboardChartsController.ts:30:14%0A ❯ Object.react_stack_bottom_frame node_modules/react-dom/cjs/react-dom-client.development.js:25989:20%0A ❯ runWithFiberInDEV node_modules/react-dom/cjs/react-dom-client.development.js:874:13%0A ❯ commitHookEffectListMount node_modules/react-dom/cjs/react-dom-client.development.js:13249:29%0A ❯ commitHookPassiveMountEffects node_modules/react-dom/cjs/react-dom-client.development.js:13336:11%0A ❯ commitPassiveMountOnFiber node_modules/react-dom/cjs/react-dom-client.development.js:15484:13%0A ❯ recursivelyTraversePassiveMountEffects node_modules/react-dom/cjs/react-dom-client.development.js:15439:11%0A ❯ commitPassiveMountOnFiber node_modules/react-dom/cjs/react-dom-client.development.js:15519:11%0A ❯ flushPassiveEffects node_modules/react-dom/cjs/react-dom-client.development.js:18432:9%0A ❯ node_modules/react-dom/cjs/react-dom-client.development.js:17923:15%0A%0A
+
+::error file=/home/runner/work/MiniUsage/MiniUsage/frontend/src/dashboard/charts/useDashboardChartsController.ts,title=src/dashboard/DashboardPage.test.tsx > DashboardPage > keeps status-not-ready as the stable button priority when dependencies fail (status then revision),line=30,column=14::TypeError: client.modelDistribution is not a function%0A ❯ src/dashboard/charts/useDashboardChartsController.ts:30:14%0A ❯ Object.react_stack_bottom_frame node_modules/react-dom/cjs/react-dom-client.development.js:25989:20%0A ❯ runWithFiberInDEV node_modules/react-dom/cjs/react-dom-client.development.js:874:13%0A ❯ commitHookEffectListMount node_modules/react-dom/cjs/react-dom-client.development.js:13249:29%0A ❯ commitHookPassiveMountEffects node_modules/react-dom/cjs/react-dom-client.development.js:13336:11%0A ❯ commitPassiveMountOnFiber node_modules/react-dom/cjs/react-dom-client.development.js:15484:13%0A ❯ recursivelyTraversePassiveMountEffects node_modules/react-dom/cjs/react-dom-client.development.js:15439:11%0A ❯ commitPassiveMountOnFiber node_modules/react-dom/cjs/react-dom-client.development.js:15519:11%0A ❯ flushPassiveEffects node_modules/react-dom/cjs/react-dom-client.development.js:18432:9%0A ❯ node_modules/react-dom/cjs/react-dom-client.development.js:17923:15%0A%0A
+
+::error file=/home/runner/work/MiniUsage/MiniUsage/frontend/src/dashboard/charts/useDashboardChartsController.ts,title=src/dashboard/DashboardPage.test.tsx > DashboardPage > keeps status-not-ready as the stable button priority when dependencies fail (revision then status),line=30,column=14::TypeError: client.modelDistribution is not a function%0A ❯ src/dashboard/charts/useDashboardChartsController.ts:30:14%0A ❯ Object.react_stack_bottom_frame node_modules/react-dom/cjs/react-dom-client.development.js:25989:20%0A ❯ runWithFiberInDEV node_modules/react-dom/cjs/react-dom-client.development.js:874:13%0A ❯ commitHookEffectListMount node_modules/react-dom/cjs/react-dom-client.development.js:13249:29%0A ❯ commitHookPassiveMountEffects node_modules/react-dom/cjs/react-dom-client.development.js:13336:11%0A ❯ commitPassiveMountOnFiber node_modules/react-dom/cjs/react-dom-client.development.js:15484:13%0A ❯ recursivelyTraversePassiveMountEffects node_modules/react-dom/cjs/react-dom-client.development.js:15439:11%0A ❯ commitPassiveMountOnFiber node_modules/react-dom/cjs/react-dom-client.development.js:15519:11%0A ❯ flushPassiveEffects node_modules/react-dom/cjs/react-dom-client.development.js:18432:9%0A ❯ node_modules/react-dom/cjs/react-dom-client.development.js:17923:15%0A%0A
+
+::error file=/home/runner/work/MiniUsage/MiniUsage/frontend/src/dashboard/charts/useDashboardChartsController.ts,title=src/dashboard/DashboardPage.test.tsx > DashboardPage > enables sync after status retry while a summary failure remains visible,line=30,column=14::TypeError: client.modelDistribution is not a function%0A ❯ src/dashboard/charts/useDashboardChartsController.ts:30:14%0A ❯ Object.react_stack_bottom_frame node_modules/react-dom/cjs/react-dom-client.development.js:25989:20%0A ❯ runWithFiberInDEV node_modules/react-dom/cjs/react-dom-client.development.js:874:13%0A ❯ commitHookEffectListMount node_modules/react-dom/cjs/react-dom-client.development.js:13249:29%0A ❯ commitHookPassiveMountEffects node_modules/react-dom/cjs/react-dom-client.development.js:13336:11%0A ❯ commitPassiveMountOnFiber node_modules/react-dom/cjs/react-dom-client.development.js:15484:13%0A ❯ recursivelyTraversePassiveMountEffects node_modules/react-dom/cjs/react-dom-client.development.js:15439:11%0A ❯ commitPassiveMountOnFiber node_modules/react-dom/cjs/react-dom-client.development.js:15519:11%0A ❯ flushPassiveEffects node_modules/react-dom/cjs/react-dom-client.development.js:18432:9%0A ❯ node_modules/react-dom/cjs/react-dom-client.development.js:17923:15%0A%0A
+
+::error file=/home/runner/work/MiniUsage/MiniUsage/frontend/src/dashboard/RangeSelector.test.tsx,title=src/dashboard/RangeSelector.test.tsx > RangeSelector > exposes the range group and pressed state,line=12,column=28::TestingLibraryElementError: Unable to find an accessible element with the role "button" and name "本月"%0A%0AHere are the accessible roles:%0A%0A  group:%0A%0A  Name "时间范围":%0A  <div%0A    aria-label="时间范围"%0A    class="range-selector"%0A    role="group"%0A  />%0A%0A  --------------------------------------------------%0A  button:%0A%0A  Name "今天":%0A  <button%0A    aria-pressed="true"%0A    class="range-option is-selected"%0A    type="button"%0A  />%0A%0A  Name "昨天":%0A  <button%0A    aria-pressed="false"%0A    class="range-option"%0A    type="button"%0A  />%0A%0A  Name "7天":%0A  <button%0A    aria-pressed="false"%0A    class="range-option"%0A    type="button"%0A  />%0A%0A  Name "30天":%0A  <button%0A    aria-pressed="false"%0A    class="range-option"%0A    type="button"%0A  />%0A%0A  Name "今年":%0A  <button%0A    aria-pressed="false"%0A    class="range-option"%0A    type="button"%0A  />%0A%0A  --------------------------------------------------%0A%0AIgnored nodes: comments, script, style%0A<body>%0A  <div>%0A    <div%0A      aria-label="时间范围"%0A      class="range-selector"%0A      role="group"%0A    >%0A      <button%0A        aria-pressed="true"%0A        class="range-option is-selected"%0A        type="button"%0A      >%0A        今天%0A      </button>%0A      <button%0A        aria-pressed="false"%0A        class="range-option"%0A        type="button"%0A      >%0A        昨天%0A      </button>%0A      <button%0A        aria-pressed="false"%0A        class="range-option"%0A        type="button"%0A      >%0A        7天%0A      </button>%0A      <button%0A        aria-pressed="false"%0A        class="range-option"%0A        type="button"%0A      >%0A        30天%0A      </button>%0A      <button%0A        aria-pressed="false"%0A        class="range-option"%0A        type="button"%0A      >%0A        今年%0A      </button>%0A    </div>%0A  </div>%0A</body>%0A ❯ Object.getElementError node_modules/@testing-library/dom/dist/config.js:37:19%0A ❯ node_modules/@testing-library/dom/dist/query-helpers.js:76:38%0A ❯ node_modules/@testing-library/dom/dist/query-helpers.js:52:17%0A ❯ node_modules/@testing-library/dom/dist/query-helpers.js:95:19%0A ❯ src/dashboard/RangeSelector.test.tsx:12:28%0A%0A
