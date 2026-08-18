@@ -11,8 +11,6 @@ needle = '''pipeline = pipeline.replace("""        result,\n        last,""", ""
 addition = '''pipeline = pipeline.replace("""        result,\n        last,""", """        result,\n        skill_events,\n        last,""")\npipeline = pipeline.replace("""        },\n        last,""", """        },\n        skill_events,\n        last,""")\n'''
 if needle in text and addition not in text:
     text = text.replace(needle, addition, 1)
-# The generated model/project aggregate statements borrow their transaction;
-# explicitly drop them before committing the read transaction.
 text = text.replace(
     'use rusqlite::{TransactionBehavior, params, params_from_iter, types::Value};',
     'use rusqlite::{TransactionBehavior, params_from_iter, types::Value};',
@@ -22,6 +20,17 @@ commit_fixed = '''    drop(statement);\n    transaction.commit().map_err(Storage
 if commit_marker in text:
     text = text.replace(commit_marker, commit_fixed, 2)
 path.write_text(text, encoding="utf-8")
+
+# The existing UsageLedger unit helper constructs the complete pipeline DTO.
+# Add the new safe Skill collection to that fixture before the implementation
+# script compiles the expanded DTO.
+ledger_test = root / "src/usage/ledger.rs"
+ledger_value = ledger_test.read_text(encoding="utf-8")
+ledger_anchor = '''            occurrences: vec![super::super::processor::Occurrence {\n                source_file_id: 1,\n                file_generation: 1,\n                source_start_offset: 0,\n                source_end_offset: 1,\n                event_id,\n            }],\n            closed_turns: Vec::new(),\n'''
+ledger_replacement = '''            occurrences: vec![super::super::processor::Occurrence {\n                source_file_id: 1,\n                file_generation: 1,\n                source_start_offset: 0,\n                source_end_offset: 1,\n                event_id,\n            }],\n            skill_events: Vec::new(),\n            closed_turns: Vec::new(),\n'''
+if ledger_anchor in ledger_value and "skill_events: Vec::new()" not in ledger_value:
+    ledger_value = ledger_value.replace(ledger_anchor, ledger_replacement, 1)
+ledger_test.write_text(ledger_value, encoding="utf-8")
 
 # Existing DashboardPage tests inject a complete MiniUsageClient. Extend that
 # test fixture with v0.1.3 analytics methods instead of weakening production
@@ -40,9 +49,6 @@ if range_test.exists():
     value = value.replace("本月", "30天")
     range_test.write_text(value, encoding="utf-8")
 
-# Controller/revision tests also construct the full client interface. Their
-# analytics calls are irrelevant to those focused tests, so typed empty mocks
-# satisfy the new interface without changing behavior.
 for rel in [
     "frontend/src/dashboard/session/useSessionDetailController.test.tsx",
     "frontend/src/dashboard/session/useSessionTableController.test.tsx",
