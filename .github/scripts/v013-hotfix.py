@@ -14,8 +14,8 @@ if needle in text and addition not in text:
 path.write_text(text, encoding="utf-8")
 
 # Existing DashboardPage tests inject a complete MiniUsageClient. Extend that
-# test fixture with the v0.1.3 analytics methods instead of weakening the
-# production client contract.
+# test fixture with v0.1.3 analytics methods instead of weakening production
+# client types.
 dashboard_test = root / "frontend/src/dashboard/DashboardPage.test.tsx"
 dashboard = dashboard_test.read_text(encoding="utf-8")
 anchor = '''    summary: vi.fn(async (range) => (range === "today" ? summary("today") : summary("yesterday"))),\n'''
@@ -29,3 +29,25 @@ if range_test.exists():
     value = range_test.read_text(encoding="utf-8")
     value = value.replace("本月", "30天")
     range_test.write_text(value, encoding="utf-8")
+
+# Controller/revision tests also construct the full client interface. Their
+# analytics calls are irrelevant to those focused tests, so typed empty mocks
+# satisfy the new interface without changing behavior.
+for rel in [
+    "frontend/src/dashboard/session/useSessionDetailController.test.tsx",
+    "frontend/src/dashboard/session/useSessionTableController.test.tsx",
+    "frontend/src/dashboard/useDashboardController.test.tsx",
+    "frontend/src/data/revisionFeed.test.ts",
+]:
+    test_path = root / rel
+    value = test_path.read_text(encoding="utf-8")
+    if "modelDistribution: vi.fn()" in value:
+        continue
+    target = "    summary: vi.fn(),\n"
+    if rel.endswith("useDashboardController.test.tsx"):
+        target = "    summary: vi.fn(async (range) => summary(range)),\n"
+    if target not in value:
+        raise RuntimeError(f"{rel}: MiniUsageClient summary fixture anchor missing")
+    replacement = target + "    modelDistribution: vi.fn(),\n    projectDistribution: vi.fn(),\n    skillsUsage: vi.fn(),\n"
+    value = value.replace(target, replacement, 1)
+    test_path.write_text(value, encoding="utf-8")
