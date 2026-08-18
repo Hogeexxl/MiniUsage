@@ -53,6 +53,7 @@ pub mod global_state;
 pub mod metadata;
 pub mod rollout;
 pub mod session_index;
+mod skill_usage;
 pub mod state_index;
 pub mod usage;
 
@@ -77,6 +78,7 @@ pub use session_index::{
     SessionIndexDiagnostic, SessionIndexError, SessionIndexReader, SessionNameFact,
     SessionNameSnapshot, SessionSourceStatus,
 };
+pub use skill_usage::{SkillUsageEvidence, SkillUsageParser};
 pub use state_index::{
     SpawnEdgeFact, SpawnEdgeSource, StateDiagnostic, StateIndexError, StateIndexReader,
     StateSnapshot, StateSourceStatus, StateThreadFact,

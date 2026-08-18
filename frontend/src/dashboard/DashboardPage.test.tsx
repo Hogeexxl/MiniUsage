@@ -59,6 +59,28 @@ function fakeClient(overrides: Partial<MiniUsageClient> = {}): MiniUsageClient {
   return {
     filterOptions: vi.fn(async () => ({ data_revision: 1, models: [], projects: [] })),
     summary: vi.fn(async (range) => (range === "today" ? summary("today") : summary("yesterday"))),
+    modelDistribution: vi.fn(async (range) => ({
+      range: { key: range, start_ms: 1, end_ms: 2, timezone: "Asia/Shanghai" },
+      data_revision: 1,
+      items: [],
+    })),
+    projectDistribution: vi.fn(async (range) => ({
+      range: { key: range, start_ms: 1, end_ms: 2, timezone: "Asia/Shanghai" },
+      data_revision: 1,
+      items: [],
+    })),
+    skillsUsage: vi.fn(async () => ({
+      range: { key: "7d" as const, start_ms: 1, end_ms: 8, timezone: "Asia/Shanghai" },
+      data_revision: 1,
+      data_status: "ready" as const,
+      days: Array.from({ length: 7 }, (_, index) => ({
+        date: `2026-08-${String(index + 1).padStart(2, "0")}`,
+        start_ms: index + 1,
+        end_ms: index + 2,
+        total: 0,
+        skills: [],
+      })),
+    })),
     getSessionSnapshot: vi.fn(async () => sessionSnapshot),
     getSessionRows: vi.fn(async ({ range }) => ({ ...sessionSnapshot, range, items: [] })),
     getSessionDetail: vi.fn(),

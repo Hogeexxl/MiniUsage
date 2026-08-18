@@ -3,8 +3,8 @@ import { RANGE_KEYS, type RangeKey } from "../data/types";
 const RANGE_LABELS: Record<RangeKey, string> = {
   today: "今天",
   yesterday: "昨天",
-  week: "本周",
-  month: "本月",
+  "7d": "7天",
+  "30d": "30天",
   year: "今年",
 };
 

@@ -7,6 +7,7 @@ import {
   type MiniUsageClient,
 } from "../data/miniUsageClient";
 import { createRevisionFeed, type RevisionEventSource, type RevisionFeed } from "../data/revisionFeed";
+import { DASHBOARD_SCOPE_POLICIES, resolveDashboardScope } from "./scope";
 import {
   type RangeKey,
   type RefreshAccepted,
@@ -31,6 +32,7 @@ export type DashboardViewModel = {
   range: RangeKey;
   filters: DashboardFilters;
   metrics: SummaryResponse["usage"] | null;
+  data_revision: number;
   last_scan_completed_at_ms: number | null;
   filter_options: FilterOptionsResponse | null;
   filter_options_loading: boolean;
@@ -239,8 +241,9 @@ export function useDashboardController(options: DashboardControllerOptions = {})
 
   const loadSummary = useCallback(
     (range: RangeKey, filters: DashboardFilters = stateRef.current.filters) => {
-      const canonicalFilters = canonicalDashboardFilters(filters);
-      const queryKey = dashboardQueryKey(range, canonicalFilters);
+      const scope = resolveDashboardScope(DASHBOARD_SCOPE_POLICIES.kpi, range, filters);
+      const canonicalFilters = canonicalDashboardFilters(scope.filters);
+      const queryKey = dashboardQueryKey(scope.range, canonicalFilters);
       summaryAbortRef.current?.abort();
       const controller = new AbortController();
       summaryAbortRef.current = controller;
@@ -252,10 +255,10 @@ export function useDashboardController(options: DashboardControllerOptions = {})
           load_state: value.snapshot ? "loading" : value.load_state === "initial" ? "initial" : "loading",
         }));
       }
-      void client.summary(range, canonicalFilters, controller.signal).then(
+      void client.summary(scope.range, canonicalFilters, controller.signal).then(
         (response) => {
           if (controller.signal.aborted || summaryGenerationRef.current !== generation) return;
-          if (response.range.key !== range || queryKey !== dashboardQueryKey(stateRef.current.range, stateRef.current.filters)) {
+          if (response.range.key !== scope.range || queryKey !== dashboardQueryKey(stateRef.current.range, stateRef.current.filters)) {
             setFailure(failuresRef, "summary", true);
             if (queryKey === dashboardQueryKey(stateRef.current.range, stateRef.current.filters)) {
               commit((value) => ({
@@ -653,6 +656,7 @@ export function useDashboardController(options: DashboardControllerOptions = {})
     range: state.range,
     filters: state.filters,
     metrics: current?.usage ?? null,
+    data_revision: current?.data_revision ?? 0,
     last_scan_completed_at_ms: state.last_scan_completed_at_ms,
     filter_options: state.filter_options,
     filter_options_loading: state.filter_options_loading,

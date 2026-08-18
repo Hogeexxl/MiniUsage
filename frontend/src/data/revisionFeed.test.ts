@@ -7,6 +7,9 @@ function clientWithRevision(revision: number): MiniUsageClient {
   return {
     filterOptions: vi.fn(),
     summary: vi.fn(),
+    modelDistribution: vi.fn(),
+    projectDistribution: vi.fn(),
+    skillsUsage: vi.fn(),
     getSessionSnapshot: vi.fn(),
     getSessionRows: vi.fn(),
     getSessionDetail: vi.fn(),

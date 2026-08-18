@@ -187,6 +187,19 @@ pub(crate) struct UsageOccurrenceWrite {
     pub event_id: String,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct SkillUsageEventWrite {
+    pub occurred_at_ms: i64,
+    pub thread_id: String,
+    pub root_session_id: String,
+    pub model: Option<String>,
+    pub skill_name: String,
+    pub source_file_id: i64,
+    pub file_generation: i64,
+    pub source_start_offset: i64,
+    pub source_end_offset: i64,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum UsageTurnStatus {
     Open,
@@ -359,6 +372,7 @@ pub(crate) struct UsageSourceCommit {
     pub tail_start_offset: Option<i64>,
     pub events: Vec<UsageEventWrite>,
     pub occurrences: Vec<UsageOccurrenceWrite>,
+    pub skill_events: Vec<SkillUsageEventWrite>,
     pub turns: Vec<UsageTurnWrite>,
     pub anomalies: Vec<UsageAnomalyWrite>,
     pub updated_state: UsageSourceStateWrite,
@@ -616,6 +630,7 @@ impl Ledger {
         }
         validate_group_relationship(&transaction, &batch.thread_id, &batch.root_session_id)?;
         let canonical_before = capture_affected_canonical_visibility(&transaction, batch)?;
+        let skills_before = capture_skill_visibility(&transaction, batch)?;
         let has_local_replay = batch.sources.iter().any(|source| source.local_replay);
 
         let mut inserted = 0usize;
@@ -631,6 +646,9 @@ impl Ledger {
                     CanonicalWrite::Duplicate => deduplicated += 1,
                 }
                 write_or_compare_occurrence(&transaction, batch.ledger_epoch, source, occurrence)?;
+            }
+            for skill in &source.skill_events {
+                write_or_compare_skill_event(&transaction, batch.ledger_epoch, source, skill)?;
             }
             for turn in &source.turns {
                 write_turn(
@@ -660,11 +678,14 @@ impl Ledger {
         if has_local_replay {
             cleanup_local_replay_orphans(&transaction, batch.ledger_epoch)?;
         }
-        let canonical_changed = affected_canonical_visibility_changed(
+        let token_visibility_changed = affected_canonical_visibility_changed(
             &transaction,
             batch.ledger_epoch,
             &canonical_before,
         )?;
+        let skill_visibility_changed =
+            affected_skill_visibility_changed(&transaction, batch.ledger_epoch, &skills_before)?;
+        let canonical_changed = token_visibility_changed || skill_visibility_changed;
 
         let active_epoch = epoch.active_epoch;
         let current_revision: i64 =
@@ -934,6 +955,9 @@ impl Ledger {
                   AND NOT EXISTS (SELECT 1 FROM usage_event_occurrences o
                                   WHERE o.ledger_epoch=e.ledger_epoch AND o.event_id=e.event_id)
                 ORDER BY e.ledger_epoch,e.rowid LIMIT ?3)",
+            "DELETE FROM skill_usage_events WHERE rowid IN (
+                SELECT rowid FROM skill_usage_events WHERE ledger_epoch<>?1 AND ledger_epoch<>?2
+                ORDER BY ledger_epoch,rowid LIMIT ?3)",
             "DELETE FROM turns WHERE rowid IN (
                 SELECT rowid FROM turns WHERE ledger_epoch<>?1 AND ledger_epoch<>?2
                 ORDER BY ledger_epoch,rowid LIMIT ?3)",
@@ -1683,6 +1707,7 @@ fn local_replay_safe(
     let contributed: i64 = transaction.query_row(
         "SELECT
             (SELECT count(*) FROM usage_event_occurrences WHERE ledger_epoch=?1 AND source_file_id=?2)
+          + (SELECT count(*) FROM skill_usage_events WHERE ledger_epoch=?1 AND source_file_id=?2)
           + (SELECT count(*) FROM turns WHERE ledger_epoch=?1 AND source_file_id=?2)
           + (SELECT count(*) FROM ingest_anomalies WHERE ledger_epoch=?1 AND source_file_id=?2)
           + (SELECT count(*) FROM usage_source_states WHERE ledger_epoch=?1 AND source_file_id=?2)",
@@ -1860,22 +1885,43 @@ fn carry_occurrence_page(
         |row| row.get(0),
     )?;
     let mut statement = transaction.prepare(
-        "SELECT source_start_offset,event_id FROM usage_event_occurrences
-         WHERE ledger_epoch=?1 AND source_file_id=?2
-           AND (?3 IS NULL OR source_start_offset>?3)
+        "SELECT source_start_offset FROM (
+             SELECT source_start_offset FROM usage_event_occurrences
+              WHERE ledger_epoch=?1 AND source_file_id=?2
+             UNION
+             SELECT source_start_offset FROM skill_usage_events
+              WHERE ledger_epoch=?1 AND source_file_id=?2
+         ) WHERE (?3 IS NULL OR source_start_offset>?3)
          ORDER BY source_start_offset LIMIT ?4",
     )?;
     let rows = statement
         .query_map(
             params![active_epoch, source_file_id, after, CARRY_PAGE_ROWS + 1],
-            |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)),
+            |row| row.get::<_, i64>(0),
         )?
         .collect::<Result<Vec<_>, _>>()?;
     let has_more = rows.len() > CARRY_PAGE_ROWS as usize;
     let copy = &rows[..rows.len().min(CARRY_PAGE_ROWS as usize)];
-    for (start, event_id) in copy {
-        carry_canonical_event(transaction, active_epoch, build_epoch, event_id)?;
-        carry_occurrence(
+    for start in copy {
+        let event_id: Option<String> = transaction
+            .query_row(
+                "SELECT event_id FROM usage_event_occurrences
+                 WHERE ledger_epoch=?1 AND source_file_id=?2 AND source_start_offset=?3",
+                params![active_epoch, source_file_id, start],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if let Some(event_id) = event_id {
+            carry_canonical_event(transaction, active_epoch, build_epoch, &event_id)?;
+            carry_occurrence(
+                transaction,
+                active_epoch,
+                build_epoch,
+                source_file_id,
+                *start,
+            )?;
+        }
+        carry_skill_events_at_offset(
             transaction,
             active_epoch,
             build_epoch,
@@ -1883,7 +1929,7 @@ fn carry_occurrence_page(
             *start,
         )?;
     }
-    let next_after = copy.last().map(|row| row.0).or(after);
+    let next_after = copy.last().copied().or(after);
     let (next_phase, next_cursor) = if has_more {
         ("occurrences", next_after)
     } else {
@@ -2398,6 +2444,32 @@ fn verify_carry_sets(
             "usage carry occurrence set mismatch",
         ));
     }
+    let skill_diff: i64 = transaction.query_row(
+        "SELECT
+          (SELECT count(*) FROM (
+             SELECT file_generation,source_start_offset,source_end_offset,occurred_at_ms,
+                    thread_id,root_session_id,model,skill_name
+             FROM skill_usage_events WHERE ledger_epoch=?1 AND source_file_id=?3
+             EXCEPT
+             SELECT file_generation,source_start_offset,source_end_offset,occurred_at_ms,
+                    thread_id,root_session_id,model,skill_name
+             FROM skill_usage_events WHERE ledger_epoch=?2 AND source_file_id=?3))
+        + (SELECT count(*) FROM (
+             SELECT file_generation,source_start_offset,source_end_offset,occurred_at_ms,
+                    thread_id,root_session_id,model,skill_name
+             FROM skill_usage_events WHERE ledger_epoch=?2 AND source_file_id=?3
+             EXCEPT
+             SELECT file_generation,source_start_offset,source_end_offset,occurred_at_ms,
+                    thread_id,root_session_id,model,skill_name
+             FROM skill_usage_events WHERE ledger_epoch=?1 AND source_file_id=?3))",
+        params![active_epoch, build_epoch, source_file_id],
+        |row| row.get(0),
+    )?;
+    if skill_diff != 0 {
+        return Err(StorageError::usage_conflict(
+            "usage carry Skill set mismatch",
+        ));
+    }
     // Compare complete active/build rows through deterministic fingerprints in
     // Rust so that updated_at_ms and ledger_epoch are the only excluded fields.
     let active_turns = carry_table_fingerprint(
@@ -2907,6 +2979,26 @@ fn validate_source_payload(
             }
         }
     }
+    for skill in &source.skill_events {
+        if skill.source_file_id != source.source_file_id
+            || skill.file_generation != source.expected_file_generation
+            || skill.thread_id != batch.thread_id
+            || skill.root_session_id != batch.root_session_id
+            || skill.occurred_at_ms < 0
+            || skill.skill_name.is_empty()
+            || skill.skill_name.len() > 128
+            || skill.skill_name.chars().any(char::is_control)
+            || skill
+                .model
+                .as_ref()
+                .is_some_and(|model| model.trim().is_empty() || model.chars().any(char::is_control))
+            || skill.source_start_offset < source.batch_start_offset
+            || skill.source_end_offset > source.last_complete_offset
+            || skill.source_end_offset <= skill.source_start_offset
+        {
+            return Err(StorageError::invalid_state("invalid Skill usage event"));
+        }
+    }
     for (event, occurrence) in source.events.iter().zip(&source.occurrences) {
         event
             .usage
@@ -3027,6 +3119,7 @@ fn prepare_local_replay(
         let facts: i64 = transaction.query_row(
             "SELECT
                 (SELECT count(*) FROM usage_event_occurrences WHERE ledger_epoch=?1 AND source_file_id=?2) +
+                (SELECT count(*) FROM skill_usage_events WHERE ledger_epoch=?1 AND source_file_id=?2) +
                 (SELECT count(*) FROM turns WHERE ledger_epoch=?1 AND source_file_id=?2) +
                 (SELECT count(*) FROM ingest_anomalies WHERE ledger_epoch=?1 AND source_file_id=?2) +
                 (SELECT count(*) FROM usage_source_states WHERE ledger_epoch=?1 AND source_file_id=?2)",
@@ -3061,6 +3154,10 @@ fn prepare_local_replay(
 
     transaction.execute(
         "DELETE FROM usage_event_occurrences WHERE ledger_epoch=?1 AND source_file_id=?2",
+        params![batch.ledger_epoch, source.source_file_id],
+    )?;
+    transaction.execute(
+        "DELETE FROM skill_usage_events WHERE ledger_epoch=?1 AND source_file_id=?2",
         params![batch.ledger_epoch, source.source_file_id],
     )?;
     transaction.execute(
@@ -3287,6 +3384,182 @@ fn write_or_compare_event(
         ],
     )?;
     Ok(CanonicalWrite::Inserted)
+}
+
+fn write_or_compare_skill_event(
+    transaction: &Transaction<'_>,
+    epoch: i64,
+    source: &UsageSourceCommit,
+    event: &SkillUsageEventWrite,
+) -> StorageResult<()> {
+    let existing: Option<(i64, i64, String, String, Option<String>)> = transaction
+        .query_row(
+            "SELECT source_end_offset,occurred_at_ms,thread_id,root_session_id,model
+             FROM skill_usage_events
+             WHERE ledger_epoch=?1 AND source_file_id=?2 AND file_generation=?3
+               AND source_start_offset=?4 AND skill_name=?5",
+            params![
+                epoch,
+                event.source_file_id,
+                event.file_generation,
+                event.source_start_offset,
+                event.skill_name
+            ],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                ))
+            },
+        )
+        .optional()?;
+    let expected = (
+        event.source_end_offset,
+        event.occurred_at_ms,
+        event.thread_id.clone(),
+        event.root_session_id.clone(),
+        event.model.clone(),
+    );
+    if let Some(existing) = existing {
+        if existing == expected {
+            return Ok(());
+        }
+        return Err(StorageError::usage_conflict("Skill usage event conflict"));
+    }
+    transaction.execute(
+        "INSERT INTO skill_usage_events(
+            ledger_epoch,source_file_id,file_generation,source_start_offset,source_end_offset,
+            occurred_at_ms,thread_id,root_session_id,model,skill_name,created_at_ms)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
+        params![
+            epoch,
+            source.source_file_id,
+            source.expected_file_generation,
+            event.source_start_offset,
+            event.source_end_offset,
+            event.occurred_at_ms,
+            event.thread_id,
+            event.root_session_id,
+            event.model,
+            event.skill_name,
+            source.committed_at_ms
+        ],
+    )?;
+    Ok(())
+}
+
+fn skill_source_fingerprint(
+    transaction: &Transaction<'_>,
+    epoch: i64,
+    source_file_id: i64,
+) -> StorageResult<Vec<u8>> {
+    let mut statement = transaction.prepare(
+        "SELECT file_generation,source_start_offset,source_end_offset,occurred_at_ms,
+                thread_id,root_session_id,model,skill_name
+         FROM skill_usage_events
+         WHERE ledger_epoch=?1 AND source_file_id=?2
+         ORDER BY file_generation,source_start_offset,skill_name",
+    )?;
+    let mut rows = statement.query(params![epoch, source_file_id])?;
+    let mut hasher = blake3::Hasher::new();
+    hasher.update(b"skill-usage-source-v1\0");
+    while let Some(row) = rows.next()? {
+        let values = [
+            row.get::<_, i64>(0)?.to_string(),
+            row.get::<_, i64>(1)?.to_string(),
+            row.get::<_, i64>(2)?.to_string(),
+            row.get::<_, i64>(3)?.to_string(),
+            row.get::<_, String>(4)?,
+            row.get::<_, String>(5)?,
+            row.get::<_, Option<String>>(6)?
+                .unwrap_or_else(|| "\0".to_owned()),
+            row.get::<_, String>(7)?,
+        ];
+        for value in values {
+            hasher.update(&(value.len() as u64).to_be_bytes());
+            hasher.update(value.as_bytes());
+        }
+    }
+    Ok(hasher.finalize().as_bytes().to_vec())
+}
+
+fn capture_skill_visibility(
+    transaction: &Transaction<'_>,
+    batch: &UsageCommitBatch,
+) -> StorageResult<Vec<(i64, Vec<u8>)>> {
+    batch
+        .sources
+        .iter()
+        .map(|source| {
+            Ok((
+                source.source_file_id,
+                skill_source_fingerprint(transaction, batch.ledger_epoch, source.source_file_id)?,
+            ))
+        })
+        .collect()
+}
+
+fn affected_skill_visibility_changed(
+    transaction: &Transaction<'_>,
+    epoch: i64,
+    before: &[(i64, Vec<u8>)],
+) -> StorageResult<bool> {
+    for (source_file_id, fingerprint) in before {
+        if &skill_source_fingerprint(transaction, epoch, *source_file_id)? != fingerprint {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+fn carry_skill_events_at_offset(
+    transaction: &Transaction<'_>,
+    active_epoch: i64,
+    build_epoch: i64,
+    source_file_id: i64,
+    start_offset: i64,
+) -> StorageResult<()> {
+    transaction.execute(
+        "INSERT INTO skill_usage_events(
+            ledger_epoch,source_file_id,file_generation,source_start_offset,source_end_offset,
+            occurred_at_ms,thread_id,root_session_id,model,skill_name,created_at_ms)
+         SELECT ?1,source_file_id,file_generation,source_start_offset,source_end_offset,
+            occurred_at_ms,thread_id,root_session_id,model,skill_name,created_at_ms
+         FROM skill_usage_events a
+         WHERE a.ledger_epoch=?2 AND a.source_file_id=?3 AND a.source_start_offset=?4
+           AND NOT EXISTS(
+             SELECT 1 FROM skill_usage_events b
+             WHERE b.ledger_epoch=?1 AND b.source_file_id=a.source_file_id
+               AND b.file_generation=a.file_generation
+               AND b.source_start_offset=a.source_start_offset AND b.skill_name=a.skill_name)",
+        params![build_epoch, active_epoch, source_file_id, start_offset],
+    )?;
+    let diff: i64 = transaction.query_row(
+        "SELECT
+          (SELECT count(*) FROM (
+             SELECT file_generation,source_end_offset,occurred_at_ms,thread_id,root_session_id,model,skill_name
+             FROM skill_usage_events WHERE ledger_epoch=?1 AND source_file_id=?3 AND source_start_offset=?4
+             EXCEPT
+             SELECT file_generation,source_end_offset,occurred_at_ms,thread_id,root_session_id,model,skill_name
+             FROM skill_usage_events WHERE ledger_epoch=?2 AND source_file_id=?3 AND source_start_offset=?4))
+        + (SELECT count(*) FROM (
+             SELECT file_generation,source_end_offset,occurred_at_ms,thread_id,root_session_id,model,skill_name
+             FROM skill_usage_events WHERE ledger_epoch=?2 AND source_file_id=?3 AND source_start_offset=?4
+             EXCEPT
+             SELECT file_generation,source_end_offset,occurred_at_ms,thread_id,root_session_id,model,skill_name
+             FROM skill_usage_events WHERE ledger_epoch=?1 AND source_file_id=?3 AND source_start_offset=?4))",
+        params![active_epoch, build_epoch, source_file_id, start_offset],
+        |row| row.get(0),
+    )?;
+    if diff != 0 {
+        return Err(StorageError::usage_conflict(
+            "usage carry Skill event conflict",
+        ));
+    }
+    Ok(())
 }
 
 fn write_or_compare_occurrence(
@@ -3844,6 +4117,11 @@ pub(super) fn reconcile_usage_metadata_change(
             params![next_root, active_epoch, thread_id],
         )?;
         transaction.execute(
+            "UPDATE skill_usage_events SET root_session_id=?1
+             WHERE ledger_epoch=?2 AND thread_id=?3",
+            params![next_root, active_epoch, thread_id],
+        )?;
+        transaction.execute(
             "UPDATE usage_source_states SET root_session_id=?1
              WHERE ledger_epoch=?2 AND owning_thread_id=?3",
             params![next_root, active_epoch, thread_id],
@@ -4097,6 +4375,7 @@ mod tests {
                 source_end_offset: 20,
                 event_id,
             }],
+            skill_events: Vec::new(),
             turns: with_auxiliary_rows
                 .then(|| UsageTurnWrite {
                     turn_key: "turn".to_owned(),

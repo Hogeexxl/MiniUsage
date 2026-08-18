@@ -7,12 +7,16 @@
 
 use crate::codex::{
     CodexRolloutParser, CompleteUsageLine, EnvelopeKind, LifecycleKind, NormalizedTokenValue,
-    OptionalTokenValue, RecordClassification, RecordOwnership, UsageRawRecord,
+    OptionalTokenValue, RecordClassification, RecordOwnership, SkillUsageParser, UsageRawRecord,
 };
 
-use super::processor::{
-    Anomaly, ClosedTurn, GapKind, Occurrence, Ownership, ProcessResult, TurnEndStatus, TurnState,
-    UsageContext, UsageEvent, UsageProcessor, UsageRecord, UsageSourceState, UsageValue,
+use super::{
+    processor::{
+        Anomaly, ClosedTurn, GapKind, Occurrence, Ownership, ProcessResult, TurnEndStatus,
+        TurnState, UsageContext, UsageEvent, UsageProcessor, UsageRecord, UsageSourceState,
+        UsageValue,
+    },
+    skills::SkillUsageEvent,
 };
 
 pub const MAX_BATCH_BYTES: u64 = 4 * 1024 * 1024;
@@ -192,6 +196,7 @@ pub struct UsageSourceCommitDto {
     pub root_session_id: String,
     pub events: Vec<UsageEvent>,
     pub occurrences: Vec<Occurrence>,
+    pub skill_events: Vec<SkillUsageEvent>,
     pub closed_turns: Vec<ClosedTurn>,
     pub open_turn: Option<TurnState>,
     pub anomalies: Vec<Anomaly>,
@@ -312,6 +317,7 @@ impl UsagePipeline {
             .and_then(|state| state.active_reasoning_effort_offset);
         let mut events = Vec::new();
         let mut occurrences = Vec::new();
+        let mut skill_events = Vec::new();
         let mut anomalies = Vec::new();
         let mut closed_turns = Vec::new();
         let mut complete_line_count = 0u64;
@@ -352,6 +358,7 @@ impl UsagePipeline {
                     continuation_state = SourceContinuationState::OwningLive;
                 }
             }
+            collect_skill_events(&item, &state, &context, &mut skill_events);
             let record = match &item {
                 ClassifiedUsageItem::Line(value) => adapter.parse_line(&value.line),
                 ClassifiedUsageItem::Oversized(_) => UsageRawRecord::OversizedComplete {
@@ -431,6 +438,7 @@ impl UsagePipeline {
             owning_thread_id,
             root_session_id,
             result,
+            skill_events,
             last_complete_offset,
             complete_line_count,
             0,
@@ -468,6 +476,7 @@ where
     let mut active_reasoning_effort_offset = None;
     let mut events = Vec::new();
     let mut occurrences = Vec::new();
+    let mut skill_events = Vec::new();
     let mut anomalies = Vec::new();
     let mut closed_turns = Vec::new();
     let mut last = plan.read_start_offset;
@@ -546,6 +555,7 @@ where
         ) {
             break;
         }
+        collect_skill_events(&item, &state, &context, &mut skill_events);
         let raw = match &item {
             ClassifiedUsageItem::Line(value) => adapter.parse_line(&value.line),
             ClassifiedUsageItem::Oversized(_) => UsageRawRecord::OversizedComplete {
@@ -599,6 +609,7 @@ where
                     updated_state: state,
                     needs_rebuild: false,
                 },
+                skill_events,
                 last,
                 complete_line_count,
                 replayed_bytes,
@@ -641,6 +652,7 @@ where
             updated_state: state,
             needs_rebuild: false,
         },
+        skill_events,
         last,
         complete_line_count,
         replayed_bytes,
@@ -684,6 +696,7 @@ where
     let mut active_reasoning_effort_offset = None;
     let mut events = Vec::new();
     let mut occurrences = Vec::new();
+    let mut skill_events = Vec::new();
     let mut anomalies = Vec::new();
     let mut closed_turns = Vec::new();
     let mut last = plan.read_start_offset;
@@ -740,6 +753,7 @@ where
         if !fits_line_budget(adapter_bytes, adapter_lines, bytes, oversized) {
             return Ok(PipelineDisposition::NeedsRebuild);
         }
+        collect_skill_events(&item, &state, &context, &mut skill_events);
         let raw = match &item {
             ClassifiedUsageItem::Line(value) => adapter.parse_line(&value.line),
             ClassifiedUsageItem::Oversized(_) => UsageRawRecord::OversizedComplete {
@@ -801,6 +815,7 @@ where
         owning_thread_id.to_owned(),
         root_session_id.to_owned(),
         result,
+        skill_events,
         last,
         replayed_lines + adapter_lines,
         replayed_bytes,
@@ -812,6 +827,36 @@ where
         active_reasoning_effort_offset,
         continuation_state,
     )))
+}
+
+fn collect_skill_events(
+    item: &ClassifiedUsageItem,
+    state: &UsageSourceState,
+    context: &UsageContext,
+    output: &mut Vec<SkillUsageEvent>,
+) {
+    if item.classification().ownership != RecordOwnership::Owning {
+        return;
+    }
+    let ClassifiedUsageItem::Line(value) = item else {
+        return;
+    };
+    let Some(evidence) = SkillUsageParser.parse_line(&value.line) else {
+        return;
+    };
+    for skill_name in evidence.skill_names {
+        output.push(SkillUsageEvent {
+            occurred_at_ms: evidence.occurred_at_ms,
+            thread_id: context.owning_thread_id.clone(),
+            root_session_id: context.root_session_id.clone(),
+            model: state.active_model.clone(),
+            skill_name,
+            source_file_id: context.source_file_id,
+            file_generation: context.file_generation,
+            source_start_offset: value.line.start_offset(),
+            source_end_offset: value.line.end_offset(),
+        });
+    }
 }
 
 fn matching_item(item: &ClassifiedUsageItem, expected: u64, observed_size: u64) -> bool {
@@ -917,6 +962,7 @@ fn commit_dto(
     owning_thread_id: String,
     root_session_id: String,
     result: ProcessResult,
+    skill_events: Vec<SkillUsageEvent>,
     last_complete_offset: u64,
     complete_line_count: u64,
     replayed_prefix_bytes: u64,
@@ -975,6 +1021,7 @@ fn commit_dto(
         root_session_id,
         events: result.events,
         occurrences: result.occurrences,
+        skill_events,
         closed_turns: result.closed_turns,
         open_turn: result.updated_state.open_turn,
         anomalies: result.anomalies,

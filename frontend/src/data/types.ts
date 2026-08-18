@@ -1,4 +1,4 @@
-export const RANGE_KEYS = ["today", "yesterday", "week", "month", "year"] as const;
+export const RANGE_KEYS = ["today", "yesterday", "7d", "30d", "year"] as const;
 
 export type RangeKey = (typeof RANGE_KEYS)[number];
 
@@ -62,6 +62,51 @@ export type FilterOptionsResponse = {
   data_revision: number;
   models: string[];
   projects: ProjectFilterOption[];
+};
+
+export type DistributionUsageDto = {
+  total_tokens: number;
+  estimated_cost: number | null;
+  estimated_cost_status: EstimatedCostStatus;
+};
+
+export type ModelDistributionItemDto = {
+  model: string;
+  usage: DistributionUsageDto;
+};
+
+export type ModelDistributionResponse = {
+  range: RangeDto;
+  data_revision: number;
+  items: ModelDistributionItemDto[];
+};
+
+export type ProjectDistributionItemDto = {
+  kind: "project" | "projectless" | "unknown";
+  project_name: string | null;
+  project_path: string | null;
+  usage: DistributionUsageDto;
+};
+
+export type ProjectDistributionResponse = {
+  range: RangeDto;
+  data_revision: number;
+  items: ProjectDistributionItemDto[];
+};
+
+export type SkillDayDto = {
+  date: string;
+  start_ms: number;
+  end_ms: number;
+  total: number;
+  skills: Array<{ skill_name: string; count: number }>;
+};
+
+export type SkillsUsageResponse = {
+  range: RangeDto;
+  data_revision: number;
+  data_status: "ready" | "rebuilding";
+  days: SkillDayDto[];
 };
 
 export type SessionItemDto = {
