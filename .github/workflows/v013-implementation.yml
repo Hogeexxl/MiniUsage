@@ -45,6 +45,7 @@ jobs:
           set +e
           log="$RUNNER_TEMP/v013-run.log"
           : > "$log"
+          rm -f .github/v013-failure.log
           run_step() {
             name="$1"; shift
             echo "===== $name =====" | tee -a "$log"
@@ -74,7 +75,6 @@ jobs:
             exit "$status"
           fi
 
-          rm -f .github/v013-failure.log
           git add -A
           if git diff --cached --quiet; then
             echo 'No implementation changes to commit.'
