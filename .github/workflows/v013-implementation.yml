@@ -1,0 +1,80 @@
+name: v0.1.3 Implementation Runner
+
+on:
+  push:
+    branches:
+      - release/v0.1.3
+    paths:
+      - '.github/scripts/v013-implement.py'
+      - '.github/workflows/v013-implementation.yml'
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  implement-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out release branch
+        uses: actions/checkout@v4
+        with:
+          ref: release/v0.1.3
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Set up Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Apply v0.1.3 implementation
+        run: python3 .github/scripts/v013-implement.py
+
+      - name: Format Rust
+        run: cargo fmt
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Frontend tests
+        working-directory: frontend
+        run: npm test
+
+      - name: Frontend type check
+        working-directory: frontend
+        run: npm run check
+
+      - name: Frontend build
+        working-directory: frontend
+        run: npm run build
+
+      - name: Rust check
+        run: cargo check --locked
+
+      - name: Rust tests
+        run: cargo test --locked
+
+      - name: Commit verified implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          git status --short
+          if git diff --quiet && git diff --cached --quiet; then
+            echo 'No implementation changes to commit.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'feat: implement v0.1.3 dashboard analytics [skip ci]'
+          git push origin HEAD:release/v0.1.3
