@@ -953,6 +953,23 @@ fn source_commit(
             })
         })
         .collect::<Result<Vec<_>, UsageLedgerError>>()?;
+    let skill_events = dto
+        .skill_events
+        .iter()
+        .map(|event| {
+            Ok(storage::usage::SkillUsageEventWrite {
+                occurred_at_ms: event.occurred_at_ms,
+                thread_id: event.thread_id.clone(),
+                root_session_id: event.root_session_id.clone(),
+                model: event.model.clone(),
+                skill_name: event.skill_name.clone(),
+                source_file_id: event.source_file_id,
+                file_generation: event.file_generation,
+                source_start_offset: u64_to_i64(event.source_start_offset)?,
+                source_end_offset: u64_to_i64(event.source_end_offset)?,
+            })
+        })
+        .collect::<Result<Vec<_>, UsageLedgerError>>()?;
     let anomalies = dto
         .anomalies
         .iter()
@@ -989,6 +1006,7 @@ fn source_commit(
         tail_start_offset: dto.tail_start_offset.map(u64_to_i64).transpose()?,
         events,
         occurrences,
+        skill_events,
         turns,
         anomalies,
         updated_state,
@@ -1375,6 +1393,7 @@ mod tests {
                 source_end_offset: 1,
                 event_id,
             }],
+            skill_events: Vec::new(),
             closed_turns: Vec::new(),
             open_turn: None,
             anomalies: Vec::new(),

@@ -1491,7 +1491,7 @@ not-json
             .unwrap()
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("read guardian fixture schema version");
-        assert_eq!(user_version, 8);
+        assert_eq!(user_version, 9);
         let child_source_id = source_checkpoint(&fixture.ledger, &fixture.child_path).0;
         let file_before = fs::File::open(&fixture.child_path).expect("open guardian rollout");
         let metadata_before = file_before.metadata().expect("stat guardian rollout");
@@ -1616,7 +1616,7 @@ not-json
             .unwrap()
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("read guardian fixture schema version");
-        assert_eq!(user_version, 8);
+        assert_eq!(user_version, 9);
         let child_source_id = source_checkpoint(&fixture.ledger, &fixture.child_path).0;
         let usage_checkpoint_before =
             checkpoint_state(&fixture.ledger, &fixture.child_path, "usage");

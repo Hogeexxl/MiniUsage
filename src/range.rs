@@ -22,8 +22,8 @@ use crate::{api::query::ApiError, usage::aggregate::TimeRange};
 pub enum RangeKey {
     Today,
     Yesterday,
-    Week,
-    Month,
+    SevenDays,
+    ThirtyDays,
     Year,
 }
 
@@ -32,8 +32,8 @@ impl RangeKey {
         match value {
             Some("today") => Ok(Self::Today),
             Some("yesterday") => Ok(Self::Yesterday),
-            Some("week") => Ok(Self::Week),
-            Some("month") => Ok(Self::Month),
+            Some("7d") => Ok(Self::SevenDays),
+            Some("30d") => Ok(Self::ThirtyDays),
             Some("year") => Ok(Self::Year),
             _ => Err(ApiError::InvalidRange),
         }
@@ -43,8 +43,8 @@ impl RangeKey {
         match self {
             Self::Today => "today",
             Self::Yesterday => "yesterday",
-            Self::Week => "week",
-            Self::Month => "month",
+            Self::SevenDays => "7d",
+            Self::ThirtyDays => "30d",
             Self::Year => "year",
         }
     }
@@ -62,6 +62,70 @@ impl ResolvedRange {
     pub(crate) fn aggregate_range(&self) -> Result<TimeRange, ApiError> {
         TimeRange::new(self.start_ms, self.end_ms).map_err(|_| ApiError::InvalidRange)
     }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResolvedDay {
+    pub date: String,
+    pub start_ms: i64,
+    pub end_ms: i64,
+}
+
+/// Resolve every local civil day covered by a named range. The returned
+/// boundaries are UTC milliseconds, but the day labels and midnight edges are
+/// determined exclusively by the range's IANA time zone. SQLite and the
+/// frontend never need platform-local time conversion.
+pub fn resolve_day_buckets(range: &ResolvedRange) -> Result<Vec<ResolvedDay>, ApiError> {
+    #[cfg(windows)]
+    {
+        return resolve_day_buckets_with_loader(range, EmbeddedZone::load);
+    }
+    #[cfg(not(windows))]
+    {
+        resolve_day_buckets_with_loader(range, TzifZone::load)
+    }
+}
+
+fn resolve_day_buckets_with_loader<L, Z>(
+    range: &ResolvedRange,
+    loader: L,
+) -> Result<Vec<ResolvedDay>, ApiError>
+where
+    L: FnOnce(&str) -> Result<Z, ApiError>,
+    Z: CivilZone,
+{
+    let zone = loader(&range.timezone)?;
+    let start_seconds = range.start_ms.div_euclid(1_000);
+    let local_seconds = start_seconds
+        .checked_add(i64::from(zone.offset_at(start_seconds)?))
+        .ok_or(ApiError::LocalTimeUnavailable)?;
+    let mut date = DateTime::from_timestamp(local_seconds, 0)
+        .ok_or(ApiError::LocalTimeUnavailable)?
+        .date_naive();
+    let mut days = Vec::new();
+    while days.len() < 400 {
+        let start_ms = zone.local_midnight_to_utc_ms(date)?;
+        if start_ms >= range.end_ms {
+            break;
+        }
+        let next = date
+            .checked_add_days(Days::new(1))
+            .ok_or(ApiError::LocalTimeUnavailable)?;
+        let end_ms = zone.local_midnight_to_utc_ms(next)?;
+        if start_ms < range.start_ms || end_ms > range.end_ms || end_ms <= start_ms {
+            return Err(ApiError::LocalTimeUnavailable);
+        }
+        days.push(ResolvedDay {
+            date: date.format("%Y-%m-%d").to_string(),
+            start_ms,
+            end_ms,
+        });
+        date = next;
+    }
+    if days.is_empty() || days.last().is_none_or(|day| day.end_ms != range.end_ms) {
+        return Err(ApiError::LocalTimeUnavailable);
+    }
+    Ok(days)
 }
 
 pub fn resolve_system_range(key: RangeKey) -> Result<ResolvedRange, ApiError> {
@@ -168,28 +232,18 @@ fn civil_dates(key: RangeKey, today: NaiveDate) -> Result<(NaiveDate, NaiveDate)
                 .ok_or(ApiError::LocalTimeUnavailable)?,
             today,
         )),
-        RangeKey::Week => {
-            let start = today
-                .checked_sub_days(Days::new(u64::from(today.weekday().num_days_from_monday())))
-                .ok_or(ApiError::LocalTimeUnavailable)?;
-            let end = start
-                .checked_add_days(Days::new(7))
-                .ok_or(ApiError::LocalTimeUnavailable)?;
-            Ok((start, end))
-        }
-        RangeKey::Month => {
-            let start = NaiveDate::from_ymd_opt(today.year(), today.month(), 1)
-                .ok_or(ApiError::LocalTimeUnavailable)?;
-            let (year, month) = if today.month() == 12 {
-                (today.year().checked_add(1), 1)
-            } else {
-                (Some(today.year()), today.month() + 1)
-            };
-            let end =
-                NaiveDate::from_ymd_opt(year.ok_or(ApiError::LocalTimeUnavailable)?, month, 1)
-                    .ok_or(ApiError::LocalTimeUnavailable)?;
-            Ok((start, end))
-        }
+        RangeKey::SevenDays => Ok((
+            today
+                .checked_sub_days(Days::new(6))
+                .ok_or(ApiError::LocalTimeUnavailable)?,
+            next_day(today)?,
+        )),
+        RangeKey::ThirtyDays => Ok((
+            today
+                .checked_sub_days(Days::new(29))
+                .ok_or(ApiError::LocalTimeUnavailable)?,
+            next_day(today)?,
+        )),
         RangeKey::Year => {
             let start = NaiveDate::from_ymd_opt(today.year(), 1, 1)
                 .ok_or(ApiError::LocalTimeUnavailable)?;
@@ -696,14 +750,14 @@ mod tests {
                 "2026-08-08T00:00:00Z",
             ),
             (
-                RangeKey::Week,
-                "2026-08-03T00:00:00Z",
-                "2026-08-10T00:00:00Z",
+                RangeKey::SevenDays,
+                "2026-08-02T00:00:00Z",
+                "2026-08-09T00:00:00Z",
             ),
             (
-                RangeKey::Month,
-                "2026-08-01T00:00:00Z",
-                "2026-09-01T00:00:00Z",
+                RangeKey::ThirtyDays,
+                "2026-07-10T00:00:00Z",
+                "2026-08-09T00:00:00Z",
             ),
             (
                 RangeKey::Year,

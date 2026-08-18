@@ -384,7 +384,7 @@ mod tests {
 }
 ''',
 )
-replace_once("src/codex/mod.rs", "mod global_state;\nmod metadata;", "mod global_state;\nmod metadata;\nmod skill_usage;")
+replace_once("src/codex/mod.rs", "pub mod global_state;\npub mod metadata;", "pub mod global_state;\npub mod metadata;\nmod skill_usage;")
 replace_once(
     "src/codex/mod.rs",
     "pub use usage::{",
@@ -502,6 +502,10 @@ pipeline = pipeline.replace("""                },
                 last,""")
 pipeline = pipeline.replace("""        result,
         last,""", """        result,
+        skill_events,
+        last,""")
+pipeline = pipeline.replace("""        },
+        last,""", """        },
         skill_events,
         last,""")
 if pipeline.count("skill_events,") < 4:
@@ -1116,7 +1120,7 @@ fn write_or_compare_occurrence(
 # ---------------------------------------------------------------------------
 write(
     "src/usage/analytics.rs",
-    r'''use rusqlite::{TransactionBehavior, params, params_from_iter, types::Value};
+    r'''use rusqlite::{TransactionBehavior, params_from_iter, types::Value};
 
 use crate::{
     range::ResolvedDay,
@@ -1321,6 +1325,7 @@ pub fn model_distribution_snapshot(
             Ok(ModelDistributionRow { model, usage: distribution_usage(tokens, cost, unknown, count)? })
         })
         .collect::<Result<Vec<_>, UsageLedgerError>>()?;
+    drop(statement);
     transaction.commit().map_err(StorageError::sqlite)?;
     Ok(AnalyticsSnapshot { data_revision, active_epoch, value })
 }
@@ -1385,6 +1390,7 @@ pub fn project_distribution_snapshot(
             })
         })
         .collect::<Result<Vec<_>, UsageLedgerError>>()?;
+    drop(statement);
     transaction.commit().map_err(StorageError::sqlite)?;
     Ok(AnalyticsSnapshot { data_revision, active_epoch, value })
 }

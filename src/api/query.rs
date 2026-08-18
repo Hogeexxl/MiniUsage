@@ -20,6 +20,10 @@ use crate::{
             SessionSortIndexItem, SessionSortOrder, SessionUsageRow, TokenTotals, UsageFilter,
             UsageSummary,
         },
+        analytics::{
+            AnalyticsSnapshot, DistributionCostStatus, ModelDistributionRow,
+            ProjectDistributionIdentity, ProjectDistributionRow, SkillsUsage,
+        },
         ledger::{
             SessionDetailSnapshot, SessionRowsSnapshot, SessionSnapshot, UsageLedgerError,
             UsageSnapshot,
@@ -265,6 +269,64 @@ pub struct ModelsResponse {
     pub range: RangeDto,
     pub data_revision: i64,
     pub items: Vec<ModelUsageDto>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct DistributionUsageDto {
+    pub total_tokens: i64,
+    pub estimated_cost: Option<f64>,
+    pub estimated_cost_status: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct ModelDistributionItemDto {
+    pub model: String,
+    pub usage: DistributionUsageDto,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct ModelDistributionResponse {
+    pub range: RangeDto,
+    pub data_revision: i64,
+    pub items: Vec<ModelDistributionItemDto>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct ProjectDistributionItemDto {
+    pub kind: String,
+    pub project_name: Option<String>,
+    pub project_path: Option<String>,
+    pub usage: DistributionUsageDto,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct ProjectDistributionResponse {
+    pub range: RangeDto,
+    pub data_revision: i64,
+    pub items: Vec<ProjectDistributionItemDto>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct SkillCountDto {
+    pub skill_name: String,
+    pub count: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct SkillDayDto {
+    pub date: String,
+    pub start_ms: i64,
+    pub end_ms: i64,
+    pub total: i64,
+    pub skills: Vec<SkillCountDto>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct SkillsUsageResponse {
+    pub range: RangeDto,
+    pub data_revision: i64,
+    pub data_status: String,
+    pub days: Vec<SkillDayDto>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -530,6 +592,130 @@ pub fn models_response(
         range: RangeDto::from(range),
         data_revision: snapshot.data_revision,
         items,
+    })
+}
+
+pub fn model_distribution_response(
+    range: &ResolvedRange,
+    snapshot: AnalyticsSnapshot<Vec<ModelDistributionRow>>,
+) -> Result<ModelDistributionResponse, ApiError> {
+    ensure_safe(snapshot.data_revision)?;
+    let items = snapshot
+        .value
+        .into_iter()
+        .map(|row| {
+            Ok(ModelDistributionItemDto {
+                model: row.model,
+                usage: map_distribution_usage(row.usage)?,
+            })
+        })
+        .collect::<Result<Vec<_>, ApiError>>()?;
+    Ok(ModelDistributionResponse {
+        range: RangeDto::from(range),
+        data_revision: snapshot.data_revision,
+        items,
+    })
+}
+
+pub fn project_distribution_response(
+    range: &ResolvedRange,
+    snapshot: AnalyticsSnapshot<Vec<ProjectDistributionRow>>,
+) -> Result<ProjectDistributionResponse, ApiError> {
+    ensure_safe(snapshot.data_revision)?;
+    let items = snapshot
+        .value
+        .into_iter()
+        .map(|row| {
+            let (kind, project_name, project_path) = match row.identity {
+                ProjectDistributionIdentity::Project {
+                    project_name,
+                    project_path,
+                } => ("project", Some(project_name), Some(project_path)),
+                ProjectDistributionIdentity::Projectless => ("projectless", None, None),
+                ProjectDistributionIdentity::Unknown => ("unknown", None, None),
+            };
+            Ok(ProjectDistributionItemDto {
+                kind: kind.to_owned(),
+                project_name,
+                project_path,
+                usage: map_distribution_usage(row.usage)?,
+            })
+        })
+        .collect::<Result<Vec<_>, ApiError>>()?;
+    Ok(ProjectDistributionResponse {
+        range: RangeDto::from(range),
+        data_revision: snapshot.data_revision,
+        items,
+    })
+}
+
+pub fn skills_usage_response(
+    range: &ResolvedRange,
+    snapshot: AnalyticsSnapshot<SkillsUsage>,
+) -> Result<SkillsUsageResponse, ApiError> {
+    ensure_safe(snapshot.data_revision)?;
+    let days = snapshot
+        .value
+        .days
+        .into_iter()
+        .map(|day| {
+            ensure_safe(day.start_ms)?;
+            ensure_safe(day.end_ms)?;
+            ensure_safe(day.total)?;
+            let skills = day
+                .skills
+                .into_iter()
+                .map(|skill| {
+                    ensure_safe(skill.count)?;
+                    Ok(SkillCountDto {
+                        skill_name: skill.skill_name,
+                        count: skill.count,
+                    })
+                })
+                .collect::<Result<Vec<_>, ApiError>>()?;
+            Ok(SkillDayDto {
+                date: day.date,
+                start_ms: day.start_ms,
+                end_ms: day.end_ms,
+                total: day.total,
+                skills,
+            })
+        })
+        .collect::<Result<Vec<_>, ApiError>>()?;
+    Ok(SkillsUsageResponse {
+        range: RangeDto::from(range),
+        data_revision: snapshot.data_revision,
+        data_status: if snapshot.value.ready {
+            "ready"
+        } else {
+            "rebuilding"
+        }
+        .to_owned(),
+        days,
+    })
+}
+
+fn map_distribution_usage(
+    usage: crate::usage::analytics::DistributionUsage,
+) -> Result<DistributionUsageDto, ApiError> {
+    ensure_safe(usage.total_tokens)?;
+    let estimated_cost = match usage.estimated_cost_nanos_usd {
+        Some(value) if value >= 0 => Some(value as f64 / 1_000_000_000.0),
+        Some(_) => return Err(ApiError::QueryFailed),
+        None => None,
+    };
+    let valid = match usage.cost_status {
+        DistributionCostStatus::Complete => estimated_cost.is_some(),
+        DistributionCostStatus::Partial => estimated_cost.is_some(),
+        DistributionCostStatus::Unknown => estimated_cost.is_none(),
+    };
+    if !valid {
+        return Err(ApiError::QueryFailed);
+    }
+    Ok(DistributionUsageDto {
+        total_tokens: usage.total_tokens,
+        estimated_cost,
+        estimated_cost_status: usage.cost_status.as_str().to_owned(),
     })
 }
 
@@ -1027,7 +1213,7 @@ mod tests {
             );
         }
         assert_eq!(
-            parse_summary_params(Some("range=year&range=month")),
+            parse_summary_params(Some("range=year&range=30d")),
             Err(ApiError::InvalidRange)
         );
     }

@@ -24,7 +24,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     platform::browser::BrowserOpener,
-    range::{RangeKey, resolve_system_range},
+    range::{RangeKey, resolve_day_buckets, resolve_system_range},
     scanner::{CommitFailureKind, ScanHandle, ScanShutdownError},
     storage::{Ledger, RevisionTuple},
     update::{ReleaseInfo, UpdateService, UpdateSnapshot},
@@ -171,6 +171,9 @@ fn build_router(state: ApiState, frontend: static_assets::FrontendSource) -> Rou
             get(session_detail),
         )
         .route("/usage/models", get(models))
+        .route("/usage/model-distribution", get(model_distribution))
+        .route("/usage/projects", get(project_distribution))
+        .route("/usage/skills", get(skills_usage))
         .route("/usage/filter-options", get(filter_options))
         .route("/update/status", get(update_status))
         .route("/update/check", post(update_check))
@@ -321,6 +324,70 @@ async fn models(
             .await?
             .map_err(query::map_usage_ledger_error)?;
     Ok(Json(query::models_response(&range, snapshot)?))
+}
+
+async fn model_distribution(
+    State(state): State<ApiState>,
+    RawQuery(raw_query): RawQuery,
+) -> Result<Json<query::ModelDistributionResponse>, ApiError> {
+    let params = query::parse_summary_params(raw_query.as_deref())?;
+    let range = resolve_request_range(params.range.as_deref())?;
+    let aggregate_range = range.aggregate_range()?;
+    let ledger = Arc::clone(&state.context.ledger);
+    let snapshot = run_blocking_query(move || {
+        crate::usage::analytics::model_distribution_snapshot(
+            &ledger,
+            aggregate_range,
+            &params.filter,
+        )
+    })
+    .await?
+    .map_err(query::map_usage_ledger_error)?;
+    Ok(Json(query::model_distribution_response(&range, snapshot)?))
+}
+
+async fn project_distribution(
+    State(state): State<ApiState>,
+    RawQuery(raw_query): RawQuery,
+) -> Result<Json<query::ProjectDistributionResponse>, ApiError> {
+    let params = query::parse_summary_params(raw_query.as_deref())?;
+    let range = resolve_request_range(params.range.as_deref())?;
+    let aggregate_range = range.aggregate_range()?;
+    let ledger = Arc::clone(&state.context.ledger);
+    let snapshot = run_blocking_query(move || {
+        crate::usage::analytics::project_distribution_snapshot(
+            &ledger,
+            aggregate_range,
+            &params.filter,
+        )
+    })
+    .await?
+    .map_err(query::map_usage_ledger_error)?;
+    Ok(Json(query::project_distribution_response(
+        &range, snapshot,
+    )?))
+}
+
+async fn skills_usage(
+    State(state): State<ApiState>,
+    RawQuery(raw_query): RawQuery,
+) -> Result<Json<query::SkillsUsageResponse>, ApiError> {
+    let params = query::parse_summary_params(raw_query.as_deref())?;
+    let range = resolve_request_range(params.range.as_deref())?;
+    if range.key != RangeKey::SevenDays {
+        return Err(ApiError::InvalidRange);
+    }
+    let days = resolve_day_buckets(&range)?;
+    if days.len() != 7 {
+        return Err(ApiError::LocalTimeUnavailable);
+    }
+    let ledger = Arc::clone(&state.context.ledger);
+    let snapshot = run_blocking_query(move || {
+        crate::usage::analytics::skills_usage_snapshot(&ledger, &days, &params.filter)
+    })
+    .await?
+    .map_err(query::map_usage_ledger_error)?;
+    Ok(Json(query::skills_usage_response(&range, snapshot)?))
 }
 
 async fn filter_options(

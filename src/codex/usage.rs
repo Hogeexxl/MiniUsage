@@ -33,7 +33,7 @@ impl CompleteUsageLine {
         self.end_offset
     }
 
-    fn json_bytes(&self) -> &[u8] {
+    pub(crate) fn json_bytes(&self) -> &[u8] {
         let without_lf = &self.bytes[..self.bytes.len() - 1];
         without_lf.strip_suffix(b"\r").unwrap_or(without_lf)
     }

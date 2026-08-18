@@ -2,16 +2,19 @@
 
 pub mod adapters;
 pub mod aggregate;
+pub mod analytics;
 pub mod ledger;
 pub mod normalized;
 pub mod pipeline;
 pub mod processor;
 pub mod rebuild;
+pub mod skills;
 
 pub use normalized::{
     NormalizedTokenUsage, USAGE_CANONICAL_ALGORITHM_VERSION, USAGE_PARSER_VERSION,
     canonical_algorithm_for,
 };
+pub use skills::SkillUsageEvent;
 
 pub use aggregate::{
     AggregateError, AggregateReader, FilterOptions, MAX_SESSION_ROWS, MainModelUsage,

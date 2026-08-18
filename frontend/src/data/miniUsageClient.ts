@@ -23,6 +23,10 @@ import {
   type ProjectSelection,
   type EstimatedCostStatus,
   type UpdateStatusResponse,
+  type ModelDistributionResponse,
+  type ProjectDistributionResponse,
+  type SkillsUsageResponse,
+  type DistributionUsageDto,
 } from "./types";
 
 const SAFE_INTEGER_MAX = Number.MAX_SAFE_INTEGER;
@@ -141,7 +145,7 @@ function requiredSessionDataStatus(record: JsonRecord, key: string): SessionItem
 function parseRange(value: unknown): RangeDto {
   const record = requiredRecord(value);
   const key = requiredString(record, "key");
-  if (!["today", "yesterday", "week", "month", "year"].includes(key)) {
+  if (!["today", "yesterday", "7d", "30d", "year"].includes(key)) {
     throw new MiniUsageClientError("HTTP_ERROR", 200);
   }
   return {
@@ -419,6 +423,91 @@ function parseSessionDetail(value: unknown): SessionDetailResponse {
   };
 }
 
+function parseDistributionUsage(value: unknown): DistributionUsageDto {
+  const record = requiredRecord(value);
+  const estimatedCost = nullableCost(record, "estimated_cost");
+  const estimatedCostStatus = requiredEstimatedCostStatus(record, "estimated_cost_status");
+  if ((estimatedCost === null) !== (estimatedCostStatus === "unknown")) {
+    throw new MiniUsageClientError("HTTP_ERROR", 200);
+  }
+  return {
+    total_tokens: requiredSafeInteger(record, "total_tokens"),
+    estimated_cost: estimatedCost,
+    estimated_cost_status: estimatedCostStatus,
+  };
+}
+
+function parseModelDistribution(value: unknown): ModelDistributionResponse {
+  const record = requiredRecord(value);
+  if (!Array.isArray(record.items)) throw new MiniUsageClientError("HTTP_ERROR", 200);
+  return {
+    range: parseRange(record.range),
+    data_revision: requiredSafeInteger(record, "data_revision"),
+    items: record.items.map((value) => {
+      const item = requiredRecord(value);
+      return { model: requiredString(item, "model"), usage: parseDistributionUsage(item.usage) };
+    }),
+  };
+}
+
+function parseProjectDistribution(value: unknown): ProjectDistributionResponse {
+  const record = requiredRecord(value);
+  if (!Array.isArray(record.items)) throw new MiniUsageClientError("HTTP_ERROR", 200);
+  return {
+    range: parseRange(record.range),
+    data_revision: requiredSafeInteger(record, "data_revision"),
+    items: record.items.map((value) => {
+      const item = requiredRecord(value);
+      const kind = requiredString(item, "kind");
+      if (kind !== "project" && kind !== "projectless" && kind !== "unknown") {
+        throw new MiniUsageClientError("HTTP_ERROR", 200);
+      }
+      const projectName = nullableString(item, "project_name");
+      const projectPath = nullableString(item, "project_path");
+      if ((kind === "project") !== (projectName !== null && projectPath !== null)) {
+        throw new MiniUsageClientError("HTTP_ERROR", 200);
+      }
+      return {
+        kind,
+        project_name: projectName,
+        project_path: projectPath,
+        usage: parseDistributionUsage(item.usage),
+      };
+    }),
+  };
+}
+
+function parseSkillsUsage(value: unknown): SkillsUsageResponse {
+  const record = requiredRecord(value);
+  const status = requiredString(record, "data_status");
+  if (status !== "ready" && status !== "rebuilding") throw new MiniUsageClientError("HTTP_ERROR", 200);
+  if (!Array.isArray(record.days) || record.days.length !== 7) throw new MiniUsageClientError("HTTP_ERROR", 200);
+  return {
+    range: parseRange(record.range),
+    data_revision: requiredSafeInteger(record, "data_revision"),
+    data_status: status,
+    days: record.days.map((value) => {
+      const day = requiredRecord(value);
+      if (!Array.isArray(day.skills)) throw new MiniUsageClientError("HTTP_ERROR", 200);
+      const skills = day.skills.map((value) => {
+        const skill = requiredRecord(value);
+        return { skill_name: requiredString(skill, "skill_name"), count: requiredSafeInteger(skill, "count") };
+      });
+      const total = requiredSafeInteger(day, "total");
+      if (skills.reduce((sum, skill) => sum + skill.count, 0) !== total) {
+        throw new MiniUsageClientError("HTTP_ERROR", 200);
+      }
+      return {
+        date: requiredString(day, "date"),
+        start_ms: requiredSafeInteger(day, "start_ms"),
+        end_ms: requiredSafeInteger(day, "end_ms"),
+        total,
+        skills,
+      };
+    }),
+  };
+}
+
 function parseRevision(value: unknown): RevisionResponse {
   const record = requiredRecord(value);
   return {
@@ -574,6 +663,9 @@ async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
 export type MiniUsageClient = {
   filterOptions(signal?: AbortSignal): Promise<FilterOptionsResponse>;
   summary(range: RangeKey, filters: DashboardFilters, signal?: AbortSignal): Promise<SummaryResponse>;
+  modelDistribution(range: RangeKey, filters: DashboardFilters, signal?: AbortSignal): Promise<ModelDistributionResponse>;
+  projectDistribution(range: RangeKey, filters: DashboardFilters, signal?: AbortSignal): Promise<ProjectDistributionResponse>;
+  skillsUsage(range: RangeKey, filters: DashboardFilters, signal?: AbortSignal): Promise<SkillsUsageResponse>;
   getSessionSnapshot(request: {
     range: RangeKey;
     filters: DashboardFilters;
@@ -697,17 +789,30 @@ export const miniUsageClient: MiniUsageClient & MiniUsageUpdateClient = {
     return parseFilterOptions(body);
   },
   async summary(range, filters, signal) {
-    const canonical = canonicalDashboardFilters(filters);
-    const params = new URLSearchParams();
-    params.append("range", range);
-    for (const model of canonical.models) params.append("model", model);
-    for (const project of canonical.projects) {
-      if (project.kind === "project") params.append("project_path", project.project_path);
-      if (project.kind === "projectless") params.append("include_projectless", "1");
-      if (project.kind === "unknown") params.append("include_unknown_project", "1");
-    }
+    const params = sessionParams(range, filters);
     const body = await getJson<unknown>(`/api/usage/summary?${params.toString()}`, signal);
     return parseSummary(body);
+  },
+  async modelDistribution(range, filters, signal) {
+    const params = sessionParams(range, filters);
+    const body = await getJson<unknown>(`/api/usage/model-distribution?${params.toString()}`, signal);
+    const response = parseModelDistribution(body);
+    if (response.range.key !== range) throw new MiniUsageClientError("HTTP_ERROR", 200);
+    return response;
+  },
+  async projectDistribution(range, filters, signal) {
+    const params = sessionParams(range, filters);
+    const body = await getJson<unknown>(`/api/usage/projects?${params.toString()}`, signal);
+    const response = parseProjectDistribution(body);
+    if (response.range.key !== range) throw new MiniUsageClientError("HTTP_ERROR", 200);
+    return response;
+  },
+  async skillsUsage(range, filters, signal) {
+    const params = sessionParams(range, filters);
+    const body = await getJson<unknown>(`/api/usage/skills?${params.toString()}`, signal);
+    const response = parseSkillsUsage(body);
+    if (response.range.key !== range) throw new MiniUsageClientError("HTTP_ERROR", 200);
+    return response;
   },
   async getSessionSnapshot({ range, filters, seed_sort_by, seed_sort_order, signal }) {
     const params = sessionParams(range, filters);

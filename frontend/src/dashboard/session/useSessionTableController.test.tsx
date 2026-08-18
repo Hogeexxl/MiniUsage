@@ -77,6 +77,9 @@ function clientWith(overrides: Partial<MiniUsageClient> = {}): MiniUsageClient {
   return {
     filterOptions: vi.fn(),
     summary: vi.fn(),
+    modelDistribution: vi.fn(),
+    projectDistribution: vi.fn(),
+    skillsUsage: vi.fn(),
     getSessionSnapshot: vi.fn(async ({ range: key }) => snapshot(0, 0, key)),
     getSessionRows: vi.fn(async ({ range: key, root_session_ids }) => ({
       range: range(key),

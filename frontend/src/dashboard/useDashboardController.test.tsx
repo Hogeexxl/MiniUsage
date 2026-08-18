@@ -62,6 +62,9 @@ function clientWith(overrides: Partial<MiniUsageClient> = {}): MiniUsageClient {
   return {
     filterOptions: vi.fn(async () => ({ data_revision: 1, models: [], projects: [] })),
     summary: vi.fn(async (range) => summary(range)),
+    modelDistribution: vi.fn(),
+    projectDistribution: vi.fn(),
+    skillsUsage: vi.fn(),
     getSessionSnapshot: vi.fn(async () => ({
       range: { key: "today" as const, start_ms: 1, end_ms: 2, timezone: "Asia/Shanghai" },
       data_revision: 1,
@@ -198,7 +201,7 @@ describe("useDashboardController", () => {
     await waitFor(() => expect(result.current.filter_options).not.toBeNull());
     expect(optionCalls).toBe(1);
 
-    await act(async () => result.current.select_range("week"));
+    await act(async () => result.current.select_range("7d"));
     await act(async () => result.current.select_filters({ models: ["gpt-a"], projects: [{ kind: "projectless" }] }));
     await act(async () => result.current.clear_filters());
     expect(optionCalls).toBe(1);

@@ -14,6 +14,9 @@ import { SessionDetailDrawer } from "./session/SessionDetailDrawer";
 import { useSessionTableController } from "./session/useSessionTableController";
 import { useSessionDetailController } from "./session/useSessionDetailController";
 import { formatLastSyncTime } from "./format";
+import { DASHBOARD_SCOPE_POLICIES, resolveDashboardScope } from "./scope";
+import { ChartSection } from "./charts/ChartSection";
+import { useDashboardChartsController } from "./charts/useDashboardChartsController";
 
 function loadErrorMessage(loadState: string, _errorCode?: string): string | null {
   if (loadState !== "error") return null;
@@ -42,13 +45,15 @@ export function DashboardPage({ options }: { options?: DashboardPageOptions }) {
     });
   }
   const view = useDashboardController({ ...options, revisionFeed: feedRef.current });
-  const sessions = useSessionTableController(view.range, view.filters, { client: options?.client, revisionFeed: feedRef.current });
-  const detail = useSessionDetailController(view.range, view.filters, {
+  const sessionScope = resolveDashboardScope(DASHBOARD_SCOPE_POLICIES.sessions, view.range, view.filters);
+  const sessions = useSessionTableController(sessionScope.range, sessionScope.filters, { client: options?.client, revisionFeed: feedRef.current });
+  const detail = useSessionDetailController(sessionScope.range, sessionScope.filters, {
     client: options?.client,
     revisionFeed: feedRef.current,
     dataRevision: sessions.data_revision,
     onStaleRevision: sessions.retry_load,
   });
+  const charts = useDashboardChartsController({ range: view.range, filters: view.filters, dataRevision: view.data_revision, client: options?.client });
   useEffect(() => () => feedRef.current?.dispose(), []);
   const loading = view.load_state === "loading";
   const loadError = loadErrorMessage(view.load_state, view.error_code);
@@ -115,6 +120,7 @@ export function DashboardPage({ options }: { options?: DashboardPageOptions }) {
         <section className="metrics-section" aria-label="关键指标" aria-busy={loading}>
           <MetricGrid usage={view.metrics} modelFilterActive={view.modelFilterActive} />
         </section>
+        <ChartSection view={charts} />
         <SessionSection view={sessions} detail={detail} />
         <div className="sr-only" aria-live="polite">
           {loading ? "数据加载中…" : loadError ?? statusMessage}

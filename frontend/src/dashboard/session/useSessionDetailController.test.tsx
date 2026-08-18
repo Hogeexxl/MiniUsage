@@ -87,6 +87,9 @@ function clientWith(overrides: Partial<MiniUsageClient> = {}): MiniUsageClient {
   return {
     filterOptions: vi.fn(),
     summary: vi.fn(),
+    modelDistribution: vi.fn(),
+    projectDistribution: vi.fn(),
+    skillsUsage: vi.fn(),
     getSessionSnapshot: vi.fn(),
     getSessionRows: vi.fn(),
     getSessionDetail: vi.fn(async ({ expected_data_revision, root_session_id }) => detail(expected_data_revision ?? 1, expected_data_revision ?? 1, root_session_id)),
@@ -172,11 +175,11 @@ describe("useSessionDetailController", () => {
     expect(client.getSessionDetail).toHaveBeenCalledTimes(1);
 
     await act(async () => result.current.close_detail());
-    activeRange = "week";
+    activeRange = "7d";
     rerender();
     await act(async () => result.current.open_detail(row));
     await waitFor(() => expect(client.getSessionDetail).toHaveBeenCalledTimes(2));
-    expect(client.getSessionDetail).toHaveBeenLastCalledWith(expect.objectContaining({ range: "week", root_session_id: "root-1" }));
+    expect(client.getSessionDetail).toHaveBeenLastCalledWith(expect.objectContaining({ range: "7d", root_session_id: "root-1" }));
 
     await act(async () => result.current.close_detail());
     activeRange = "today";
