@@ -562,9 +562,14 @@ fn validate_source_commit(
             source_commit.source_file_id
         )));
     }
-    if advance.committed_offset > 0 && fact.continuation_state != ContinuationState::OwningLive {
+    if advance.committed_offset > 0
+        && !matches!(
+            fact.continuation_state,
+            ContinuationState::ReplayedAncestor | ContinuationState::OwningLive
+        )
+    {
         return Err(StorageError::invalid_state(format!(
-            "source {} cannot continue from a non-owning-live fact",
+            "source {} cannot continue from a non-resumable fact",
             source_commit.source_file_id
         )));
     }
