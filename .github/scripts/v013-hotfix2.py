@@ -13,7 +13,11 @@ value = value.replace("assert_eq!(migrate(&mut fresh, 8).unwrap(), 8);", "assert
 # t_s01_001 has already migrated the same in-memory database to latest. Its
 # second call is an idempotence check, therefore current_version must be 9.
 value = value.replace("assert_eq!(migrate(&mut connection, 8).unwrap(), 9);", "assert_eq!(migrate(&mut connection, 9).unwrap(), 9);")
+value = value.replace("assert_eq!(migrate(&mut upgraded, 5).unwrap(), 8);", "assert_eq!(migrate(&mut upgraded, 5).unwrap(), 9);
+")
 value = value.replace("assert_eq!(ledger.schema_version().unwrap(), 8);", "assert_eq!(ledger.schema_version().unwrap(), 9);")
+# The upgraded fixture immediately reads PRAGMA user_version after the migration.
+value = value.replace("            8\n        );\n        let after: (i64, i64, i64, i64, i64) = upgraded", "            9\n        );\n        let after: (i64, i64, i64, i64, i64) = upgraded")
 migrations_path.write_text(value, encoding="utf-8")
 
 storage_path = root / "src/storage/mod.rs"
