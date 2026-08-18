@@ -1,0 +1,141 @@
+name: Release v0.1.2 one-shot
+
+on:
+  create:
+
+permissions:
+  contents: write
+  actions: write
+
+env:
+  RELEASE_TAG: v0.1.2
+  RELEASE_VERSION: 0.1.2
+  TRIGGER_BRANCH: release-v0.1.2-trigger
+
+jobs:
+  release:
+    if: ${{ github.event.ref_type == 'branch' && github.event.ref == 'release-v0.1.2-trigger' }}
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Configure release commit identity
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Bump Cargo package and lockfile to 0.1.2
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          cargo = Path('Cargo.toml')
+          cargo_text = cargo.read_text(encoding='utf-8')
+          old = 'name = "mini-usage"\nversion = "0.1.1"'
+          new = 'name = "mini-usage"\nversion = "0.1.2"'
+          if cargo_text.count(old) != 1:
+              raise SystemExit('Cargo.toml version anchor was not exactly 0.1.1 once')
+          cargo.write_text(cargo_text.replace(old, new, 1), encoding='utf-8')
+
+          lock = Path('Cargo.lock')
+          lock_text = lock.read_text(encoding='utf-8')
+          old = '[[package]]\nname = "mini-usage"\nversion = "0.1.1"'
+          new = '[[package]]\nname = "mini-usage"\nversion = "0.1.2"'
+          if lock_text.count(old) != 1:
+              raise SystemExit('Cargo.lock mini-usage version anchor was not exactly 0.1.1 once')
+          lock.write_text(lock_text.replace(old, new, 1), encoding='utf-8')
+          PY
+
+          grep -A2 '^name = "mini-usage"$' Cargo.lock | head -n 2
+          grep -A1 '^name = "mini-usage"$' Cargo.toml
+
+          git add Cargo.toml Cargo.lock
+          if git diff --cached --quiet; then
+            echo 'Version files were already at 0.1.2; no bump commit needed.'
+          else
+            git commit -m 'release: bump version to 0.1.2 [skip ci]'
+            git push origin HEAD:main
+          fi
+
+      - name: Create stable tag without triggering duplicate push CI
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main --tags
+          git reset --hard origin/main
+          expected_version="$(python3 - <<'PY'
+          import tomllib
+          with open('Cargo.toml', 'rb') as handle:
+              print(tomllib.load(handle)['package']['version'])
+          PY
+          )"
+          if [[ "$expected_version" != "$RELEASE_VERSION" ]]; then
+            echo "Expected Cargo version $RELEASE_VERSION, got $expected_version" >&2
+            exit 1
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Tag $RELEASE_TAG already exists" >&2
+            exit 1
+          fi
+          git tag -a "$RELEASE_TAG" -m "MiniUsage $RELEASE_TAG"
+          git push origin "$RELEASE_TAG"
+
+      - name: Dispatch canonical Release workflow on the stable tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref "$RELEASE_TAG"
+
+      - name: Wait for published GitHub Release
+        shell: bash
+        run: |
+          set -euo pipefail
+          published=0
+          for _ in $(seq 1 120); do
+            if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json tagName,isDraft,isPrerelease >/tmp/release.json 2>/dev/null; then
+              python3 - /tmp/release.json <<'PY'
+          import json, sys
+          data = json.load(open(sys.argv[1], encoding='utf-8'))
+          if data.get('tagName') != 'v0.1.2' or data.get('isDraft') or data.get('isPrerelease'):
+              raise SystemExit('v0.1.2 exists but is not a published stable Release')
+          PY
+              published=1
+              break
+            fi
+            sleep 15
+          done
+          if [[ "$published" != 1 ]]; then
+            echo 'Timed out waiting for v0.1.2 Release publication.' >&2
+            gh run list --repo "$GITHUB_REPOSITORY" --workflow release.yml --limit 10 || true
+            exit 1
+          fi
+
+      - name: Remove one-shot workflow from main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git checkout main
+          git reset --hard origin/main
+          git rm .github/workflows/release-v0.1.2-once.yml
+          git commit -m 'chore: remove v0.1.2 release orchestration [skip ci]'
+          git push origin HEAD:main
+
+      - name: Delete merged and trigger branches after publication
+        shell: bash
+        run: |
+          set -euo pipefail
+          for branch in 'fix/replayed-ancestor-storage-resume' "$TRIGGER_BRANCH"; do
+            if git ls-remote --exit-code --heads origin "refs/heads/$branch" >/dev/null 2>&1; then
+              git push origin --delete "$branch"
+            fi
+          done
