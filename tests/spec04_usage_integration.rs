@@ -2021,7 +2021,7 @@ fn t_s04_019_t_s02_020_late_foreign_meta_discards_preceding_usage_and_starts_reb
 }
 
 #[test]
-fn t_s04_024_long_subagent_replay_prefix_is_ephemeral_until_owning_live() {
+fn t_s04_024_long_subagent_replay_prefix_persists_safe_resume_without_parent_usage() {
     let fixture = Fixture::new("long-replay");
     let mut records = Vec::with_capacity(5_010);
     records.push(json!({"type":"session_meta","payload":{"id":CHILD,"cwd":"/child","source":{"subagent":{"thread_spawn":{"parent_thread_id":ROOT,"depth":1}}}}}));
@@ -2041,8 +2041,10 @@ fn t_s04_024_long_subagent_replay_prefix_is_ephemeral_until_owning_live() {
     let handle = fixture.start(Arc::clone(&ledger));
     wait_scan(&ledger, None);
 
-    // No stable OwningLive boundary existed. The replay-only prefix is kept
-    // purely in memory and must not become durable usage progress or facts.
+    // The child's owning identity is already confirmed even though the fixed
+    // view ends while replaying its ancestor. That replay tail is resumable:
+    // it may advance durable usage progress, but replayed parent tokens must
+    // never become usage events and it must not keep the active epoch at zero.
     let db = Connection::open(&fixture.db).unwrap();
     assert_eq!(
         db.query_row("SELECT count(*) FROM usage_events", [], |r| r
@@ -2050,20 +2052,54 @@ fn t_s04_024_long_subagent_replay_prefix_is_ephemeral_until_owning_live() {
             .unwrap(),
         0
     );
-    let usage_offset: Option<i64> = db
+    let first_size = fs::metadata(&rollout).unwrap().len() as i64;
+    let first: (i64, Option<i64>, i64, String, String, i64, String, String) = db
         .query_row(
-            "SELECT committed_offset FROM source_checkpoints c JOIN source_files s USING(source_file_id)
-             WHERE c.consumer_kind='usage' AND s.current_path=?1",
+            "SELECT
+                a.usage_active_epoch,
+                a.usage_build_epoch,
+                c.committed_offset,
+                c.processing_status,
+                s.continuation_state,
+                s.resolved_through_offset,
+                s.owning_thread_id,
+                s.root_session_id
+             FROM app_meta a
+             JOIN source_files f ON f.current_path=?1
+             JOIN source_checkpoints c
+               ON c.source_file_id=f.source_file_id AND c.consumer_kind='usage'
+             JOIN usage_source_states s
+               ON s.ledger_epoch=a.usage_active_epoch AND s.source_file_id=f.source_file_id
+             WHERE a.id=1",
             [rollout.to_str().unwrap()],
-            |r| r.get(0),
+            |r| {
+                Ok((
+                    r.get(0)?,
+                    r.get(1)?,
+                    r.get(2)?,
+                    r.get(3)?,
+                    r.get(4)?,
+                    r.get(5)?,
+                    r.get(6)?,
+                    r.get(7)?,
+                ))
+            },
         )
-        .optional()
         .unwrap();
-    assert!(usage_offset.is_none() || usage_offset == Some(0));
+    assert!(first.0 > 0, "replay tail must not block first activation");
+    assert_eq!(first.1, None);
+    assert_eq!(first.2, first_size);
+    assert_eq!(first.3, "ready");
+    assert_eq!(first.4, "replayed_ancestor");
+    assert_eq!(first.5, first_size);
+    assert_eq!(first.6, CHILD);
+    assert_eq!(first.7, ROOT);
+    let first_offset = first.2;
     drop(db);
 
-    // Finish the child OwningLive boundary. The next round must replay from
-    // zero with the same classifier state and count only the child request.
+    // When the child later reaches its own live records, resume from the saved
+    // replay-tail checkpoint and count only the child request. Parent replay
+    // history remains excluded.
     let mut append = records_to_bytes(&[
         json!({"type":"turn_context","timestamp":"2026-08-08T02:00:02Z","payload":{"turn_id":"00000000-0834-7000-8000-000000000004","model":"child-model"}}),
         token(7, 7, "2026-08-08T02:00:03Z", "CHILD_AFTER_LONG_REPLAY"),
@@ -2089,6 +2125,24 @@ fn t_s04_024_long_subagent_replay_prefix_is_ephemeral_until_owning_live() {
             .collect()
     };
     assert_eq!(rows, vec![(CHILD.to_owned(), 7)]);
+    let final_size = fs::metadata(&rollout).unwrap().len() as i64;
+    let resumed: (i64, String) = db
+        .query_row(
+            "SELECT c.committed_offset,s.continuation_state
+             FROM app_meta a
+             JOIN source_files f ON f.current_path=?1
+             JOIN source_checkpoints c
+               ON c.source_file_id=f.source_file_id AND c.consumer_kind='usage'
+             JOIN usage_source_states s
+               ON s.ledger_epoch=a.usage_active_epoch AND s.source_file_id=f.source_file_id
+             WHERE a.id=1",
+            [rollout.to_str().unwrap()],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap();
+    assert!(resumed.0 > first_offset);
+    assert_eq!(resumed.0, final_size);
+    assert_eq!(resumed.1, "owning_live");
     handle.shutdown().unwrap();
 }
 
