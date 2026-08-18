@@ -1,5 +1,6 @@
 from pathlib import Path
 
+root = Path(__file__).resolve().parents[2]
 path = Path(__file__).with_name("v013-implement.py")
 text = path.read_text(encoding="utf-8")
 old = 'replace_once("src/codex/mod.rs", "mod global_state;\\nmod metadata;", "mod global_state;\\nmod metadata;\\nmod skill_usage;")'
@@ -11,3 +12,20 @@ addition = '''pipeline = pipeline.replace("""        result,\n        last,""", 
 if needle in text and addition not in text:
     text = text.replace(needle, addition, 1)
 path.write_text(text, encoding="utf-8")
+
+# Existing DashboardPage tests inject a complete MiniUsageClient. Extend that
+# test fixture with the v0.1.3 analytics methods instead of weakening the
+# production client contract.
+dashboard_test = root / "frontend/src/dashboard/DashboardPage.test.tsx"
+dashboard = dashboard_test.read_text(encoding="utf-8")
+anchor = '''    summary: vi.fn(async (range) => (range === "today" ? summary("today") : summary("yesterday"))),\n'''
+fixture = '''    summary: vi.fn(async (range) => (range === "today" ? summary("today") : summary("yesterday"))),\n    modelDistribution: vi.fn(async (range) => ({\n      range: { key: range, start_ms: 1, end_ms: 2, timezone: "Asia/Shanghai" },\n      data_revision: 1,\n      items: [],\n    })),\n    projectDistribution: vi.fn(async (range) => ({\n      range: { key: range, start_ms: 1, end_ms: 2, timezone: "Asia/Shanghai" },\n      data_revision: 1,\n      items: [],\n    })),\n    skillsUsage: vi.fn(async () => ({\n      range: { key: "7d" as const, start_ms: 1, end_ms: 8, timezone: "Asia/Shanghai" },\n      data_revision: 1,\n      data_status: "ready" as const,\n      days: Array.from({ length: 7 }, (_, index) => ({\n        date: `2026-08-${String(index + 1).padStart(2, "0")}`,\n        start_ms: index + 1,\n        end_ms: index + 2,\n        total: 0,\n        skills: [],\n      })),\n    })),\n'''
+if anchor in dashboard and "modelDistribution: vi.fn" not in dashboard:
+    dashboard = dashboard.replace(anchor, fixture, 1)
+dashboard_test.write_text(dashboard, encoding="utf-8")
+
+range_test = root / "frontend/src/dashboard/RangeSelector.test.tsx"
+if range_test.exists():
+    value = range_test.read_text(encoding="utf-8")
+    value = value.replace("本月", "30天")
+    range_test.write_text(value, encoding="utf-8")
