@@ -300,7 +300,10 @@ fn wait_for_startup(ledger: &Ledger) {
         if state.last_finished_scan_id.is_some() && state.active_scan_id.is_none() {
             return;
         }
-        assert!(Instant::now() < deadline, "timed out waiting for startup scan");
+        assert!(
+            Instant::now() < deadline,
+            "timed out waiting for startup scan"
+        );
         thread::sleep(Duration::from_millis(10));
     }
 }
@@ -351,7 +354,10 @@ fn startup_replay_tail_scan_completes_and_activates_usage() {
         )
         .unwrap();
     assert_eq!(metadata.0, "replayed_ancestor");
-    assert_eq!(metadata.1, fs::metadata(&rollout_path).unwrap().len() as i64);
+    assert_eq!(
+        metadata.1,
+        fs::metadata(&rollout_path).unwrap().len() as i64
+    );
     assert_eq!(metadata.2, "ready");
 
     let epochs: (i64, Option<i64>, i64) = connection
@@ -362,7 +368,10 @@ fn startup_replay_tail_scan_completes_and_activates_usage() {
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )
         .unwrap();
-    assert!(epochs.0 > 0, "replay-tail source must not keep active epoch at zero");
+    assert!(
+        epochs.0 > 0,
+        "replay-tail source must not keep active epoch at zero"
+    );
     assert_eq!(epochs.1, None);
     assert_eq!(epochs.2, mini_usage::usage::USAGE_PARSER_VERSION);
 
