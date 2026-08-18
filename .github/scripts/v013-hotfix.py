@@ -11,6 +11,16 @@ needle = '''pipeline = pipeline.replace("""        result,\n        last,""", ""
 addition = '''pipeline = pipeline.replace("""        result,\n        last,""", """        result,\n        skill_events,\n        last,""")\npipeline = pipeline.replace("""        },\n        last,""", """        },\n        skill_events,\n        last,""")\n'''
 if needle in text and addition not in text:
     text = text.replace(needle, addition, 1)
+# The generated model/project aggregate statements borrow their transaction;
+# explicitly drop them before committing the read transaction.
+text = text.replace(
+    'use rusqlite::{TransactionBehavior, params, params_from_iter, types::Value};',
+    'use rusqlite::{TransactionBehavior, params_from_iter, types::Value};',
+)
+commit_marker = '''    transaction.commit().map_err(StorageError::sqlite)?;\n    Ok(AnalyticsSnapshot { data_revision, active_epoch, value })'''
+commit_fixed = '''    drop(statement);\n    transaction.commit().map_err(StorageError::sqlite)?;\n    Ok(AnalyticsSnapshot { data_revision, active_epoch, value })'''
+if commit_marker in text:
+    text = text.replace(commit_marker, commit_fixed, 2)
 path.write_text(text, encoding="utf-8")
 
 # Existing DashboardPage tests inject a complete MiniUsageClient. Extend that
