@@ -45,7 +45,7 @@ jobs:
           set +e
           log="$RUNNER_TEMP/v013-run.log"
           : > "$log"
-          rm -f .github/v013-failure.log
+          git rm -f --ignore-unmatch .github/v013-failure.log >/dev/null 2>&1 || true
           run_step() {
             name="$1"; shift
             echo "===== $name =====" | tee -a "$log"
