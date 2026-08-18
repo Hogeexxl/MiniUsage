@@ -7,6 +7,7 @@ on:
     paths:
       - '.github/scripts/v013-implement.py'
       - '.github/scripts/v013-hotfix.py'
+      - '.github/scripts/v013-hotfix2.py'
       - '.github/workflows/v013-implementation.yml'
 
 permissions:
@@ -52,6 +53,7 @@ jobs:
           status=0
           run_step hotfix python3 .github/scripts/v013-hotfix.py || status=$?
           if [[ $status -eq 0 ]]; then run_step implement python3 .github/scripts/v013-implement.py || status=$?; fi
+          if [[ $status -eq 0 ]]; then run_step hotfix2 python3 .github/scripts/v013-hotfix2.py || status=$?; fi
           if [[ $status -eq 0 ]]; then run_step rustfmt cargo fmt || status=$?; fi
           if [[ $status -eq 0 ]]; then (cd frontend && npm ci) >> "$log" 2>&1 || status=$?; fi
           if [[ $status -eq 0 ]]; then (cd frontend && npm test) >> "$log" 2>&1 || status=$?; fi
