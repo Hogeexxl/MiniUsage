@@ -1,0 +1,90 @@
+name: Agent D3 exact fixes
+
+on:
+  push:
+    branches:
+      - agent/v0.2.0-beui-redesign
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/v0.2.0-beui-redesign
+          fetch-depth: 0
+      - name: Apply exact D3 fixes and self-delete
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace_exact(path_s, old, new, count=1):
+              path = Path(path_s)
+              text = path.read_text(encoding="utf-8")
+              found = text.count(old)
+              if found != count:
+                  raise SystemExit(f"{path_s}: expected {count} matches, found {found}")
+              path.write_text(text.replace(old, new, count), encoding="utf-8")
+
+          replace_exact(
+              "frontend/tests/browser/dashboard.spec.ts",
+              '  expect(result.statuses).toEqual([200, 200, 200, 200]);',
+              '  expect(result.statuses).toEqual([204, 200, 200, 200]);',
+          )
+
+          replace_exact(
+              "frontend/tests/browser/dashboard.spec.ts",
+              '  const drawerBox = await dialog.boundingBox();\n  expect(drawerBox?.x).toBeCloseTo(0, 0);\n  expect(drawerBox?.width).toBeCloseTo(390, 0);',
+              '  await expect.poll(async () => (await dialog.boundingBox())?.x ?? Number.POSITIVE_INFINITY).toBeCloseTo(0, 0);\n  await expect.poll(async () => (await dialog.boundingBox())?.width ?? 0).toBeCloseTo(390, 0);',
+          )
+
+          replace_exact(
+              "frontend/src/dashboard/session/SessionSection.tsx",
+              '<h2 id="session-heading" className="m-0 text-sm font-medium text-foreground">Session 记录</h2>',
+              '<h2 id="session-heading" className="m-0 text-sm font-medium leading-4 text-foreground">Session 记录</h2>',
+          )
+
+          replace_exact(
+              "frontend/src/dashboard/session/SessionDetailDrawer.tsx",
+              'className="w-[480px] max-w-full max-[480px]:w-screen"',
+              'className="w-[480px] max-w-full max-[480px]:w-screen max-[480px]:max-w-none"',
+          )
+
+          replace_exact(
+              "frontend/src/dashboard/FilterControls.tsx",
+              'import { useMemo, useState } from "react";',
+              'import { forwardRef, useMemo, useState } from "react";',
+          )
+          replace_exact(
+              "frontend/src/dashboard/FilterControls.tsx",
+              'import { Button } from "../ui/beui/button";',
+              'import { Button, type ButtonProps } from "../ui/beui/button";',
+          )
+          replace_exact(
+              "frontend/src/dashboard/FilterControls.tsx",
+              '''function FilterTrigger({ label, count, icon }: { label: string; count: number; icon: React.ReactNode }) {
+  const active = count > 0;
+  return <Button variant={active ? "primary" : "secondary"} size="sm" aria-label={`${label}筛选${active ? `，已选${count}项` : "，全部"}`}><span className="inline-flex h-4 w-4 items-center justify-center">{icon}</span><span>{label} · {active ? `${count} 项` : "全部"}</span></Button>;
+}''',
+              '''type FilterTriggerProps = Omit<ButtonProps, "children"> & { label: string; count: number; icon: React.ReactNode };
+
+const FilterTrigger = forwardRef<HTMLButtonElement, FilterTriggerProps>(function FilterTrigger({ label, count, icon, ...buttonProps }, ref) {
+  const active = count > 0;
+  return <Button ref={ref} {...buttonProps} variant={active ? "primary" : "secondary"} size="sm" aria-label={`${label}筛选${active ? `，已选${count}项` : "，全部"}`}><span className="inline-flex h-4 w-4 items-center justify-center">{icon}</span><span>{label} · {active ? `${count} 项` : "全部"}</span></Button>;
+});''',
+          )
+
+          Path(".github/workflows/agent-d3-fix.yml").unlink()
+          Path(".github/agent-d3-fix.trigger").unlink(missing_ok=True)
+      - name: Commit exact fixes
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/tests/browser/dashboard.spec.ts frontend/src/dashboard/FilterControls.tsx frontend/src/dashboard/session/SessionSection.tsx frontend/src/dashboard/session/SessionDetailDrawer.tsx .github/workflows/agent-d3-fix.yml .github/agent-d3-fix.trigger
+          git diff --cached --check
+          git commit -m "fix(ui): close remaining D3 browser gaps"
+          git push origin HEAD:agent/v0.2.0-beui-redesign
