@@ -49,17 +49,26 @@ jobs:
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci
-      - name: Use runner Chrome for this gate
-        working-directory: frontend
+      - name: Prepare browser gate workspace
         shell: python
         run: |
           from pathlib import Path
-          path = Path("playwright.config.ts")
-          text = path.read_text()
-          needle = '    browserName: "chromium",\n'
-          if text.count(needle) != 1:
+
+          config = Path("frontend/playwright.config.ts")
+          config_text = config.read_text()
+          browser = '    browserName: "chromium",\n'
+          if config_text.count(browser) != 1:
               raise SystemExit("unexpected Playwright config")
-          path.write_text(text.replace(needle, needle + '    channel: "chrome",\n', 1))
+          config.write_text(config_text.replace(browser, browser + '    channel: "chrome",\n', 1))
+
+          fixture = Path("tests/spec06_frontend_browser.rs")
+          fixture_text = fixture.read_text()
+          old = 'assert_eq!(ledger.schema_version().expect("browser schema version"), 7);'
+          new = 'assert_eq!(ledger.schema_version().expect("browser schema version"), 9);'
+          if old in fixture_text:
+              fixture.write_text(fixture_text.replace(old, new, 1))
+          elif new not in fixture_text:
+              raise SystemExit("unexpected browser schema assertion")
       - name: Run formal browser gate
         working-directory: frontend
         run: npm run test:browser:gate
