@@ -27,7 +27,7 @@ export function Drawer({ open, onOpenChange, children, side = "right", className
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const frame = window.requestAnimationFrame(() => {
-      const first = panelRef.current?.querySelector<HTMLElement>(FOCUSABLE);
+      const first = panelRef.current?.querySelectorAll<HTMLElement>(FOCUSABLE)[0];
       (first ?? panelRef.current)?.focus();
     });
     const onKeyDown = (event: KeyboardEvent) => {
