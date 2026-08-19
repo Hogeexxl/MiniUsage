@@ -394,7 +394,7 @@ test("C2 covers the approved v0.2.0 core interaction flow", async ({ page }) => 
   const modelCard = chartSection.locator("article").filter({ has: page.getByRole("heading", { name: "模型分布" }) });
   await modelCard.getByRole("tab", { name: "费用" }).click();
   await expect(modelCard.getByRole("img", { name: "模型分布费用分布" })).toBeVisible();
-  const legendButtons = modelCard.locator("button[title]");
+  const legendButtons = modelCard.getByRole("button");
   await expect.poll(() => legendButtons.count()).toBeGreaterThan(1);
   await legendButtons.nth(0).focus();
   await expect.poll(async () => Number(await legendButtons.nth(1).evaluate((node) => getComputedStyle(node).opacity))).toBeLessThan(1);
