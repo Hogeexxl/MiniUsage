@@ -1,9 +1,9 @@
 import { ChevronRight, Cpu, Folder } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
-import { useMemo, useState } from "react";
+import { forwardRef, useMemo, useState } from "react";
 
 import type { DashboardFilters, FilterOptionsResponse, ProjectFilterOption, ProjectSelection } from "../data/types";
-import { Button } from "../ui/beui/button";
+import { Button, type ButtonProps } from "../ui/beui/button";
 import { Checkbox } from "../ui/beui/checkbox";
 import { MorphPopover, MorphPopoverContent, MorphPopoverTrigger } from "../ui/beui/morph-popover";
 import { projectDisplay, projectKey, projectTitle, type ProjectLike } from "./shared/projectDisplay";
@@ -42,10 +42,12 @@ function OptionStatus({ loading, stale, error, hasOptions, onRetry }: { loading:
   return null;
 }
 
-function FilterTrigger({ label, count, icon }: { label: string; count: number; icon: React.ReactNode }) {
+type FilterTriggerProps = Omit<ButtonProps, "children"> & { label: string; count: number; icon: React.ReactNode };
+
+const FilterTrigger = forwardRef<HTMLButtonElement, FilterTriggerProps>(function FilterTrigger({ label, count, icon, ...buttonProps }, ref) {
   const active = count > 0;
-  return <Button variant={active ? "primary" : "secondary"} size="sm" aria-label={`${label}筛选${active ? `，已选${count}项` : "，全部"}`}><span className="inline-flex h-4 w-4 items-center justify-center">{icon}</span><span>{label} · {active ? `${count} 项` : "全部"}</span></Button>;
-}
+  return <Button ref={ref} {...buttonProps} variant={active ? "primary" : "secondary"} size="sm" aria-label={`${label}筛选${active ? `，已选${count}项` : "，全部"}`}><span className="inline-flex h-4 w-4 items-center justify-center">{icon}</span><span>{label} · {active ? `${count} 项` : "全部"}</span></Button>;
+});
 
 export function FilterControls({ filters, options, optionsLoading, optionsStale, optionsErrorCode, anyFilterActive, onChange, onClear, onRetryOptions }: FilterControlsProps) {
   const [gptExpanded, setGptExpanded] = useState(true);
