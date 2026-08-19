@@ -46,9 +46,9 @@ describe("UpdateButton / useUpdateController (T-DIST-009)", () => {
     expect(screen.getByRole("button", { name: "检查中…" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "同步数据" })).toBeEnabled();
     resolveCheck(latest(false));
-    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("当前已是最新版本 v0.1.0"));
+    await waitFor(() => expect(screen.getByRole("button", { name: "已是最新" })).toBeEnabled());
     expect(checkUpdate).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole("button", { name: "检查更新" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "已是最新" })).toBeEnabled();
   });
 
   it("shows a newer version for an automatic check and delegates upgrade to the backend", async () => {

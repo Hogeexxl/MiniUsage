@@ -188,7 +188,7 @@ describe("DashboardPage v0.2.0", () => {
     });
     renderWithTheme(<DashboardPage options={{ client, eventSourceFactory: () => fakeEvents() }} />);
     await waitFor(() => expect(totalTokenCard()).toHaveTextContent("12"));
-    screen.getByRole("button", { name: "昨天" }).click();
+    screen.getByRole("tab", { name: "昨天" }).click();
     await waitFor(() => expect(screen.getAllByRole("alert")[0]).toHaveTextContent("数据加载失败"));
     expect(screen.queryByText("private response body")).not.toBeInTheDocument();
     expect(screen.getByLabelText("KPI 加载中")).toBeInTheDocument();
