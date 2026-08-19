@@ -18,7 +18,7 @@ Object.defineProperty(window, "matchMedia", {
   }),
 });
 
-class TestResizeObserver implements ResizeObserver {
+class TestResizeObserver {
   observe() {}
   unobserve() {}
   disconnect() {}
@@ -29,7 +29,7 @@ Object.defineProperty(globalThis, "ResizeObserver", {
   value: TestResizeObserver,
 });
 
-class TestIntersectionObserver implements IntersectionObserver {
+class TestIntersectionObserver {
   readonly root = null;
   readonly rootMargin = "0px";
   readonly thresholds = [0];
