@@ -68,6 +68,7 @@ function IconSlot({ keyId, children }: { keyId: string; children: ReactNode }) {
   return (
     <motion.span
       key={keyId}
+      aria-hidden
       variants={ICON_VARIANTS}
       initial={reduce ? { opacity: 0 } : "initial"}
       animate={reduce ? { opacity: 1 } : "animate"}
@@ -119,36 +120,35 @@ function TextSlot({
             ))
           : children}
       </span>
+      <span className="sr-only">{children}</span>
 
       {cascade ? (
-        <>
-          <span className="sr-only">{label}</span>
-          <AnimatePresence initial={false}>
-            <motion.span
-              key={`cascade-${value}`}
-              aria-hidden
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              className="absolute left-0 top-0 inline-block whitespace-pre"
-            >
-              {label.split("").map((char, index) => (
-                <motion.span
-                  key={index}
-                  custom={index * CASCADE_STAGGER}
-                  variants={CASCADE_LETTER_VARIANTS}
-                  className="inline-block whitespace-pre will-change-[opacity,filter,transform]"
-                >
-                  {char}
-                </motion.span>
-              ))}
-            </motion.span>
-          </AnimatePresence>
-        </>
+        <AnimatePresence initial={false}>
+          <motion.span
+            key={`cascade-${value}`}
+            aria-hidden
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className="absolute left-0 top-0 inline-block whitespace-pre"
+          >
+            {label.split("").map((char, index) => (
+              <motion.span
+                key={index}
+                custom={index * CASCADE_STAGGER}
+                variants={CASCADE_LETTER_VARIANTS}
+                className="inline-block whitespace-pre will-change-[opacity,filter,transform]"
+              >
+                {char}
+              </motion.span>
+            ))}
+          </motion.span>
+        </AnimatePresence>
       ) : (
         <AnimatePresence initial={false}>
           <motion.span
             key={`text-${value}`}
+            aria-hidden
             initial={reduce ? { opacity: 0 } : { opacity: 0, y: 14, filter: ROLL_BLUR }}
             animate={reduce ? { opacity: 1 } : { opacity: 1, y: 0, filter: "blur(0px)" }}
             exit={reduce ? { opacity: 0 } : { opacity: 0, y: -14, filter: ROLL_BLUR }}
