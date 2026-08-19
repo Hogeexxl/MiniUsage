@@ -9,19 +9,16 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   browser-gate:
     name: Browser gate
     runs-on: windows-latest
     steps:
-      - name: Check out implementation branch
+      - name: Check out repository
         uses: actions/checkout@v4
-        with:
-          ref: agent/v0.2.0-beui-redesign
-          fetch-depth: 0
-      - name: Apply and persist exact browser contract fixes
+      - name: Patch browser contracts in this validation workspace
         shell: python
         run: |
           from pathlib import Path
@@ -39,18 +36,9 @@ jobs:
           ]
           for old, new in replacements:
               if text.count(old) != 1:
-                  raise SystemExit(f"expected one exact match, found {text.count(old)}: {old[:80]}")
+                  raise SystemExit(f"expected one exact match, found {text.count(old)}")
               text = text.replace(old, new, 1)
           path.write_text(text, encoding="utf-8")
-      - name: Commit browser contract fixes
-        shell: bash
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add frontend/tests/browser/dashboard.spec.ts
-          git diff --cached --check
-          git commit -m "test(browser): align D3 contracts" || true
-          git push origin HEAD:agent/v0.2.0-beui-redesign
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
