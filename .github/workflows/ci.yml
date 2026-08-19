@@ -4,17 +4,102 @@ on:
   push:
   pull_request:
 
-concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
 permissions:
   contents: read
 
 jobs:
-  browser-gate:
-    name: Browser gate
-    runs-on: windows-latest
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend dependencies
+        run: npm ci
+      - name: Run frontend tests
+        run: npm test
+      - name: Type-check frontend
+        run: npm run check
+      - name: Build frontend
+        run: npm run build
+
+  rust-format:
+    name: Rust format
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Check Rust formatting
+        run: cargo fmt --check
+
+  rust:
+    name: Rust (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x64
+            os: windows-latest
+            architecture: AMD64
+          - name: macOS arm64
+            os: macos-latest
+            architecture: arm64
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Rust stable
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+      - name: Verify Windows x64 runner
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if ($env:PROCESSOR_ARCHITECTURE -ne 'AMD64') {
+            throw "Expected an x64 Windows runner, got $env:PROCESSOR_ARCHITECTURE"
+          }
+      - name: Verify macOS runner architecture
+        if: runner.os == 'macOS'
+        shell: bash
+        run: test "$(uname -m)" = "${{ matrix.architecture }}"
+      - name: Check Rust dependencies
+        run: cargo check --locked
+      - name: Run all Rust tests
+        run: cargo test --locked
+      - name: Run Windows distribution identity/scanner evidence
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cargo test --locked file_identity
+          cargo test --locked scanner
+
+  embedded:
+    name: Embedded release smoke (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x64
+            os: windows-latest
+            architecture: AMD64
+          - name: macOS arm64
+            os: macos-latest
+            architecture: arm64
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -26,19 +111,26 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Set up Rust stable
         uses: dtolnay/rust-toolchain@stable
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+      - name: Verify Windows x64 runner
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if ($env:PROCESSOR_ARCHITECTURE -ne 'AMD64') {
+            throw "Expected an x64 Windows runner, got $env:PROCESSOR_ARCHITECTURE"
+          }
+      - name: Verify macOS runner architecture
+        if: runner.os == 'macOS'
+        shell: bash
+        run: test "$(uname -m)" = "${{ matrix.architecture }}"
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci
-      - name: Use runner Chrome for this gate
-        shell: python
-        run: |
-          from pathlib import Path
-          config = Path("frontend/playwright.config.ts")
-          text = config.read_text()
-          needle = '    browserName: "chromium",\n'
-          if text.count(needle) != 1:
-              raise SystemExit("unexpected Playwright config")
-          config.write_text(text.replace(needle, needle + '    channel: "chrome",\n', 1))
-      - name: Run formal browser gate
+      - name: Build frontend assets
         working-directory: frontend
-        run: npm run test:browser:gate
+        run: npm run build
+      - name: Build embedded release binary
+        run: cargo build --release --locked --features embedded-frontend
+      - name: Run embedded frontend runtime smoke
+        run: cargo test --locked --test distribution_runtime_integration t_dist_005_release_binary_serves_embedded_frontend_outside_repository -- --nocapture
