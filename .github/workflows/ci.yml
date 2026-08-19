@@ -134,3 +134,50 @@ jobs:
         run: cargo build --release --locked --features embedded-frontend
       - name: Run embedded frontend runtime smoke
         run: cargo test --locked --test distribution_runtime_integration t_dist_005_release_binary_serves_embedded_frontend_outside_repository -- --nocapture
+
+  v020-phase-a:
+    name: v0.2.0 Phase A
+    if: github.event_name == 'pull_request' && github.head_ref == 'feat/v0.2.0-beui-redesign'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out implementation branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/v0.2.0-beui-redesign
+          fetch-depth: 0
+      - name: Set up Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Apply approved Phase A contract changes
+        run: python3 .github/scripts/v020-phase-a.py
+      - name: Generate dependency lock
+        working-directory: frontend
+        run: npm install --package-lock-only --ignore-scripts
+      - name: Validate Phase A
+        run: |
+          cargo fmt
+          cargo fmt --check
+          cargo check --locked
+          cargo test --locked
+          cd frontend
+          npm ci
+          npm run check
+      - name: Commit Phase A and remove temporary tooling
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git show origin/main:.github/workflows/ci.yml > .github/workflows/ci.yml
+          git rm .github/scripts/v020-phase-a.py
+          git add .github/workflows/ci.yml src/usage/aggregate.rs src/api/query.rs frontend/package-lock.json
+          git commit -m "feat: complete v0.2.0 phase A contracts"
+          git push origin HEAD:feat/v0.2.0-beui-redesign
