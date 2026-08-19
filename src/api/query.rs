@@ -1252,6 +1252,7 @@ mod tests {
                         cost_completeness: CostCompleteness::Empty,
                     },
                     session_count: 0,
+                    cost_incomplete_session_count: 0,
                     health: crate::usage::aggregate::SessionHealthSummary {
                         total_sessions: 0,
                         complete_sessions: 0,
@@ -1294,6 +1295,7 @@ mod tests {
                     model_sort_key: Some("unknown".into()),
                     total_tokens: Some(12),
                     combined_total_tokens: Some(12),
+                    combined_estimated_cost_nanos_usd: None,
                     cache_hit_rate: Some(0.4),
                     data_status: SessionDataStatus::Incomplete,
                     error_code: None,
@@ -1448,6 +1450,7 @@ mod tests {
                     value: UsageSummary {
                         totals: totals(Some(3), 1, 0),
                         session_count: 0,
+                        cost_incomplete_session_count: 0,
                         health: crate::usage::aggregate::SessionHealthSummary {
                             total_sessions: 0,
                             complete_sessions: 0,
