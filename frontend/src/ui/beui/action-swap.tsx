@@ -105,20 +105,18 @@ export function ActionSwapText({ value, children, animation = "blur", className 
       <span aria-hidden className="invisible inline-block whitespace-nowrap">
         {cascade ? label.split("").map((char, index) => <span key={index} className="inline-block whitespace-pre">{char}</span>) : children}
       </span>
+      <span className="sr-only">{children}</span>
       {cascade ? (
-        <>
-          <span className="sr-only">{label}</span>
-          <AnimatePresence initial={false}>
-            <motion.span key={`cascade-${value}`} aria-hidden initial="initial" animate="animate" exit="exit" className="absolute left-0 top-[0.08em] inline-block whitespace-pre">
-              {label.split("").map((char, i) => (
-                <motion.span key={i} custom={i * CASCADE_STAGGER} variants={CASCADE_LETTER_VARIANTS} className="inline-block whitespace-pre will-change-[opacity,filter,transform]">{char}</motion.span>
-              ))}
-            </motion.span>
-          </AnimatePresence>
-        </>
+        <AnimatePresence initial={false}>
+          <motion.span key={`cascade-${value}`} aria-hidden initial="initial" animate="animate" exit="exit" className="absolute left-0 top-[0.08em] inline-block whitespace-pre">
+            {label.split("").map((char, i) => (
+              <motion.span key={i} custom={i * CASCADE_STAGGER} variants={CASCADE_LETTER_VARIANTS} className="inline-block whitespace-pre will-change-[opacity,filter,transform]">{char}</motion.span>
+            ))}
+          </motion.span>
+        </AnimatePresence>
       ) : (
         <AnimatePresence initial={false}>
-          <motion.span key={`${animation}-${value}`} variants={TEXT_VARIANTS[coreAnimation]} initial={reduce ? false : "initial"} animate={reduce ? { opacity: 1, filter: "blur(0px)", scale: 1, y: 0 } : "animate"} exit={reduce ? undefined : "exit"} className="absolute left-0 top-[0.08em] inline-block max-w-full truncate will-change-[opacity,filter,transform]">
+          <motion.span aria-hidden key={`${animation}-${value}`} variants={TEXT_VARIANTS[coreAnimation]} initial={reduce ? false : "initial"} animate={reduce ? { opacity: 1, filter: "blur(0px)", scale: 1, y: 0 } : "animate"} exit={reduce ? undefined : "exit"} className="absolute left-0 top-[0.08em] inline-block max-w-full truncate will-change-[opacity,filter,transform]">
             {children}
           </motion.span>
         </AnimatePresence>
