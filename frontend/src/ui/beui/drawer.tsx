@@ -111,7 +111,7 @@ export function Drawer({
             exit={reduce ? { opacity: 0 } : { x: offscreen }}
             transition={reduce ? { duration: 0.2, ease: EASE_OUT } : SPRING_PANEL}
             className={cn(
-              "absolute inset-y-0 flex w-80 max-w-[85vw] flex-col bg-background shadow-2xl outline-none",
+              "absolute inset-y-0 flex w-80 max-w-[85vw] max-[480px]:w-screen max-[480px]:max-w-none flex-col bg-background shadow-2xl outline-none",
               side === "right"
                 ? "right-0 border-l border-border"
                 : "left-0 border-r border-border",
