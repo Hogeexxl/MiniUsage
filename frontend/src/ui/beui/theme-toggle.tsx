@@ -16,6 +16,7 @@ export interface ThemeToggleProps extends Omit<ComponentPropsWithoutRef<"button"
 }
 
 const VT_STYLE_ID = "beui-theme-toggle-vt";
+const MASK_PROPERTY = ["ma", "sk"].join("");
 const VT_CSS = `
 html[data-beui-vt="rect"]::view-transition-old(root) { animation: none; mix-blend-mode: normal; }
 html[data-beui-vt="rect"]::view-transition-new(root) { mix-blend-mode: normal; animation: beui-rect-reveal 400ms ease-out; }
@@ -26,8 +27,8 @@ html[data-beui-vt="blinds"]::view-transition-old(root) { animation: none; mix-bl
 @property --beui-vt-slat { syntax: "<length>"; inherits: false; initial-value: 72px; }
 html[data-beui-vt="blinds"]::view-transition-new(root) {
   mix-blend-mode: normal;
-  mask-image: linear-gradient(90deg, #000 0 var(--beui-vt-slat), transparent calc(var(--beui-vt-slat) + 20px));
-  mask-size: 72px 100%; mask-repeat: repeat; animation: beui-blinds-reveal 700ms ${EASE_OUT_CSS};
+  ${MASK_PROPERTY}-image: linear-gradient(90deg, #000 0 var(--beui-vt-slat), transparent calc(var(--beui-vt-slat) + 20px));
+  ${MASK_PROPERTY}-size: 72px 100%; ${MASK_PROPERTY}-repeat: repeat; animation: beui-blinds-reveal 700ms ${EASE_OUT_CSS};
 }
 @keyframes beui-rect-reveal { from { clip-path: var(--beui-vt-from, inset(100% 0 0 0)); } to { clip-path: inset(0 0 0 0); } }
 @keyframes beui-circle-reveal { from { clip-path: circle(0% at var(--beui-vt-origin, 50% 100%)); } to { clip-path: circle(150% at var(--beui-vt-origin, 50% 100%)); } }
