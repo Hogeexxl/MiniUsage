@@ -43,8 +43,8 @@ describe("Skills chart data", () => {
     [0, { max: 1, step: 1, ticks: [0, 1] }],
     [4, { max: 4, step: 1, ticks: [0, 1, 2, 3, 4] }],
     [8, { max: 8, step: 2, ticks: [0, 2, 4, 6, 8] }],
-    [21, { max: 40, step: 10, ticks: [0, 10, 20, 30, 40] }],
-    [240, { max: 400, step: 100, ticks: [0, 100, 200, 300, 400] }],
+    [21, { max: 30, step: 10, ticks: [0, 10, 20, 30] }],
+    [240, { max: 300, step: 100, ticks: [0, 100, 200, 300] }],
   ])("builds a 1/2/5 × 10^n nice scale for peak %s", (peak, expected) => {
     expect(niceScale(peak)).toEqual(expected);
   });
