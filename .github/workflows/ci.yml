@@ -18,27 +18,6 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-      - name: Patch browser contracts in this validation workspace
-        shell: python
-        run: |
-          from pathlib import Path
-          path = Path("frontend/tests/browser/dashboard.spec.ts")
-          text = path.read_text(encoding="utf-8")
-          replacements = [
-              (
-                  '  expect(result.statuses).toEqual([200, 200, 200, 200]);',
-                  '  expect(result.statuses).toEqual([204, 200, 200, 200]);',
-              ),
-              (
-                  '  const drawerBox = await dialog.boundingBox();\n  expect(drawerBox?.x).toBeCloseTo(0, 0);\n  expect(drawerBox?.width).toBeCloseTo(390, 0);',
-                  '  await expect.poll(async () => (await dialog.boundingBox())?.x ?? Number.POSITIVE_INFINITY).toBeCloseTo(0, 0);\n  await expect.poll(async () => (await dialog.boundingBox())?.width ?? 0).toBeCloseTo(390, 0);',
-              ),
-          ]
-          for old, new in replacements:
-              if text.count(old) != 1:
-                  raise SystemExit(f"expected one exact match, found {text.count(old)}")
-              text = text.replace(old, new, 1)
-          path.write_text(text, encoding="utf-8")
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
