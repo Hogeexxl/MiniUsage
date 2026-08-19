@@ -932,7 +932,13 @@ fn map_model(row: ModelUsageRow) -> Result<ModelUsageDto, ApiError> {
 
 fn map_project_filter_option(option: ProjectFilterOption) -> ProjectFilterOptionDto {
     match option {
-        ProjectFilterOption::Project { project_name, project_path } => ProjectFilterOptionDto::Project { project_name, project_path },
+        ProjectFilterOption::Project {
+            project_name,
+            project_path,
+        } => ProjectFilterOptionDto::Project {
+            project_name,
+            project_path,
+        },
         ProjectFilterOption::Projectless => ProjectFilterOptionDto::Projectless,
         ProjectFilterOption::Unknown => ProjectFilterOptionDto::Unknown,
     }
@@ -955,7 +961,10 @@ fn map_totals(totals: TokenTotals) -> Result<TokenUsageDto, ApiError> {
     if let Some(value) = totals.uncached_input_tokens {
         ensure_safe(value)?;
     }
-    if totals.cache_hit_rate.is_some_and(|ratio| !ratio.is_finite() || !(0.0..=1.0).contains(&ratio)) {
+    if totals
+        .cache_hit_rate
+        .is_some_and(|ratio| !ratio.is_finite() || !(0.0..=1.0).contains(&ratio))
+    {
         return Err(ApiError::QueryFailed);
     }
     let estimated_cost = match totals.estimated_cost_nanos_usd {
@@ -964,7 +973,9 @@ fn map_totals(totals: TokenTotals) -> Result<TokenUsageDto, ApiError> {
         None => None,
     };
     let estimated_cost_status = match totals.cost_completeness {
-        CostCompleteness::Empty | CostCompleteness::Complete if estimated_cost.is_some() => "complete",
+        CostCompleteness::Empty | CostCompleteness::Complete if estimated_cost.is_some() => {
+            "complete"
+        }
         CostCompleteness::Partial if estimated_cost.is_some() => "partial",
         CostCompleteness::Unknown if estimated_cost.is_none() => "unknown",
         _ => return Err(ApiError::QueryFailed),
@@ -985,7 +996,10 @@ fn map_totals(totals: TokenTotals) -> Result<TokenUsageDto, ApiError> {
 }
 
 fn ensure_safe(value: i64) -> Result<(), ApiError> {
-    (0..=JSON_SAFE_INTEGER_MAX).contains(&value).then_some(()).ok_or(ApiError::QueryOverflow)
+    (0..=JSON_SAFE_INTEGER_MAX)
+        .contains(&value)
+        .then_some(())
+        .ok_or(ApiError::QueryOverflow)
 }
 
 pub fn revision(ledger: &Ledger) -> Result<RevisionResponse, ApiError> {
@@ -996,14 +1010,19 @@ pub fn revision(ledger: &Ledger) -> Result<RevisionResponse, ApiError> {
 pub fn revision_from_state(state: &AppState) -> Result<RevisionResponse, ApiError> {
     ensure_safe(state.data_revision)?;
     ensure_safe(state.status_revision)?;
-    Ok(RevisionResponse { data_revision: state.data_revision, status_revision: state.status_revision })
+    Ok(RevisionResponse {
+        data_revision: state.data_revision,
+        status_revision: state.status_revision,
+    })
 }
 
 pub fn status(ledger: &Ledger, target_scan_id: Option<&str>) -> Result<StatusResponse, ApiError> {
     if target_scan_id.is_some_and(|scan_id| Uuid::parse_str(scan_id).is_err()) {
         return Err(ApiError::InvalidScanId);
     }
-    let snapshot = ledger.scan_status_snapshot(target_scan_id).map_err(map_storage_error)?;
+    let snapshot = ledger
+        .scan_status_snapshot(target_scan_id)
+        .map_err(map_storage_error)?;
     if target_scan_id.is_some() && snapshot.target_scan.is_none() {
         return Err(ApiError::ScanNotFound);
     }
@@ -1011,7 +1030,11 @@ pub fn status(ledger: &Ledger, target_scan_id: Option<&str>) -> Result<StatusRes
 }
 
 pub fn status_from_snapshot(snapshot: ScanStatusSnapshot) -> Result<StatusResponse, ApiError> {
-    let AppState { data_revision, scan: state, .. } = snapshot.app_state;
+    let AppState {
+        data_revision,
+        scan: state,
+        ..
+    } = snapshot.app_state;
     ensure_safe(data_revision)?;
     ensure_safe(state.status_revision)?;
     for value in [
@@ -1020,16 +1043,26 @@ pub fn status_from_snapshot(snapshot: ScanStatusSnapshot) -> Result<StatusRespon
         state.last_scan_failed_at_ms,
         state.followup_requested_at_ms,
         state.followup_enqueued_status_revision,
-    ].into_iter().flatten() {
+    ]
+    .into_iter()
+    .flatten()
+    {
         ensure_safe(value)?;
     }
     let followup = match state.followup_state {
         None => None,
         Some(followup_state) => Some(FollowupDto {
-            scan_id: state.followup_scan_id.clone().ok_or(ApiError::QueryFailed)?,
+            scan_id: state
+                .followup_scan_id
+                .clone()
+                .ok_or(ApiError::QueryFailed)?,
             state: followup_state.as_str().to_owned(),
-            enqueued_status_revision: state.followup_enqueued_status_revision.ok_or(ApiError::QueryFailed)?,
-            requested_at_ms: state.followup_requested_at_ms.ok_or(ApiError::QueryFailed)?,
+            enqueued_status_revision: state
+                .followup_enqueued_status_revision
+                .ok_or(ApiError::QueryFailed)?,
+            requested_at_ms: state
+                .followup_requested_at_ms
+                .ok_or(ApiError::QueryFailed)?,
             error_code: match followup_state {
                 FollowupState::Queued => None,
                 FollowupState::StartFailed => state.followup_error_code.clone(),
@@ -1043,7 +1076,9 @@ pub fn status_from_snapshot(snapshot: ScanStatusSnapshot) -> Result<StatusRespon
         scan_state: state.scan_state.as_str().to_owned(),
         active_scan_id: state.active_scan_id,
         last_finished_scan_id: state.last_finished_scan_id,
-        last_finished_scan_result: state.last_finished_scan_result.map(|result| result.as_str().to_owned()),
+        last_finished_scan_result: state
+            .last_finished_scan_result
+            .map(|result| result.as_str().to_owned()),
         followup,
         target_scan,
         last_scan_started_at_ms: state.last_scan_started_at_ms,
@@ -1054,13 +1089,18 @@ pub fn status_from_snapshot(snapshot: ScanStatusSnapshot) -> Result<StatusRespon
             SourceBindingStatus::Unbound => "unbound",
             SourceBindingStatus::Ready => "ready",
             SourceBindingStatus::SourceChanged => "source_changed",
-        }.to_owned(),
+        }
+        .to_owned(),
     })
 }
 
 fn map_target_scan(scan: ScanRun) -> Result<TargetScanDto, ApiError> {
-    if let Some(value) = scan.started_status_revision { ensure_safe(value)?; }
-    if let Some(value) = scan.terminal_status_revision { ensure_safe(value)?; }
+    if let Some(value) = scan.started_status_revision {
+        ensure_safe(value)?;
+    }
+    if let Some(value) = scan.terminal_status_revision {
+        ensure_safe(value)?;
+    }
     Ok(TargetScanDto {
         scan_id: scan.scan_id,
         state: scan.state.as_str().to_owned(),
@@ -1097,7 +1137,6 @@ fn map_storage_error(error: crate::storage::StorageError) -> ApiError {
         _ => ApiError::QueryFailed,
     }
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1112,7 +1151,9 @@ mod tests {
     use chrono::DateTime;
 
     fn utc_range(key: RangeKey) -> ResolvedRange {
-        let now = DateTime::parse_from_rfc3339("2026-08-08T12:34:56Z").unwrap().timestamp_millis();
+        let now = DateTime::parse_from_rfc3339("2026-08-08T12:34:56Z")
+            .unwrap()
+            .timestamp_millis();
         resolve_utc_range_at_for_test(key, now).unwrap()
     }
 
@@ -1140,15 +1181,26 @@ mod tests {
     fn t_s06_001_summary_query_parser_matrix() {
         let parsed = parse_summary_params(Some(
             "range=year&model=gpt%2Cb&model=gpt%2Ca&model=gpt%2Cb&project_path=%2FUsers%2Fme%2Fmy+path%2F%26%2F%E4%B8%AD&project_path=%2FUsers%2Fme%2Fmy+path%2F%26%2F%E4%B8%AD&include_projectless=1&include_projectless=1&include_unknown_project=1",
-        )).unwrap();
+        ))
+        .unwrap();
         assert_eq!(parsed.range.as_deref(), Some("year"));
-        assert_eq!(parsed.filter.models(), &["gpt,a".to_owned(), "gpt,b".to_owned()]);
-        assert_eq!(parsed.filter.project_paths(), &["/Users/me/my path/&/中".to_owned()]);
+        assert_eq!(
+            parsed.filter.models(),
+            &["gpt,a".to_owned(), "gpt,b".to_owned()]
+        );
+        assert_eq!(
+            parsed.filter.project_paths(),
+            &["/Users/me/my path/&/中".to_owned()]
+        );
         assert!(parsed.filter.include_projectless());
         assert!(parsed.filter.include_unknown_project());
 
-        let separate_values = parse_summary_params(Some("range=year&model=gpt%2Ca&model=gpt%2Cb")).unwrap();
-        assert_eq!(separate_values.filter.models(), &["gpt,a".to_owned(), "gpt,b".to_owned()]);
+        let separate_values =
+            parse_summary_params(Some("range=year&model=gpt%2Ca&model=gpt%2Cb")).unwrap();
+        assert_eq!(
+            separate_values.filter.models(),
+            &["gpt,a".to_owned(), "gpt,b".to_owned()]
+        );
 
         let empty = parse_summary_params(Some("range=year")).unwrap();
         assert!(empty.filter.models().is_empty());
@@ -1165,15 +1217,16 @@ mod tests {
             "range=year&include_unknown_project=true",
             "range=year&include_projectless=1&include_projectless=0",
         ] {
-            assert_eq!(parse_summary_params(Some(raw_query)), Err(ApiError::InvalidFilter), "query should be rejected: {raw_query}");
+            assert_eq!(
+                parse_summary_params(Some(raw_query)),
+                Err(ApiError::InvalidFilter),
+                "query should be rejected: {raw_query}"
+            );
         }
-        assert_eq!(parse_summary_params(Some("range=year&range=30d")), Err(ApiError::InvalidRange));
-
-        let cost_sort = parse_session_query_params(Some(
-            "range=year&seed_sort_by=combined_estimated_cost&seed_sort_order=desc",
-        )).unwrap();
-        assert_eq!(cost_sort.seed_sort_field, SessionSortField::CombinedEstimatedCost);
-        assert_eq!(cost_sort.seed_sort_order, SessionSortOrder::Desc);
+        assert_eq!(
+            parse_summary_params(Some("range=year&range=30d")),
+            Err(ApiError::InvalidRange)
+        );
     }
 
     #[test]
@@ -1199,7 +1252,6 @@ mod tests {
                         cost_completeness: CostCompleteness::Empty,
                     },
                     session_count: 0,
-                    cost_incomplete_session_count: 0,
                     health: crate::usage::aggregate::SessionHealthSummary {
                         total_sessions: 0,
                         complete_sessions: 0,
@@ -1208,13 +1260,13 @@ mod tests {
                     },
                 },
             },
-        ).unwrap();
+        )
+        .unwrap();
         assert_eq!(summary.usage.cache_write_tokens, Some(0));
         assert_eq!(summary.usage.uncached_input_tokens, Some(0));
         assert_eq!(summary.usage.cache_hit_rate, None);
         assert_eq!(summary.usage.estimated_cost, Some(0.0));
         assert_eq!(summary.usage.estimated_cost_status, "complete");
-        assert_eq!(summary.usage.cost_incomplete_session_count, 0);
 
         let response = session_snapshot_response(
             &range,
@@ -1242,26 +1294,109 @@ mod tests {
                     model_sort_key: Some("unknown".into()),
                     total_tokens: Some(12),
                     combined_total_tokens: Some(12),
-                    combined_estimated_cost_nanos_usd: None,
                     cache_hit_rate: Some(0.4),
                     data_status: SessionDataStatus::Incomplete,
                     error_code: None,
                 }],
             },
-        ).unwrap();
-        assert_eq!(response.sort_index[0].combined_estimated_cost, None);
-        assert_eq!(response.items[0].inclusive_usage.as_ref().unwrap().cache_write_tokens, None);
-        assert_eq!(response.items[0].inclusive_usage.as_ref().unwrap().uncached_input_tokens, None);
-        assert_eq!(response.items[0].self_usage.as_ref().unwrap().cache_write_tokens, Some(3));
-        assert_eq!(response.items[0].self_usage.as_ref().unwrap().cache_hit_rate, Some(0.4));
-        assert_eq!(response.items[0].subagent_usage.as_ref().unwrap().cache_write_tokens, Some(0));
-        assert_eq!(response.items[0].subagent_usage.as_ref().unwrap().uncached_input_tokens, Some(6));
-        assert_eq!(response.items[0].inclusive_usage.as_ref().unwrap().estimated_cost, None);
-        assert_eq!(response.items[0].self_usage.as_ref().unwrap().estimated_cost, None);
-        assert_eq!(response.items[0].subagent_usage.as_ref().unwrap().estimated_cost, None);
-        assert_eq!(response.items[0].inclusive_usage.as_ref().unwrap().estimated_cost_status, "unknown");
-        assert_eq!(response.items[0].self_usage.as_ref().unwrap().estimated_cost_status, "unknown");
-        assert_eq!(response.items[0].subagent_usage.as_ref().unwrap().estimated_cost_status, "unknown");
+        )
+        .unwrap();
+        assert_eq!(
+            response.items[0]
+                .inclusive_usage
+                .as_ref()
+                .unwrap()
+                .cache_write_tokens,
+            None
+        );
+        assert_eq!(
+            response.items[0]
+                .inclusive_usage
+                .as_ref()
+                .unwrap()
+                .uncached_input_tokens,
+            None
+        );
+        assert_eq!(
+            response.items[0]
+                .self_usage
+                .as_ref()
+                .unwrap()
+                .cache_write_tokens,
+            Some(3)
+        );
+        assert_eq!(
+            response.items[0]
+                .self_usage
+                .as_ref()
+                .unwrap()
+                .cache_hit_rate,
+            Some(0.4)
+        );
+        assert_eq!(
+            response.items[0]
+                .subagent_usage
+                .as_ref()
+                .unwrap()
+                .cache_write_tokens,
+            Some(0)
+        );
+        assert_eq!(
+            response.items[0]
+                .subagent_usage
+                .as_ref()
+                .unwrap()
+                .uncached_input_tokens,
+            Some(6)
+        );
+        assert_eq!(
+            response.items[0]
+                .inclusive_usage
+                .as_ref()
+                .unwrap()
+                .estimated_cost,
+            None
+        );
+        assert_eq!(
+            response.items[0]
+                .self_usage
+                .as_ref()
+                .unwrap()
+                .estimated_cost,
+            None
+        );
+        assert_eq!(
+            response.items[0]
+                .subagent_usage
+                .as_ref()
+                .unwrap()
+                .estimated_cost,
+            None
+        );
+        assert_eq!(
+            response.items[0]
+                .inclusive_usage
+                .as_ref()
+                .unwrap()
+                .estimated_cost_status,
+            "unknown"
+        );
+        assert_eq!(
+            response.items[0]
+                .self_usage
+                .as_ref()
+                .unwrap()
+                .estimated_cost_status,
+            "unknown"
+        );
+        assert_eq!(
+            response.items[0]
+                .subagent_usage
+                .as_ref()
+                .unwrap()
+                .estimated_cost_status,
+            "unknown"
+        );
 
         let models = models_response(
             &range,
@@ -1269,13 +1404,39 @@ mod tests {
                 data_revision: 9,
                 active_epoch: 2,
                 value: vec![
-                    ModelUsageRow { model: "unknown".into(), totals: totals(Some(3), 5, 0), session_count: 1, first_activity_at_ms: 1, last_activity_at_ms: 2 },
-                    ModelUsageRow { model: "gpt-5-b".into(), totals: totals(Some(3), 20, 0), session_count: 1, first_activity_at_ms: 1, last_activity_at_ms: 2 },
-                    ModelUsageRow { model: "gpt-5-a".into(), totals: totals(Some(3), 20, 0), session_count: 1, first_activity_at_ms: 1, last_activity_at_ms: 2 },
+                    ModelUsageRow {
+                        model: "unknown".into(),
+                        totals: totals(Some(3), 5, 0),
+                        session_count: 1,
+                        first_activity_at_ms: 1,
+                        last_activity_at_ms: 2,
+                    },
+                    ModelUsageRow {
+                        model: "gpt-5-b".into(),
+                        totals: totals(Some(3), 20, 0),
+                        session_count: 1,
+                        first_activity_at_ms: 1,
+                        last_activity_at_ms: 2,
+                    },
+                    ModelUsageRow {
+                        model: "gpt-5-a".into(),
+                        totals: totals(Some(3), 20, 0),
+                        session_count: 1,
+                        first_activity_at_ms: 1,
+                        last_activity_at_ms: 2,
+                    },
                 ],
             },
-        ).unwrap();
-        assert_eq!(models.items.iter().map(|row| row.model.as_str()).collect::<Vec<_>>(), vec!["gpt-5-a", "gpt-5-b", "unknown"]);
+        )
+        .unwrap();
+        assert_eq!(
+            models
+                .items
+                .iter()
+                .map(|row| row.model.as_str())
+                .collect::<Vec<_>>(),
+            vec!["gpt-5-a", "gpt-5-b", "unknown"]
+        );
         assert!(models.items.iter().any(|row| row.model == "unknown"));
 
         assert_eq!(
@@ -1287,7 +1448,6 @@ mod tests {
                     value: UsageSummary {
                         totals: totals(Some(3), 1, 0),
                         session_count: 0,
-                        cost_incomplete_session_count: 0,
                         health: crate::usage::aggregate::SessionHealthSummary {
                             total_sessions: 0,
                             complete_sessions: 0,
@@ -1335,19 +1495,33 @@ mod tests {
             terminal_status_revision: Some(10),
             error_code: Some("SCAN_CANCELLED".into()),
         };
-        let response = status_from_snapshot(ScanStatusSnapshot::new(app_state, Some(target)).unwrap()).unwrap();
+        let response =
+            status_from_snapshot(ScanStatusSnapshot::new(app_state, Some(target)).unwrap())
+                .unwrap();
         assert_eq!(response.data_revision, 8);
         assert_eq!(response.status_revision, 12);
         assert_eq!(response.scan_state, "failed");
-        assert_eq!(response.last_finished_scan_result.as_deref(), Some("failed"));
+        assert_eq!(
+            response.last_finished_scan_result.as_deref(),
+            Some("failed")
+        );
         assert_eq!(response.followup.as_ref().unwrap().state, "start_failed");
-        assert_eq!(response.followup.as_ref().unwrap().error_code.as_deref(), Some("SCANNER_UNAVAILABLE"));
+        assert_eq!(
+            response.followup.as_ref().unwrap().error_code.as_deref(),
+            Some("SCANNER_UNAVAILABLE")
+        );
         assert_eq!(response.target_scan.unwrap().state, "failed");
         assert_eq!(response.source_binding_status, "source_changed");
         assert_eq!(response.last_scan_completed_at_ms, None);
 
         assert_eq!(
-            revision_from_state(&ScanStatusSnapshot::new(AppState::new(0, ScanState::initial()).unwrap(), None).unwrap().app_state).unwrap().data_revision,
+            revision_from_state(
+                &ScanStatusSnapshot::new(AppState::new(0, ScanState::initial()).unwrap(), None,)
+                    .unwrap()
+                    .app_state
+            )
+            .unwrap()
+            .data_revision,
             0
         );
     }
@@ -1407,13 +1581,25 @@ mod tests {
         ];
 
         for (scan, expected_state, expected_followup, expected_result, binding) in cases {
-            let response = status_from_snapshot(ScanStatusSnapshot::new(AppState::new(3, scan).unwrap(), None).unwrap()).unwrap();
+            let response = status_from_snapshot(
+                ScanStatusSnapshot::new(AppState::new(3, scan).unwrap(), None).unwrap(),
+            )
+            .unwrap();
             assert_eq!(response.scan_state, expected_state);
-            assert_eq!(response.followup.as_ref().map(|value| value.state.as_str()), expected_followup);
-            assert_eq!(response.last_finished_scan_result.as_deref(), expected_result);
+            assert_eq!(
+                response.followup.as_ref().map(|value| value.state.as_str()),
+                expected_followup
+            );
+            assert_eq!(
+                response.last_finished_scan_result.as_deref(),
+                expected_result
+            );
             assert_eq!(response.source_binding_status, binding);
             if let Some(followup) = response.followup {
-                assert_eq!(followup.error_code, None, "queued follow-up never carries an error");
+                assert_eq!(
+                    followup.error_code, None,
+                    "queued follow-up never carries an error"
+                );
             }
         }
     }
@@ -1440,8 +1626,14 @@ mod tests {
             cost_completeness: CostCompleteness::Unknown,
         };
         assert_eq!(map_totals(huge), Err(ApiError::QueryOverflow));
-        assert_eq!(map_aggregate_error(AggregateError::ArithmeticOverflow), ApiError::QueryOverflow);
-        assert_eq!(map_aggregate_error(AggregateError::InvariantViolation), ApiError::QueryFailed);
+        assert_eq!(
+            map_aggregate_error(AggregateError::ArithmeticOverflow),
+            ApiError::QueryOverflow
+        );
+        assert_eq!(
+            map_aggregate_error(AggregateError::InvariantViolation),
+            ApiError::QueryFailed
+        );
     }
 
     #[test]
@@ -1469,8 +1661,18 @@ mod tests {
     #[test]
     fn t_mu04_c03_api_cost_status_contract() {
         for (cost, completeness, expected_cost, expected_status) in [
-            (Some(1_250_000_000), CostCompleteness::Complete, Some(1.25), "complete"),
-            (Some(750_000_000), CostCompleteness::Partial, Some(0.75), "partial"),
+            (
+                Some(1_250_000_000),
+                CostCompleteness::Complete,
+                Some(1.25),
+                "complete",
+            ),
+            (
+                Some(750_000_000),
+                CostCompleteness::Partial,
+                Some(0.75),
+                "partial",
+            ),
             (None, CostCompleteness::Unknown, None, "unknown"),
             (Some(0), CostCompleteness::Empty, Some(0.0), "complete"),
         ] {
