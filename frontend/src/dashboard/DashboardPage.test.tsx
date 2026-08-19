@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import { StrictMode, type ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -122,7 +122,7 @@ function renderWithTheme(node: ReactNode) {
 }
 
 function totalTokenCard() {
-  return screen.getByText("总 Token").parentElement;
+  return within(screen.getByLabelText("KPI 指标")).getByText("总 Token").parentElement;
 }
 
 describe("DashboardPage v0.2.0", () => {

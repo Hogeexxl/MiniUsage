@@ -138,7 +138,7 @@ export function SessionDetailDrawer({ view, timezone }: SessionDetailDrawerProps
   const toast = useAnimatedToastStack();
   const [mainOpen, setMainOpen] = useState<string | null>(null);
   const [subagentOpen, setSubagentOpen] = useState<string | null>(null);
-  const previousRefreshError = useRef<string | undefined>();
+  const previousRefreshError = useRef<string | undefined>(undefined);
   const detail = view.detail;
 
   useEffect(() => {
