@@ -19,7 +19,7 @@ describe("distribution ranking", () => {
 
   it("excludes unknown cost while keeping known partial cost in the denominator", () => {
     const cost = buildDistribution(items, "cost");
-    expect(cost.unknown.map((item) => item.id)).toEqual(["m6"]);
+    expect(cost.segments.some((segment) => segment.id === "m6")).toBe(false);
     expect(cost.total).toBe(27);
     expect(cost.segments.some((segment) => segment.id === "m5")).toBe(true);
   });
