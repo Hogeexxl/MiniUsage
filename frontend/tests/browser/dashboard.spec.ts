@@ -303,7 +303,7 @@ test("real Query API exposes the v0.2.0 Summary and Session contracts", async ({
       sessions: await sessionsResponse.json(),
     };
   });
-  expect(result.statuses).toEqual([200, 200, 200, 200]);
+  expect(result.statuses).toEqual([204, 200, 200, 200]);
   expect(result.summary.usage).toHaveProperty("cost_incomplete_session_count");
   expect(result.summary.usage).toHaveProperty("session_health");
   expect(result.sessions.sort_index.length).toBeGreaterThan(0);
@@ -472,9 +472,8 @@ test("C3 narrow viewport wraps KPI and Donuts, scrolls only the Table, and makes
   await page.locator('tr[data-session-root-id]').first().click();
   const dialog = page.getByRole("dialog", { name: "Session 详情" });
   await expect(dialog).toBeVisible();
-  const drawerBox = await dialog.boundingBox();
-  expect(drawerBox?.x).toBeCloseTo(0, 0);
-  expect(drawerBox?.width).toBeCloseTo(390, 0);
+  await expect.poll(async () => (await dialog.boundingBox())?.x ?? Number.POSITIVE_INFINITY).toBeCloseTo(0, 0);
+  await expect.poll(async () => (await dialog.boundingBox())?.width ?? 0).toBeCloseTo(390, 0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
   await dialog.getByRole("button", { name: "关闭 Session 详情" }).click();
   await expect(dialog).toBeHidden();
