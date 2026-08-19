@@ -4,12 +4,12 @@ import { describe, expect, it, vi } from "vitest";
 import { RangeSelector } from "./RangeSelector";
 
 describe("RangeSelector", () => {
-  it("exposes the range group and pressed state", () => {
+  it("exposes the range tablist and selected state", () => {
     const onChange = vi.fn();
     render(<RangeSelector value="today" onChange={onChange} />);
-    expect(screen.getByRole("group", { name: "时间范围" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "今天" })).toHaveAttribute("aria-pressed", "true");
-    fireEvent.click(screen.getByRole("button", { name: "30天" }));
+    expect(screen.getByRole("tablist")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "今天" })).toHaveAttribute("aria-selected", "true");
+    fireEvent.click(screen.getByRole("tab", { name: "30d" }));
     expect(onChange).toHaveBeenCalledWith("30d");
   });
 });
