@@ -2,8 +2,7 @@ name: v0.2.0 temporary gate
 
 on:
   push:
-    branches:
-      - gate/v0.2.0-real-1
+  pull_request:
 
 permissions:
   contents: read
