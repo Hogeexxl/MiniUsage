@@ -9,35 +9,36 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  patch-c2:
-    name: Patch C2 selector
+  browser-gate:
+    name: Browser gate
     runs-on: windows-latest
     steps:
-      - name: Check out implementation branch
+      - name: Check out repository
         uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          ref: agent/v0.2.0-beui-redesign
-          fetch-depth: 0
-      - name: Apply exact semantic selector fix
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Set up Rust stable
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+      - name: Use runner Chrome for this gate
         shell: python
         run: |
           from pathlib import Path
-          path = Path("frontend/tests/browser/dashboard.spec.ts")
-          text = path.read_text(encoding="utf-8")
-          old = '  const legendButtons = modelCard.locator("button[title]");'
-          new = '  const legendButtons = modelCard.getByRole("button");'
-          if text.count(old) != 1:
-              raise SystemExit(f"expected one old C2 selector, found {text.count(old)}")
-          path.write_text(text.replace(old, new, 1), encoding="utf-8")
-      - name: Commit selector fix
-        shell: bash
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add frontend/tests/browser/dashboard.spec.ts
-          git diff --cached --check
-          git commit -m "test(browser): use semantic donut legend selector"
-          git push origin HEAD:agent/v0.2.0-beui-redesign
+          config = Path("frontend/playwright.config.ts")
+          text = config.read_text()
+          needle = '    browserName: "chromium",\n'
+          if text.count(needle) != 1:
+              raise SystemExit("unexpected Playwright config")
+          config.write_text(text.replace(needle, needle + '    channel: "chrome",\n', 1))
+      - name: Run formal browser gate
+        working-directory: frontend
+        run: npm run test:browser:gate
