@@ -1,0 +1,55 @@
+name: Agent test contract patch
+
+on:
+  push:
+    branches:
+      - agent/v0.2.0-beui-redesign
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/v0.2.0-beui-redesign
+          fetch-depth: 0
+      - name: Patch migrated UI assertions exactly
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              file = Path(path)
+              text = file.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected exactly one match, found {count}")
+              file.write_text(text.replace(old, new, 1))
+
+          replace_once(
+              "frontend/src/dashboard/DashboardPage.test.tsx",
+              '    screen.getByRole("button", { name: "昨天" }).click();',
+              '    screen.getByRole("tab", { name: "昨天" }).click();',
+          )
+          replace_once(
+              "frontend/src/dashboard/useUpdateController.test.tsx",
+              '    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("当前已是最新版本 v0.1.0"));',
+              '    await waitFor(() => expect(screen.getByRole("button", { name: "已是最新" })).toBeEnabled());',
+          )
+          replace_once(
+              "frontend/src/dashboard/useUpdateController.test.tsx",
+              '    expect(screen.getByRole("button", { name: "检查更新" })).toBeEnabled();',
+              '    expect(screen.getByRole("button", { name: "已是最新" })).toBeEnabled();',
+          )
+          Path(".github/workflows/agent-test-contract-patch.yml").unlink()
+      - name: Commit exact patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/dashboard/DashboardPage.test.tsx frontend/src/dashboard/useUpdateController.test.tsx .github/workflows/agent-test-contract-patch.yml
+          git diff --cached --check
+          git commit -m "test(frontend): align migrated tab and update success states"
+          git push origin HEAD:agent/v0.2.0-beui-redesign
