@@ -34,6 +34,7 @@ export type SessionHealthDto = {
 
 export type SummaryUsageDto = UsageDto & {
   session_count: number;
+  cost_incomplete_session_count: number;
   session_health: SessionHealthDto;
 };
 
@@ -130,6 +131,7 @@ export type SessionSortField =
   | "model"
   | "total_tokens"
   | "combined_total_tokens"
+  | "combined_estimated_cost"
   | "cache_hit_rate";
 
 export type SessionSortOrder = "asc" | "desc";
@@ -141,6 +143,7 @@ export type SessionSortIndexItem = {
   model_sort_key: string | null;
   total_tokens: number | null;
   combined_total_tokens: number | null;
+  combined_estimated_cost: number | null;
   cache_hit_rate: number | null;
   data_status: "complete" | "incomplete" | "error";
   error_code: string | null;
@@ -228,64 +231,20 @@ export type StatusResponse = {
   last_finished_scan_result: string | null;
   followup: FollowupDto | null;
   target_scan: TargetScanDto | null;
-  last_scan_started_at_ms: number | null;
-  last_scan_completed_at_ms: number | null;
-  last_scan_failed_at_ms: number | null;
-  last_scan_error_code: string | null;
-  source_binding_status: "unbound" | "ready" | "source_changed";
 };
 
-export type UpdateStatusResponse = {
+export type SyncResponse = {
+  status: "accepted" | "already_running" | "queued";
+  scan_id: string | null;
+};
+
+export type UpdateCheckResponse = {
+  status: "up_to_date" | "update_available";
   current_version: string;
-  latest_version: string | null;
-  update_available: boolean;
+  latest_version: string;
   release_url: string | null;
-  last_checked_at_ms: number | null;
-  checking: boolean;
 };
 
-export type RefreshAccepted = {
-  http_status: 200 | 202;
-  disposition: "started" | "coalesced";
-  scan_id: string;
-  status_revision: number;
+export type UpdateOpenResponse = {
+  status: "opened";
 };
-
-export type ApiErrorCode =
-  | "INVALID_RANGE"
-  | "INVALID_FILTER"
-  | "INVALID_SESSION_IDS"
-  | "INVALID_SCAN_ID"
-  | "SCAN_NOT_FOUND"
-  | "STALE_DATA_REVISION"
-  | "FORBIDDEN"
-  | "FORBIDDEN_HOST"
-  | "FORBIDDEN_ORIGIN"
-  | "NOT_FOUND"
-  | "SOURCE_CHANGED"
-  | "SCANNER_UNAVAILABLE"
-  | "LOCAL_TIME_UNAVAILABLE"
-  | "QUERY_OVERFLOW"
-  | "DATABASE_BUSY"
-  | "QUERY_FAILED"
-  | "SCAN_START_FAILED"
-  | "SCAN_ENQUEUE_FAILED"
-  | "UPDATE_CHECK_FAILED"
-  | "UPDATE_NOT_AVAILABLE"
-  | "UPDATE_BROWSER_OPEN_FAILED"
-  | "INTERNAL_ERROR"
-  | "HTTP_ERROR";
-
-export class MiniUsageClientError extends Error {
-  readonly code: ApiErrorCode;
-  readonly status: number;
-
-  constructor(code: ApiErrorCode, status: number) {
-    super(code);
-    this.name = "MiniUsageClientError";
-    this.code = code;
-    this.status = status;
-  }
-}
-
-export type RevisionTuple = Pick<RevisionResponse, "data_revision" | "status_revision">;
