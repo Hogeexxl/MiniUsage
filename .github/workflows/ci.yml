@@ -35,23 +35,16 @@ jobs:
   browser-gate:
     name: Browser gate
     runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.62.1-noble
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
       - name: Set up Rust stable
         uses: dtolnay/rust-toolchain@stable
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci
-      - name: Install Chromium
-        working-directory: frontend
-        run: npx playwright install --with-deps chromium
       - name: Run formal browser gate
         working-directory: frontend
         run: npm run test:browser:gate
