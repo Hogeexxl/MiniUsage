@@ -187,6 +187,10 @@ function parseTokenUsage(value: unknown, requireNullCost = false): UsageDto {
 function parseUsage(value: unknown): SummaryUsageDto {
   const record = requiredRecord(value);
   const sessionCount = requiredSafeInteger(record, "session_count");
+  const costIncompleteSessionCount = requiredSafeInteger(record, "cost_incomplete_session_count");
+  if (costIncompleteSessionCount > sessionCount) {
+    throw new MiniUsageClientError("HTTP_ERROR", 200);
+  }
   const healthRecord = requiredRecord(record.session_health);
   const sessionHealth = {
     total_sessions: requiredSafeInteger(healthRecord, "total_sessions"),
@@ -207,6 +211,7 @@ function parseUsage(value: unknown): SummaryUsageDto {
   return {
     ...parseTokenUsage(record),
     session_count: sessionCount,
+    cost_incomplete_session_count: costIncompleteSessionCount,
     session_health: sessionHealth,
   };
 }
@@ -311,8 +316,9 @@ function parseSessionSortIndex(value: unknown): SessionSnapshotResponse["sort_in
   const errorCode = nullableString(record, "error_code");
   const totalTokens = nullableSafeInteger(record, "total_tokens");
   const combinedTotalTokens = nullableSafeInteger(record, "combined_total_tokens");
+  const combinedEstimatedCost = nullableCost(record, "combined_estimated_cost");
   if (dataStatus === "error") {
-    if (totalTokens !== null || combinedTotalTokens !== null || !errorCode) {
+    if (totalTokens !== null || combinedTotalTokens !== null || combinedEstimatedCost !== null || !errorCode) {
       throw new MiniUsageClientError("HTTP_ERROR", 200);
     }
   } else if (totalTokens === null || combinedTotalTokens === null || errorCode !== null) {
@@ -325,6 +331,7 @@ function parseSessionSortIndex(value: unknown): SessionSnapshotResponse["sort_in
     model_sort_key: nullableString(record, "model_sort_key"),
     total_tokens: totalTokens,
     combined_total_tokens: combinedTotalTokens,
+    combined_estimated_cost: combinedEstimatedCost,
     cache_hit_rate: nullableRatio(record, "cache_hit_rate"),
     data_status: dataStatus,
     error_code: errorCode,
