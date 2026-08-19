@@ -35,15 +35,31 @@ impl SkillUsageParser {
         }
         let payload = object.get("payload")?.as_object()?;
         let item_type = payload.get("type")?.as_str()?;
-        if !item_type.ends_with("_call") {
-            return None;
-        }
         let occurred_at_ms = payload
             .get("timestamp")
             .and_then(parse_timestamp_ms)
             .or_else(|| object.get("timestamp").and_then(parse_timestamp_ms))?;
+
         let mut names = BTreeSet::new();
-        collect_skill_names(&Value::Object(payload.clone()), &mut names);
+        match item_type {
+            "custom_tool_call" => {
+                if let Some(input) = payload.get("input").and_then(Value::as_str) {
+                    extract_from_locator_text(input, &mut names);
+                }
+            }
+            "function_call" => {
+                if let Some(arguments) = payload.get("arguments").and_then(Value::as_str) {
+                    extract_from_function_arguments(arguments, &mut names);
+                }
+            }
+            "local_shell_call" => {
+                if let Some(action) = payload.get("action") {
+                    extract_from_shell_action(action, &mut names);
+                }
+            }
+            _ => return None,
+        }
+
         (!names.is_empty()).then(|| SkillUsageEvidence {
             occurred_at_ms,
             skill_names: names.into_iter().collect(),
@@ -51,35 +67,58 @@ impl SkillUsageParser {
     }
 }
 
-fn collect_skill_names(value: &Value, output: &mut BTreeSet<String>) {
+fn extract_from_function_arguments(arguments: &str, output: &mut BTreeSet<String>) {
+    let Ok(value) = serde_json::from_str::<Value>(arguments) else {
+        return;
+    };
+    let Some(object) = value.as_object() else {
+        return;
+    };
+    for key in ["command", "cmd", "path", "file_path", "skill_path"] {
+        if let Some(value) = object.get(key) {
+            extract_explicit_locator_value(value, output);
+        }
+    }
+}
+
+fn extract_from_shell_action(action: &Value, output: &mut BTreeSet<String>) {
+    let Some(object) = action.as_object() else {
+        return;
+    };
+    for key in ["command", "cmd"] {
+        if let Some(value) = object.get(key) {
+            extract_explicit_locator_value(value, output);
+        }
+    }
+}
+
+fn extract_explicit_locator_value(value: &Value, output: &mut BTreeSet<String>) {
     match value {
-        Value::String(text) => extract_from_text(text, output),
+        Value::String(text) => extract_from_locator_text(text, output),
         Value::Array(values) => {
             for value in values {
-                collect_skill_names(value, output);
-            }
-        }
-        Value::Object(values) => {
-            for value in values.values() {
-                collect_skill_names(value, output);
+                if let Some(text) = value.as_str() {
+                    extract_from_locator_text(text, output);
+                }
             }
         }
         _ => {}
     }
 }
 
-fn extract_from_text(text: &str, output: &mut BTreeSet<String>) {
+fn extract_from_locator_text(text: &str, output: &mut BTreeSet<String>) {
     let normalized = text.replace('\\', "/");
     let mut cursor = 0usize;
     while let Some(relative) = normalized[cursor..].find("SKILL.md") {
         let index = cursor + relative;
         let before = normalized[..index].trim_end_matches('/');
-        if let Some(name) = before
-            .rsplit('/')
-            .next()
-            .filter(|value| valid_skill_name(value))
-        {
-            output.insert(name.to_owned());
+        let mut components = before.rsplit('/');
+        let skill_name = components.next();
+        let skills_dir = components.next();
+        if skills_dir == Some("skills") {
+            if let Some(name) = skill_name.filter(|value| valid_skill_name(value)) {
+                output.insert(name.to_owned());
+            }
         }
         cursor = index.saturating_add("SKILL.md".len());
         if cursor >= normalized.len() {
@@ -132,16 +171,42 @@ mod tests {
     }
 
     #[test]
+    fn canonical_skill_path_is_required() {
+        let parser = SkillUsageParser;
+        assert!(parser
+            .parse_line(&line(
+                r#"{"timestamp":"2026-08-19T00:00:00Z","type":"response_item","payload":{"type":"custom_tool_call","input":"cat /tmp/foo/SKILL.md && const r = 'SKILL.md'"}}"#,
+            ))
+            .is_none());
+        let parsed = parser
+            .parse_line(&line(
+                r#"{"timestamp":"2026-08-19T00:00:00Z","type":"response_item","payload":{"type":"custom_tool_call","input":"cat /tmp/skills/foo/SKILL.md"}}"#,
+            ))
+            .unwrap();
+        assert_eq!(parsed.skill_names, vec!["foo"]);
+    }
+
+    #[test]
+    fn unrelated_payload_strings_are_not_scanned() {
+        let parser = SkillUsageParser;
+        assert!(parser
+            .parse_line(&line(
+                r#"{"timestamp":"2026-08-19T00:00:00Z","type":"response_item","payload":{"type":"function_call","arguments":"{\"value\":\"/tmp/skills/false-positive/SKILL.md\"}","note":"/tmp/skills/also-false/SKILL.md"}}"#,
+            ))
+            .is_none());
+    }
+
+    #[test]
     fn t_013_003_skill_listing_message_and_missing_timestamp_are_not_usage() {
         let parser = SkillUsageParser;
         assert!(parser
             .parse_line(&line(
-                r#"{"timestamp":"2026-08-19T00:00:00Z","type":"response_item","payload":{"type":"message","content":"<skills_instructions>/x/foo/SKILL.md</skills_instructions>"}}"#,
+                r#"{"timestamp":"2026-08-19T00:00:00Z","type":"response_item","payload":{"type":"message","content":"<skills_instructions>/x/skills/foo/SKILL.md</skills_instructions>"}}"#,
             ))
             .is_none());
         assert!(parser
             .parse_line(&line(
-                r#"{"type":"response_item","payload":{"type":"custom_tool_call","input":"cat /x/foo/SKILL.md"}}"#,
+                r#"{"type":"response_item","payload":{"type":"custom_tool_call","input":"cat /x/skills/foo/SKILL.md"}}"#,
             ))
             .is_none());
     }
