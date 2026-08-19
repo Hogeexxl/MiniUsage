@@ -1,0 +1,38 @@
+name: v0.2.0 contract patch
+
+on:
+  push:
+    branches:
+      - agent/v0.2.0-beui-redesign
+    paths:
+      - .github/workflows/v020-contract-patch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/v0.2.0-beui-redesign
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Apply exact contract patch
+        run: python tools/v020_contract_patch.py
+      - name: Commit generated contract and lockfile changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "feat(v0.2.0): add cost contracts and refresh lockfile"
+          git push origin HEAD:agent/v0.2.0-beui-redesign
