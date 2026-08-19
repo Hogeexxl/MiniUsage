@@ -21,43 +21,44 @@ jobs:
         run: |
           from pathlib import Path
 
-          def replace_once(path: str, old: str, new: str) -> None:
+          def replace_exact(path: str, old: str, new: str, expected: int = 1) -> None:
               file = Path(path)
               text = file.read_text()
               count = text.count(old)
-              if count != 1:
-                  raise SystemExit(f"{path}: expected exactly one match, found {count}")
-              file.write_text(text.replace(old, new, 1))
+              if count != expected:
+                  raise SystemExit(f"{path}: expected {expected} matches, found {count}")
+              file.write_text(text.replace(old, new))
 
-          replace_once(
+          replace_exact(
               "frontend/src/data/miniUsageClient.ts",
               '  const sessionCount = requiredSafeInteger(record, "session_count");\n  const healthRecord = requiredRecord(record.session_health);',
               '  const sessionCount = requiredSafeInteger(record, "session_count");\n  const costIncompleteSessionCount = requiredSafeInteger(record, "cost_incomplete_session_count");\n  if (costIncompleteSessionCount > sessionCount) {\n    throw new MiniUsageClientError("HTTP_ERROR", 200);\n  }\n  const healthRecord = requiredRecord(record.session_health);',
           )
-          replace_once(
+          replace_exact(
               "frontend/src/data/miniUsageClient.ts",
               '    session_count: sessionCount,\n    session_health: sessionHealth,',
               '    session_count: sessionCount,\n    cost_incomplete_session_count: costIncompleteSessionCount,\n    session_health: sessionHealth,',
           )
-          replace_once(
+          replace_exact(
               "frontend/src/data/miniUsageClient.ts",
               '  const combinedTotalTokens = nullableSafeInteger(record, "combined_total_tokens");\n  if (dataStatus === "error") {\n    if (totalTokens !== null || combinedTotalTokens !== null || !errorCode) {',
               '  const combinedTotalTokens = nullableSafeInteger(record, "combined_total_tokens");\n  const combinedEstimatedCost = nullableCost(record, "combined_estimated_cost");\n  if (dataStatus === "error") {\n    if (totalTokens !== null || combinedTotalTokens !== null || combinedEstimatedCost !== null || !errorCode) {',
           )
-          replace_once(
+          replace_exact(
               "frontend/src/data/miniUsageClient.ts",
               '    combined_total_tokens: combinedTotalTokens,\n    cache_hit_rate: nullableRatio(record, "cache_hit_rate"),',
               '    combined_total_tokens: combinedTotalTokens,\n    combined_estimated_cost: combinedEstimatedCost,\n    cache_hit_rate: nullableRatio(record, "cache_hit_rate"),',
           )
-          replace_once(
+          replace_exact(
               "frontend/src/data/miniUsageClient.test.ts",
               '  session_count: 1,\n  session_health: {',
               '  session_count: 1,\n  cost_incomplete_session_count: 1,\n  session_health: {',
           )
-          replace_once(
+          replace_exact(
               "frontend/src/data/miniUsageClient.test.ts",
               '      combined_total_tokens: 30,\n      cache_hit_rate: 0.4,',
               '      combined_total_tokens: 30,\n      combined_estimated_cost: null,\n      cache_hit_rate: 0.4,',
+              expected=2,
           )
           Path(".github/workflows/agent-client-contract-patch.yml").unlink()
       - name: Commit exact patch
