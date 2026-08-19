@@ -49,7 +49,9 @@ export function SkillsUsageChart({ response }: { response: SkillsUsageResponse |
     <article className="mt-4 min-w-0 rounded-2xl border border-border bg-card p-5 text-foreground">
       <header>
         <h2 className="m-0 text-sm font-medium text-foreground">Skills used</h2>
-        <NumberTicker value={data.total} blur format={formatCompact} className="mt-1 text-[28px] font-semibold leading-8 tracking-tight text-foreground" title={String(data.total)} />
+        <span title={String(data.total)}>
+          <NumberTicker value={data.total} blur format={formatCompact} className="mt-1 text-[28px] font-semibold leading-8 tracking-tight text-foreground" />
+        </span>
       </header>
       {data.days.length === 7 ? (
         <div className="relative mt-3 min-w-0">
