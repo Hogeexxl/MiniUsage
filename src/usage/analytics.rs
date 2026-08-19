@@ -10,6 +10,8 @@ use super::{
     ledger::UsageLedgerError,
 };
 
+pub const SKILL_USAGE_PARSER_VERSION: i64 = 9;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DistributionCostStatus {
     Complete,
@@ -323,7 +325,7 @@ pub fn skills_usage_snapshot(
         .transaction_with_behavior(TransactionBehavior::Deferred)
         .map_err(StorageError::sqlite)?;
     let (data_revision, active_epoch, active_parser) = snapshot_meta(&transaction)?;
-    let ready = active_epoch > 0 && active_parser >= 8;
+    let ready = active_epoch > 0 && active_parser >= SKILL_USAGE_PARSER_VERSION;
     let mut output = Vec::with_capacity(days.len());
     for day in days {
         let range = TimeRange::new(day.start_ms, day.end_ms)?;
