@@ -34,6 +34,7 @@ export type SessionHealthDto = {
 
 export type SummaryUsageDto = UsageDto & {
   session_count: number;
+  cost_incomplete_session_count: number;
   session_health: SessionHealthDto;
 };
 
@@ -130,7 +131,8 @@ export type SessionSortField =
   | "model"
   | "total_tokens"
   | "combined_total_tokens"
-  | "cache_hit_rate";
+  | "cache_hit_rate"
+  | "combined_estimated_cost";
 
 export type SessionSortOrder = "asc" | "desc";
 
@@ -141,6 +143,7 @@ export type SessionSortIndexItem = {
   model_sort_key: string | null;
   total_tokens: number | null;
   combined_total_tokens: number | null;
+  combined_estimated_cost: number | null;
   cache_hit_rate: number | null;
   data_status: "complete" | "incomplete" | "error";
   error_code: string | null;
