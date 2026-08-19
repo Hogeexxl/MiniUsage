@@ -152,6 +152,7 @@ pub struct SummaryUsageDto {
     pub estimated_cost: Option<f64>,
     pub estimated_cost_status: String,
     pub session_count: i64,
+    pub cost_incomplete_session_count: i64,
     pub session_health: SessionHealthDto,
 }
 
@@ -201,6 +202,7 @@ pub struct SessionSortIndexDto {
     pub model_sort_key: Option<String>,
     pub total_tokens: Option<i64>,
     pub combined_total_tokens: Option<i64>,
+    pub combined_estimated_cost: Option<f64>,
     pub cache_hit_rate: Option<f64>,
     pub data_status: String,
     pub error_code: Option<String>,
@@ -518,6 +520,7 @@ fn parse_session_sort_field(value: &str) -> Result<SessionSortField, ApiError> {
         "model" => Ok(SessionSortField::Model),
         "total_tokens" => Ok(SessionSortField::TotalTokens),
         "combined_total_tokens" => Ok(SessionSortField::CombinedTotalTokens),
+        "combined_estimated_cost" => Ok(SessionSortField::CombinedEstimatedCost),
         "cache_hit_rate" => Ok(SessionSortField::CacheHitRate),
         _ => Err(ApiError::InvalidFilter),
     }
@@ -536,6 +539,7 @@ pub fn summary_response(
 ) -> Result<SummaryResponse, ApiError> {
     ensure_safe(snapshot.data_revision)?;
     ensure_safe(snapshot.value.session_count)?;
+    ensure_safe(snapshot.value.cost_incomplete_session_count)?;
     for value in [
         snapshot.value.health.total_sessions,
         snapshot.value.health.complete_sessions,
@@ -561,6 +565,7 @@ pub fn summary_response(
             estimated_cost: tokens.estimated_cost,
             estimated_cost_status: tokens.estimated_cost_status,
             session_count: snapshot.value.session_count,
+            cost_incomplete_session_count: snapshot.value.cost_incomplete_session_count,
             session_health: SessionHealthDto {
                 total_sessions: snapshot.value.health.total_sessions,
                 complete_sessions: snapshot.value.health.complete_sessions,
@@ -818,6 +823,11 @@ fn map_sort_index(row: SessionSortIndexItem) -> Result<SessionSortIndexDto, ApiE
     if let Some(value) = row.combined_total_tokens {
         ensure_safe(value)?;
     }
+    let combined_estimated_cost = match row.combined_estimated_cost_nanos_usd {
+        Some(value) if value >= 0 => Some(value as f64 / 1_000_000_000.0),
+        Some(_) => return Err(ApiError::QueryFailed),
+        None => None,
+    };
     if row
         .cache_hit_rate
         .is_some_and(|ratio| !ratio.is_finite() || !(0.0..=1.0).contains(&ratio))
@@ -831,6 +841,7 @@ fn map_sort_index(row: SessionSortIndexItem) -> Result<SessionSortIndexDto, ApiE
         model_sort_key: row.model_sort_key,
         total_tokens: row.total_tokens,
         combined_total_tokens: row.combined_total_tokens,
+        combined_estimated_cost,
         cache_hit_rate: row.cache_hit_rate,
         data_status: session_status(row.data_status).to_owned(),
         error_code: row.error_code,
@@ -1241,6 +1252,7 @@ mod tests {
                         cost_completeness: CostCompleteness::Empty,
                     },
                     session_count: 0,
+                    cost_incomplete_session_count: 0,
                     health: crate::usage::aggregate::SessionHealthSummary {
                         total_sessions: 0,
                         complete_sessions: 0,
@@ -1283,6 +1295,7 @@ mod tests {
                     model_sort_key: Some("unknown".into()),
                     total_tokens: Some(12),
                     combined_total_tokens: Some(12),
+                    combined_estimated_cost_nanos_usd: None,
                     cache_hit_rate: Some(0.4),
                     data_status: SessionDataStatus::Incomplete,
                     error_code: None,
@@ -1437,6 +1450,7 @@ mod tests {
                     value: UsageSummary {
                         totals: totals(Some(3), 1, 0),
                         session_count: 0,
+                        cost_incomplete_session_count: 0,
                         health: crate::usage::aggregate::SessionHealthSummary {
                             total_sessions: 0,
                             complete_sessions: 0,

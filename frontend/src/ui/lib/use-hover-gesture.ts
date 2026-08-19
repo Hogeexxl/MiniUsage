@@ -1,5 +1,4 @@
 import { useMemo, useRef } from "react";
-
 import { isHoveringPointer } from "./touch";
 
 interface BoundaryEvent {
@@ -15,6 +14,7 @@ export interface HoverGesture {
 
 export function useHoverGesture(): HoverGesture {
   const contact = useRef(new Set<number>());
+
   return useMemo(
     () => ({
       enter: (event) => {

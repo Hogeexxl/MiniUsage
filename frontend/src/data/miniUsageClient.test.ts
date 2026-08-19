@@ -18,6 +18,7 @@ const usage = {
   estimated_cost: null,
   estimated_cost_status: "unknown",
   session_count: 1,
+  cost_incomplete_session_count: 1,
   session_health: {
     total_sessions: 1,
     complete_sessions: 0,
@@ -235,6 +236,7 @@ describe("miniUsageClient DTO seam", () => {
       model_sort_key: "gpt-5",
       total_tokens: 30,
       combined_total_tokens: 30,
+      combined_estimated_cost: null,
       cache_hit_rate: 0.4,
       data_status: "incomplete",
       error_code: null,
@@ -361,6 +363,7 @@ describe("miniUsageClient DTO seam", () => {
       model_sort_key: "gpt-5",
       total_tokens: 30,
       combined_total_tokens: 30,
+      combined_estimated_cost: null,
       cache_hit_rate: 0.4,
       data_status: "incomplete",
       error_code: null,

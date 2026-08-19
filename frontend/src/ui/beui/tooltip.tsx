@@ -1,4 +1,9 @@
-import { AnimatePresence, motion, useReducedMotion, type Variants } from "motion/react";
+import {
+  AnimatePresence,
+  motion,
+  useReducedMotion,
+  type Variants,
+} from "motion/react";
 import {
   cloneElement,
   isValidElement,
@@ -90,7 +95,14 @@ const REDUCED_VARIANTS: Variants = {
 const WARM_WINDOW_MS = 300;
 let lastHiddenAt = 0;
 
-export function Tooltip({ content, children, side = "top", delay = 120, className, wrapperClassName }: TooltipProps) {
+export function Tooltip({
+  content,
+  children,
+  side = "top",
+  delay = 120,
+  className,
+  wrapperClassName,
+}: TooltipProps) {
   const [open, setOpen] = useState(false);
   const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
   const id = useId();
@@ -146,6 +158,7 @@ export function Tooltip({ content, children, side = "top", delay = 120, classNam
   }, [hide, place, tap]);
 
   useDismiss(open, hide, anchorRef);
+
   useEffect(() => {
     if (!open) return;
     const onMove = () => place();
@@ -157,9 +170,15 @@ export function Tooltip({ content, children, side = "top", delay = 120, classNam
     };
   }, [open, place]);
 
-  const variants = useMemo(() => (reduce ? REDUCED_VARIANTS : buildVariants(side)), [reduce, side]);
+  const variants = useMemo(
+    () => (reduce ? REDUCED_VARIANTS : buildVariants(side)),
+    [reduce, side],
+  );
+
   if (!isValidElement(children)) return children;
-  const trigger = cloneElement(children as ReactElement<Record<string, unknown>>, { "aria-describedby": id });
+  const trigger = cloneElement(children as ReactElement<Record<string, unknown>>, {
+    "aria-describedby": id,
+  });
 
   return (
     <>
@@ -188,7 +207,11 @@ export function Tooltip({ content, children, side = "top", delay = 120, classNam
                 <span
                   aria-hidden
                   className="pointer-events-none fixed z-[9999]"
-                  style={{ top: coords.top, left: coords.left, transform: anchorTransform[side] }}
+                  style={{
+                    top: coords.top,
+                    left: coords.left,
+                    transform: anchorTransform[side],
+                  }}
                 >
                   <motion.span
                     id={id}
@@ -198,7 +221,10 @@ export function Tooltip({ content, children, side = "top", delay = 120, classNam
                     animate="animate"
                     exit="exit"
                     style={{ transformOrigin: transformOrigin[side] }}
-                    className={cn("block whitespace-nowrap rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-medium text-foreground shadow-lg", className)}
+                    className={cn(
+                      "block whitespace-nowrap rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-medium text-foreground shadow-lg",
+                      className,
+                    )}
                   >
                     {content}
                   </motion.span>

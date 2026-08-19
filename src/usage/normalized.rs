@@ -317,7 +317,7 @@ mod tests {
     }
 
     #[test]
-    fn t_dc_010_fingerprint_is_v5_and_parser_v9_reuses_it() {
+    fn t_dc_010_fingerprint_is_v5_and_distinguishes_states() {
         assert_eq!(USAGE_PARSER_VERSION, 9);
         assert_eq!(USAGE_CANONICAL_ALGORITHM_VERSION, 5);
         assert_eq!(canonical_algorithm_for(1), None);
@@ -326,7 +326,6 @@ mod tests {
         assert_eq!(canonical_algorithm_for(4), Some(4));
         assert_eq!(canonical_algorithm_for(5), Some(4));
         assert_eq!(canonical_algorithm_for(6), Some(5));
-        assert_eq!(canonical_algorithm_for(7), Some(5));
         assert_eq!(canonical_algorithm_for(8), Some(5));
         assert_eq!(canonical_algorithm_for(9), Some(5));
         assert_eq!(

@@ -5,15 +5,8 @@ export type PortalLayout = {
   content: { width: number; height: number };
 };
 
-function sameLayout(current: PortalLayout | null, next: PortalLayout) {
-  return (
-    current?.trigger.left === next.trigger.left &&
-    current.trigger.top === next.trigger.top &&
-    current.trigger.width === next.trigger.width &&
-    current.trigger.height === next.trigger.height &&
-    current.content.width === next.content.width &&
-    current.content.height === next.content.height
-  );
+function sameLayout(a: PortalLayout | null, b: PortalLayout) {
+  return a?.trigger.left === b.trigger.left && a.trigger.top === b.trigger.top && a.trigger.width === b.trigger.width && a.trigger.height === b.trigger.height && a.content.width === b.content.width && a.content.height === b.content.height;
 }
 
 export function usePopoverPortalPosition<TriggerElement extends HTMLElement, ContentElement extends HTMLElement>(
@@ -37,9 +30,9 @@ export function usePopoverPortalPosition<TriggerElement extends HTMLElement, Con
   useLayoutEffect(() => {
     update();
     if (!active) return;
-    const observer = new ResizeObserver(update);
     const trigger = triggerRef.current;
     const content = contentRef.current;
+    const observer = new ResizeObserver(update);
     if (trigger) observer.observe(trigger);
     if (content) observer.observe(content);
     window.addEventListener("scroll", update, true);

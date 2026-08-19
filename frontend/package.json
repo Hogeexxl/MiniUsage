@@ -1,7 +1,7 @@
 {
   "name": "mini-usage-frontend",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -13,13 +13,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@tanstack/react-virtual": "3.14.9",
-    "clsx": "2.1.1",
-    "lucide-react": "1.31.0",
-    "motion": "13.0.0",
+    "@tanstack/react-virtual": "^3.14.4",
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.16.0",
+    "motion": "^11.15.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "tailwind-merge": "3.6.0"
+    "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",

@@ -12,10 +12,9 @@ export type DistributionItem = {
 export type DistributionSegment = DistributionItem & { value: number; percentage: number; isOther?: boolean };
 
 export function buildDistribution(items: DistributionItem[], metric: DistributionMetric) {
-  const known = metric === "tokens" ? items : items.filter((item) => item.estimatedCost !== null);
-  const unknown = metric === "cost" ? items.filter((item) => item.estimatedCost === null) : [];
+  const eligible = metric === "tokens" ? items : items.filter((item) => item.estimatedCost !== null);
   const valueOf = (item: DistributionItem) => metric === "tokens" ? item.totalTokens : item.estimatedCost ?? 0;
-  const sorted = [...known].sort((a, b) => valueOf(b) - valueOf(a) || a.label.localeCompare(b.label));
+  const sorted = [...eligible].sort((a, b) => valueOf(b) - valueOf(a) || a.label.localeCompare(b.label));
   const total = sorted.reduce((sum, item) => sum + valueOf(item), 0);
   const top = sorted.slice(0, 5);
   const rest = sorted.slice(5);
@@ -26,14 +25,11 @@ export function buildDistribution(items: DistributionItem[], metric: Distributio
       label: "其他",
       totalTokens: rest.reduce((sum, item) => sum + item.totalTokens, 0),
       estimatedCost: metric === "cost" ? rest.reduce((sum, item) => sum + (item.estimatedCost ?? 0), 0) : null,
-      estimatedCostStatus: "complete",
+      estimatedCostStatus: rest.some((item) => item.estimatedCostStatus === "partial") ? "partial" : "complete",
       value: rest.reduce((sum, item) => sum + valueOf(item), 0),
       isOther: true,
     });
   }
-  const segments: DistributionSegment[] = visible.map((item) => ({
-    ...item,
-    percentage: total > 0 ? item.value / total : 0,
-  }));
-  return { total, segments, unknown };
+  const segments: DistributionSegment[] = visible.map((item) => ({ ...item, percentage: total > 0 ? item.value / total : 0 }));
+  return { total, segments };
 }

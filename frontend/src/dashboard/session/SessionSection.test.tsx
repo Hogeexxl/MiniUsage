@@ -1,11 +1,11 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import type { SessionItemDto } from "../../data/types";
+import type { SessionItemDto, UsageDto } from "../../data/types";
 import type { SessionTableViewModel } from "./sessionTypes";
 import { SessionSection } from "./SessionSection";
 
-const usage = {
+const usage: UsageDto = {
   input_tokens: 1_234,
   cached_tokens: 100,
   cache_write_tokens: null,
@@ -15,8 +15,8 @@ const usage = {
   other_output_tokens: 555,
   total_tokens: 1_801,
   cache_hit_rate: 100 / 1234,
-  estimated_cost: null,
-  estimated_cost_status: "unknown" as const,
+  estimated_cost: 1.25,
+  estimated_cost_status: "complete",
 };
 
 const item: SessionItemDto = {
@@ -57,16 +57,14 @@ function view(overrides: Partial<SessionTableViewModel> = {}): SessionTableViewM
   };
 }
 
-describe("SessionSection", () => {
-  it("T-S07-001 renders the eight-column Session table and full integer values", () => {
+describe("SessionSection v0.2.0", () => {
+  it("renders the BeUI eight-column header including sortable combined cost", () => {
     const selectSort = vi.fn();
-    const nextPage = vi.fn();
-    const previousPage = vi.fn();
-    const goToPage = vi.fn();
-    render(<SessionSection view={view({ select_sort: selectSort, next_page: nextPage, previous_page: previousPage, go_to_page: goToPage, page: 2, total_items: 31, total_pages: 3 })} />);
-    expect(screen.getByRole("heading", { name: "Session记录" })).toBeInTheDocument();
-    expect(screen.getAllByRole("columnheader").map((header) => header.textContent)).toEqual([
-      "最后活动 ↓",
+    render(<SessionSection view={view({ select_sort: selectSort })} />);
+
+    expect(screen.getByRole("heading", { name: "Session 记录" })).toBeInTheDocument();
+    expect(screen.getAllByRole("columnheader").map((header) => header.textContent?.trim())).toEqual([
+      "最后活动",
       "标题",
       "项目",
       "模型",
@@ -75,17 +73,10 @@ describe("SessionSection", () => {
       "缓存命中率",
       "合计费用",
     ]);
-    expect(screen.getByText("未命名 Session")).toBeInTheDocument();
-    expect(screen.getByRole("cell", { name: "gpt-5, o4-mini" })).toHaveTextContent("gpt-5 +1");
-    expect(screen.getByRole("cell", { name: "1234" })).toHaveTextContent("1,234");
-    expect(screen.getByRole("cell", { name: "5678" })).toHaveTextContent("5,678");
-    expect(screen.getByTitle("1234")).toHaveTextContent("1,234");
-    expect(screen.getByTitle("5678")).toHaveTextContent("5,678");
-    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
-    for (const field of ["最后活动", "项目", "模型", "总 Token", "合计 Token", "缓存命中率"]) {
-      screen.getByRole("button", { name: new RegExp(`${field}排序`) }).click();
+
+    for (const label of ["最后活动", "项目", "模型", "总 Token", "合计 Token", "缓存命中率", "合计费用"]) {
+      fireEvent.click(screen.getByRole("button", { name: label }));
     }
-    expect(selectSort).toHaveBeenCalledTimes(6);
     expect(selectSort.mock.calls.map(([field]) => field)).toEqual([
       "last_activity",
       "project",
@@ -93,58 +84,75 @@ describe("SessionSection", () => {
       "total_tokens",
       "combined_total_tokens",
       "cache_hit_rate",
+      "combined_estimated_cost",
     ]);
-    screen.getByRole("button", { name: "下一页" }).click();
+  });
+
+  it("keeps pagination in the Session header and supports direct page input", () => {
+    const nextPage = vi.fn();
+    const previousPage = vi.fn();
+    const goToPage = vi.fn();
+    render(
+      <SessionSection
+        view={view({
+          page: 2,
+          total_items: 31,
+          total_pages: 3,
+          next_page: nextPage,
+          previous_page: previousPage,
+          go_to_page: goToPage,
+        })}
+      />,
+    );
+
+    expect(screen.getByText("共 31 条")).toBeInTheDocument();
+    expect(screen.getByText("2 / 3")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "下一页" }));
+    fireEvent.click(screen.getByRole("button", { name: "上一页" }));
     expect(nextPage).toHaveBeenCalledTimes(1);
+    expect(previousPage).toHaveBeenCalledTimes(1);
+
     const pageInput = screen.getByRole("textbox", { name: "跳转页码" });
-    fireEvent.change(pageInput, { target: { value: "2" } });
+    fireEvent.change(pageInput, { target: { value: "3" } });
     fireEvent.keyDown(pageInput, { key: "Enter" });
-    expect(goToPage).toHaveBeenCalledWith(2);
+    expect(goToPage).toHaveBeenCalledWith(3);
+
     fireEvent.change(pageInput, { target: { value: "99" } });
     fireEvent.keyDown(pageInput, { key: "Enter" });
     expect(goToPage).toHaveBeenCalledTimes(1);
-    screen.getByRole("button", { name: "上一页" }).click();
-    expect(previousPage).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole("button", { name: "加载更多" })).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(/每页/)).not.toBeInTheDocument();
   });
 
-  it("shows six loading rows, an accessible empty state, and page controls", () => {
+  it("uses BeUI structural loading rows and the approved empty state", () => {
     const loading = render(<SessionSection view={view({ rows: [], load_state: "loading" })} />);
-    expect(loading.container.querySelectorAll(".session-skeleton-row")).toHaveLength(6);
-    expect(loading.container.querySelector("table")?.getAttribute("aria-busy")).toBe("true");
-    expect(loading.container.querySelector("tbody")?.getAttribute("aria-live")).toBe("polite");
+    expect(screen.getByRole("table")).toBeInTheDocument();
+    expect(screen.queryByText("当前时间范围暂无 Session 记录")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("row").length).toBeGreaterThan(1);
     loading.unmount();
 
-    const empty = render(<SessionSection view={view({ rows: [] })} />);
-    expect(empty.container.querySelector("tbody")?.getAttribute("aria-live")).toBe("polite");
-    empty.unmount();
-
-    const next = vi.fn();
-    render(<SessionSection view={view({ next_page: next, total_items: 16, total_pages: 2 })} />);
-    screen.getByRole("button", { name: "下一页" }).click();
-    expect(next).toHaveBeenCalledTimes(1);
+    render(<SessionSection view={view({ rows: [], total_items: 0, total_pages: 0 })} />);
+    expect(screen.getByText("当前时间范围暂无 Session 记录")).toBeInTheDocument();
   });
 
-  it("keeps a missing foreground window behind a full-page skeleton", () => {
-    render(<SessionSection view={view({ page_state: "loading" })} />);
-    expect(document.querySelectorAll(".session-skeleton-row")).toHaveLength(6);
-    expect(screen.queryByText("未命名 Session")).not.toBeInTheDocument();
-    expect(screen.getByRole("table")).toHaveAttribute("aria-busy", "true");
-  });
-
-  it("keeps rows while showing a bounded refresh error and exposes retry", () => {
-    const retry = vi.fn();
-    render(<SessionSection view={view({ load_state: "error", error_code: "UPDATE_FAILED", retry_load: retry })} />);
+  it("keeps bounded refresh and page errors with retry controls", () => {
+    const retryLoad = vi.fn();
+    const retryPage = vi.fn();
+    const rendered = render(
+      <SessionSection
+        view={view({ load_state: "error", error_code: "UPDATE_FAILED", retry_load: retryLoad })}
+      />,
+    );
     expect(screen.getByRole("alert")).toHaveTextContent("Session 记录更新失败");
-    expect(screen.getByText("未命名 Session")).toBeInTheDocument();
-    screen.getByRole("button", { name: "重试" }).click();
-    expect(retry).toHaveBeenCalledTimes(1);
-  });
+    fireEvent.click(screen.getByRole("button", { name: "重试" }));
+    expect(retryLoad).toHaveBeenCalledTimes(1);
+    rendered.unmount();
 
-  it("keeps a page error visible in the footer", () => {
-    render(<SessionSection view={view({ page_state: "error" })} />);
+    render(
+      <SessionSection
+        view={view({ page_state: "error", total_items: 16, total_pages: 2, retry_page: retryPage })}
+      />,
+    );
     expect(screen.getByText("加载页面失败")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "重试" }));
+    expect(retryPage).toHaveBeenCalledTimes(1);
   });
 });

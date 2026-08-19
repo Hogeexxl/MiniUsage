@@ -131,8 +131,8 @@ export type SessionSortField =
   | "model"
   | "total_tokens"
   | "combined_total_tokens"
-  | "cache_hit_rate"
-  | "combined_estimated_cost";
+  | "combined_estimated_cost"
+  | "cache_hit_rate";
 
 export type SessionSortOrder = "asc" | "desc";
 
@@ -292,3 +292,19 @@ export class MiniUsageClientError extends Error {
 }
 
 export type RevisionTuple = Pick<RevisionResponse, "data_revision" | "status_revision">;
+
+export type SyncResponse = {
+  status: "accepted" | "already_running" | "queued";
+  scan_id: string | null;
+};
+
+export type UpdateCheckResponse = {
+  status: "up_to_date" | "update_available";
+  current_version: string;
+  latest_version: string;
+  release_url: string | null;
+};
+
+export type UpdateOpenResponse = {
+  status: "opened";
+};

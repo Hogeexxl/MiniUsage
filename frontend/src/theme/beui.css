@@ -13,6 +13,16 @@
   --danger: oklch(62% 0.22 25);
   --success: oklch(70% 0.18 155);
   --warning: oklch(78% 0.18 75);
+  --chart-1: var(--accent);
+  --chart-2: var(--violet);
+  --chart-3: var(--neon);
+  --chart-4: var(--warning);
+  --chart-5: var(--success);
+  --chart-6: oklch(67% 0.19 35);
+  --chart-7: oklch(65% 0.17 245);
+  --chart-8: oklch(72% 0.15 330);
+  --chart-9: oklch(72% 0.14 110);
+  --chart-10: oklch(68% 0.14 220);
   --glass-bg: oklch(99% 0 0 / 0.55);
   --glass-border: oklch(15% 0 0 / 0.08);
   --glass-strong-bg: rgb(255 255 255 / 0.7);
@@ -76,30 +86,14 @@
   --color-ring: var(--ring);
 }
 
-@theme {
-  --animate-marquee: marquee 30s linear infinite;
-  --animate-marquee-vertical: marquee-vertical 30s linear infinite;
-  --animate-shimmer: shimmer 2.5s linear infinite;
-
-  @keyframes marquee {
-    from { transform: translateX(0); }
-    to { transform: translateX(calc(-100% - var(--gap, 1rem))); }
-  }
-  @keyframes marquee-vertical {
-    from { transform: translateY(0); }
-    to { transform: translateY(calc(-100% - var(--gap, 1rem))); }
-  }
-  @keyframes shimmer {
-    from { background-position: 200% 0; }
-    to { background-position: -200% 0; }
-  }
+@layer base {
+  body { background: var(--background); color: var(--foreground); }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 }
 
 @layer utilities {
   .scrollbar-hide::-webkit-scrollbar { display: none; }
   .scrollbar-hide { scrollbar-width: none; }
-  .mask-radial-fade { mask-image: radial-gradient(ellipse at center, black 40%, transparent 75%); }
-  .mask-b-fade { mask-image: linear-gradient(to bottom, black 60%, transparent); }
   .glass {
     background: var(--glass-bg);
     backdrop-filter: blur(20px) saturate(160%);

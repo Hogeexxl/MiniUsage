@@ -7,7 +7,7 @@
 use std::collections::BTreeSet;
 
 use chrono::DateTime;
-use serde_json::{Map, Value};
+use serde_json::Value;
 
 use super::CompleteUsageLine;
 
@@ -35,86 +35,70 @@ impl SkillUsageParser {
         }
         let payload = object.get("payload")?.as_object()?;
         let item_type = payload.get("type")?.as_str()?;
-        if !item_type.ends_with("_call") {
-            return None;
-        }
         let occurred_at_ms = payload
             .get("timestamp")
             .and_then(parse_timestamp_ms)
             .or_else(|| object.get("timestamp").and_then(parse_timestamp_ms))?;
 
-        let mut canonical_paths = BTreeSet::new();
-        collect_explicit_locator_fields(item_type, payload, &mut canonical_paths);
-        if canonical_paths.is_empty() {
-            return None;
+        let mut names = BTreeSet::new();
+        match item_type {
+            "custom_tool_call" => {
+                if let Some(input) = payload.get("input").and_then(Value::as_str) {
+                    extract_from_locator_text(input, &mut names);
+                }
+            }
+            "function_call" => {
+                if let Some(arguments) = payload.get("arguments").and_then(Value::as_str) {
+                    extract_from_function_arguments(arguments, &mut names);
+                }
+            }
+            "local_shell_call" => {
+                if let Some(action) = payload.get("action") {
+                    extract_from_shell_action(action, &mut names);
+                }
+            }
+            _ => return None,
         }
-        let skill_names = canonical_paths
-            .into_iter()
-            .filter_map(|path| skill_name_from_canonical_path(&path).map(ToOwned::to_owned))
-            .collect::<BTreeSet<_>>()
-            .into_iter()
-            .collect::<Vec<_>>();
-        (!skill_names.is_empty()).then_some(SkillUsageEvidence {
+
+        (!names.is_empty()).then(|| SkillUsageEvidence {
             occurred_at_ms,
-            skill_names,
+            skill_names: names.into_iter().collect(),
         })
     }
 }
 
-fn collect_explicit_locator_fields(
-    item_type: &str,
-    payload: &Map<String, Value>,
-    output: &mut BTreeSet<String>,
-) {
-    match item_type {
-        "custom_tool_call" => {
-            if let Some(input) = payload.get("input").and_then(Value::as_str) {
-                extract_canonical_paths(input, output);
-            }
-        }
-        "function_call" => {
-            if let Some(arguments) = payload.get("arguments") {
-                collect_function_arguments(arguments, output);
-            }
-        }
-        "local_shell_call" | "shell_call" => {
-            collect_named_string(payload.get("command"), output);
-            collect_named_string(payload.get("cmd"), output);
-            if let Some(action) = payload.get("action").and_then(Value::as_object) {
-                collect_named_string(action.get("command"), output);
-                collect_named_string(action.get("cmd"), output);
-                collect_named_string(action.get("path"), output);
-            }
-        }
-        _ => {}
-    }
-}
-
-fn collect_function_arguments(arguments: &Value, output: &mut BTreeSet<String>) {
-    let parsed;
-    let object = match arguments {
-        Value::Object(object) => Some(object),
-        Value::String(text) => {
-            parsed = serde_json::from_str::<Value>(text).ok();
-            parsed.as_ref().and_then(Value::as_object)
-        }
-        _ => None,
-    };
-    let Some(object) = object else {
+fn extract_from_function_arguments(arguments: &str, output: &mut BTreeSet<String>) {
+    let Ok(value) = serde_json::from_str::<Value>(arguments) else {
         return;
     };
-    for key in ["command", "cmd", "path", "file_path", "filepath"] {
-        collect_named_string(object.get(key), output);
+    let Some(object) = value.as_object() else {
+        return;
+    };
+    for key in ["command", "cmd", "path", "file_path", "skill_path"] {
+        if let Some(value) = object.get(key) {
+            extract_explicit_locator_value(value, output);
+        }
     }
 }
 
-fn collect_named_string(value: Option<&Value>, output: &mut BTreeSet<String>) {
+fn extract_from_shell_action(action: &Value, output: &mut BTreeSet<String>) {
+    let Some(object) = action.as_object() else {
+        return;
+    };
+    for key in ["command", "cmd"] {
+        if let Some(value) = object.get(key) {
+            extract_explicit_locator_value(value, output);
+        }
+    }
+}
+
+fn extract_explicit_locator_value(value: &Value, output: &mut BTreeSet<String>) {
     match value {
-        Some(Value::String(text)) => extract_canonical_paths(text, output),
-        Some(Value::Array(values)) => {
+        Value::String(text) => extract_from_locator_text(text, output),
+        Value::Array(values) => {
             for value in values {
                 if let Some(text) = value.as_str() {
-                    extract_canonical_paths(text, output);
+                    extract_from_locator_text(text, output);
                 }
             }
         }
@@ -122,29 +106,25 @@ fn collect_named_string(value: Option<&Value>, output: &mut BTreeSet<String>) {
     }
 }
 
-fn extract_canonical_paths(text: &str, output: &mut BTreeSet<String>) {
+fn extract_from_locator_text(text: &str, output: &mut BTreeSet<String>) {
     let normalized = text.replace('\\', "/");
     let mut cursor = 0usize;
     while let Some(relative) = normalized[cursor..].find("SKILL.md") {
-        let end = cursor + relative + "SKILL.md".len();
-        let prefix = &normalized[..cursor + relative];
-        if let Some(skills_index) = prefix.rfind("/skills/") {
-            let name = prefix[skills_index + "/skills/".len()..].trim_end_matches('/');
-            if valid_skill_name(name) {
-                output.insert(format!("{}/skills/{name}/SKILL.md", &prefix[..skills_index]));
+        let index = cursor + relative;
+        let before = normalized[..index].trim_end_matches('/');
+        let mut components = before.rsplit('/');
+        let skill_name = components.next();
+        let skills_dir = components.next();
+        if skills_dir == Some("skills") {
+            if let Some(name) = skill_name.filter(|value| valid_skill_name(value)) {
+                output.insert(name.to_owned());
             }
         }
-        cursor = end;
+        cursor = index.saturating_add("SKILL.md".len());
         if cursor >= normalized.len() {
             break;
         }
     }
-}
-
-fn skill_name_from_canonical_path(path: &str) -> Option<&str> {
-    let suffix = path.strip_suffix("/SKILL.md")?;
-    let (prefix, name) = suffix.rsplit_once('/')?;
-    prefix.ends_with("/skills").then_some(name)
 }
 
 fn valid_skill_name(value: &str) -> bool {
@@ -177,7 +157,7 @@ mod tests {
     }
 
     #[test]
-    fn canonical_skill_locators_are_cross_platform_and_deduplicated_per_call() {
+    fn t_013_003_skill_locator_is_cross_platform_and_deduplicated_per_call() {
         let parser = SkillUsageParser;
         let parsed = parser
             .parse_line(&line(
@@ -191,44 +171,43 @@ mod tests {
     }
 
     #[test]
-    fn arbitrary_payload_strings_are_not_skill_evidence() {
+    fn canonical_skill_path_is_required() {
         let parser = SkillUsageParser;
-        assert!(
-            parser
-                .parse_line(&line(
-                    r#"{"timestamp":"2026-08-19T00:00:00Z","type":"response_item","payload":{"type":"function_call","arguments":{"code":"const r = '/Users/me/.codex/skills/not-a-skill/SKILL.md'"}}}"#,
-                ))
-                .is_none()
-        );
-    }
-
-    #[test]
-    fn function_command_field_accepts_only_canonical_skill_path() {
-        let parser = SkillUsageParser;
+        assert!(parser
+            .parse_line(&line(
+                r#"{"timestamp":"2026-08-19T00:00:00Z","type":"response_item","payload":{"type":"custom_tool_call","input":"cat /tmp/foo/SKILL.md && const r = 'SKILL.md'"}}"#,
+            ))
+            .is_none());
         let parsed = parser
             .parse_line(&line(
-                r#"{"timestamp":"2026-08-19T00:00:00Z","type":"response_item","payload":{"type":"function_call","arguments":"{\"command\":\"cat /x/skills/foo/SKILL.md\"}"}}"#,
+                r#"{"timestamp":"2026-08-19T00:00:00Z","type":"response_item","payload":{"type":"custom_tool_call","input":"cat /tmp/skills/foo/SKILL.md"}}"#,
             ))
             .unwrap();
         assert_eq!(parsed.skill_names, vec!["foo"]);
     }
 
     #[test]
-    fn listing_message_and_missing_timestamp_are_not_usage() {
+    fn unrelated_payload_strings_are_not_scanned() {
         let parser = SkillUsageParser;
-        assert!(
-            parser
-                .parse_line(&line(
-                    r#"{"timestamp":"2026-08-19T00:00:00Z","type":"response_item","payload":{"type":"message","content":"<skills_instructions>/x/skills/foo/SKILL.md</skills_instructions>"}}"#,
-                ))
-                .is_none()
-        );
-        assert!(
-            parser
-                .parse_line(&line(
-                    r#"{"type":"response_item","payload":{"type":"custom_tool_call","input":"cat /x/skills/foo/SKILL.md"}}"#,
-                ))
-                .is_none()
-        );
+        assert!(parser
+            .parse_line(&line(
+                r#"{"timestamp":"2026-08-19T00:00:00Z","type":"response_item","payload":{"type":"function_call","arguments":"{\"value\":\"/tmp/skills/false-positive/SKILL.md\"}","note":"/tmp/skills/also-false/SKILL.md"}}"#,
+            ))
+            .is_none());
+    }
+
+    #[test]
+    fn t_013_003_skill_listing_message_and_missing_timestamp_are_not_usage() {
+        let parser = SkillUsageParser;
+        assert!(parser
+            .parse_line(&line(
+                r#"{"timestamp":"2026-08-19T00:00:00Z","type":"response_item","payload":{"type":"message","content":"<skills_instructions>/x/skills/foo/SKILL.md</skills_instructions>"}}"#,
+            ))
+            .is_none());
+        assert!(parser
+            .parse_line(&line(
+                r#"{"type":"response_item","payload":{"type":"custom_tool_call","input":"cat /x/skills/foo/SKILL.md"}}"#,
+            ))
+            .is_none());
     }
 }

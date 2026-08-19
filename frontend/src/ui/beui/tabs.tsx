@@ -8,7 +8,6 @@ import {
   useState,
   type ReactNode,
 } from "react";
-
 import { EASE_OUT } from "../lib/ease";
 import { cn } from "../lib/cn";
 
@@ -16,7 +15,7 @@ type Variant = "pill" | "underline" | "segment";
 
 type Ctx = {
   value: string;
-  setValue: (value: string) => void;
+  setValue: (v: string) => void;
   layoutId: string;
   variant: Variant;
 };
@@ -46,7 +45,7 @@ export function Tabs({
 }: {
   defaultValue?: string;
   value?: string;
-  onValueChange?: (value: string) => void;
+  onValueChange?: (v: string) => void;
   variant?: Variant;
   children: ReactNode;
   className?: string;
@@ -57,9 +56,9 @@ export function Tabs({
   const controlled = value !== undefined;
   const current = controlled ? value : internal;
   const setValue = useCallback(
-    (next: string) => {
-      if (!controlled) setInternal(next);
-      onValueChange?.(next);
+    (v: string) => {
+      if (!controlled) setInternal(v);
+      onValueChange?.(v);
     },
     [controlled, onValueChange],
   );
@@ -67,7 +66,6 @@ export function Tabs({
     () => ({ value: current, setValue, layoutId, variant }),
     [current, layoutId, setValue, variant],
   );
-
   return (
     <MotionConfig transition={reduce ? { duration: 0 } : transition}>
       <TabsCtx.Provider value={contextValue}>
@@ -116,7 +114,7 @@ export function TabsTrigger({
         aria-selected={active}
         onClick={() => setValue(value)}
         className={cn(
-          "relative isolate -mb-px inline-flex min-h-[44px] items-center px-3 pb-2.5 pt-1 text-sm font-medium transition-colors",
+          "relative isolate px-3 pb-2.5 pt-1 -mb-px text-sm font-medium transition-colors min-h-[44px] inline-flex items-center",
           active ? "text-foreground" : "text-muted-foreground hover:text-foreground",
           className,
         )}
@@ -126,7 +124,10 @@ export function TabsTrigger({
           <motion.span
             layoutId={layoutId}
             layout="position"
-            className={cn("absolute -bottom-px left-0 right-0 h-px bg-primary", indicatorClassName)}
+            className={cn(
+              "absolute -bottom-px left-0 right-0 h-px bg-primary",
+              indicatorClassName,
+            )}
           />
         ) : null}
       </button>
@@ -134,6 +135,7 @@ export function TabsTrigger({
   }
 
   const radius = variant === "pill" ? "rounded-full" : "rounded-md";
+
   return (
     <div className="relative">
       {active ? (
@@ -150,8 +152,11 @@ export function TabsTrigger({
         aria-selected={active}
         onClick={() => setValue(value)}
         className={cn(
-          "relative z-10 inline-flex items-center justify-center whitespace-nowrap bg-transparent px-3.5 py-1.5 text-sm font-medium outline-none transition-colors",
-          active ? "text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+          "relative z-10 inline-flex items-center justify-center whitespace-nowrap bg-transparent px-3.5 py-1.5 text-sm font-medium outline-none",
+          "transition-colors",
+          active
+            ? "text-primary-foreground"
+            : "text-muted-foreground hover:text-foreground",
           radius,
           className,
         )}
@@ -165,7 +170,8 @@ export function TabsTrigger({
 export function TabsContent({ value, children, className }: { value: string; children: ReactNode; className?: string }) {
   const { value: current } = useTabs();
   const reduce = useReducedMotion();
-  if (current !== value) {
+  const active = current === value;
+  if (!active) {
     return (
       <div hidden className={className}>
         {children}

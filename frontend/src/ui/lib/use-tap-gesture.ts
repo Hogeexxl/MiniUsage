@@ -13,6 +13,7 @@ export interface TapGesture<S> {
 
 export function useTapGesture<S>(): TapGesture<S> {
   const record = useRef<TapRecord<S> | null>(null);
+
   return useMemo(
     () => ({
       start: (event, state) => {

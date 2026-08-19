@@ -1,12 +1,11 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import type { SessionDetailResponse, SessionItemDto } from "../../data/types";
-import f01SharedFixture from "../../test-fixtures/t_mu03_f01_real_structure.json";
+import type { SessionDetailResponse, SessionItemDto, UsageDto } from "../../data/types";
 import type { SessionDetailControllerViewModel } from "./useSessionDetailController";
 import { SessionDetailDrawer } from "./SessionDetailDrawer";
 
-const usage = {
+const usage: UsageDto = {
   input_tokens: 1_234,
   cached_tokens: 12,
   cache_write_tokens: null,
@@ -16,8 +15,8 @@ const usage = {
   other_output_tokens: 559,
   total_tokens: 1_801,
   cache_hit_rate: 0.01,
-  estimated_cost: null,
-  estimated_cost_status: "unknown" as const,
+  estimated_cost: 0.5,
+  estimated_cost_status: "complete",
 };
 
 const detail: SessionDetailResponse = {
@@ -32,11 +31,11 @@ const detail: SessionDetailResponse = {
     models_used: ["gpt-5", "o4-mini"],
     model_usage: [
       { model: "gpt-5", reasoning_effort: "high", usage },
-      { model: "o4-mini", reasoning_effort: null, usage: { ...usage, cache_write_tokens: 0, total_tokens: 0 } },
+      { model: "o4-mini", reasoning_effort: null, usage: { ...usage, total_tokens: 200, estimated_cost: 0.1 } },
     ],
-    self_usage: { ...usage, total_tokens: 1_801 },
+    self_usage: { ...usage, total_tokens: 1_801, estimated_cost: 0.6 },
     subagent_count: 2,
-    inclusive_usage: { ...usage, total_tokens: 3_601 },
+    inclusive_usage: { ...usage, total_tokens: 3_601, estimated_cost: 1.2, estimated_cost_status: "partial" },
   },
   subagents: [
     {
@@ -87,6 +86,8 @@ function view(overrides: Partial<SessionDetailControllerViewModel> = {}): Sessio
     detail,
     data_revision: 3,
     load_state: "ready",
+    error_code: undefined,
+    refresh_error_code: undefined,
     open_detail: vi.fn(),
     select_session: vi.fn(),
     close_detail: vi.fn(),
@@ -96,150 +97,127 @@ function view(overrides: Partial<SessionDetailControllerViewModel> = {}): Sessio
   };
 }
 
-describe("SessionDetailDrawer", () => {
-  it("T-S09-001/T-MU03-C06 renders model-effort blocks and one independent Subagent block for single, unknown, and mixed effort", () => {
+describe("SessionDetailDrawer v0.2.0", () => {
+  it("renders the 480px receipt shell with exactly four summary rows", () => {
     render(<SessionDetailDrawer view={view()} timezone="Asia/Shanghai" />);
-    const dialog = screen.getByRole("dialog");
-    expect(dialog).toHaveAttribute("aria-modal", "true");
-    expect(dialog).toHaveAttribute("aria-labelledby", "session-detail-title");
+
+    const dialog = screen.getByRole("dialog", { name: "Session 详情" });
+    expect(dialog).toHaveClass("w-[480px]", "max-[480px]:w-screen");
     expect(screen.getByRole("heading", { name: "A long Session title" })).toBeInTheDocument();
     expect(screen.getByText("root-session-full-id")).toBeInTheDocument();
-    expect(dialog.querySelector(".session-detail-header")).not.toHaveTextContent("Main Session");
-    expect(dialog.querySelector(".session-detail-header")).not.toHaveTextContent("gpt-5");
-    expect(screen.getByText("合计 Token")).toBeInTheDocument();
-    expect(screen.getByText("Main", { selector: "span" })).toBeInTheDocument();
-    expect(screen.getByText("Subagent", { selector: "span" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Main (2)" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Subagent (2)" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "gpt-5 (high)" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "o4-mini (—)" })).toBeInTheDocument();
-    expect(screen.getByText("gpt-5 (high)", { selector: ".session-detail-subagent-model" })).toBeInTheDocument();
-    expect(screen.getByText("o4-mini (mixed)", { selector: ".session-detail-subagent-model" })).toBeInTheDocument();
-    expect(screen.queryByText(/个模型配置/)).not.toBeInTheDocument();
-    expect(screen.getAllByText("总 Token")).toHaveLength(3);
-    expect(screen.getAllByText("预估费用")).toHaveLength(3);
-    expect(screen.getByText("合计费用")).toBeInTheDocument();
-    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("0", { selector: "dd" })).toHaveLength(2);
-    expect(Array.from(dialog.querySelectorAll<HTMLElement>(".session-detail-summary strong"), (node) => node.textContent)).toEqual(["3,601", "1,801", "1,800", "—"]);
-    expect(dialog.querySelectorAll(".session-detail-summary > div")).toHaveLength(4);
-    expect(dialog.querySelectorAll(".session-detail-copy-button")).toHaveLength(0);
-    expect(dialog).toHaveTextContent("subagent-recent-full-id");
-    expect(dialog).toHaveTextContent("subagent-old-full-id");
-    expect(dialog.querySelectorAll(".session-detail-usage-block")).toHaveLength(2);
-    expect(dialog.querySelectorAll(".session-detail-usage-block .session-detail-usage-item")).toHaveLength(16);
-    expect(dialog.querySelectorAll(".session-detail-subagent-block .session-detail-usage-item")).toHaveLength(8);
-    const toggles = screen.getAllByRole("button", { name: /Subagent 详情/ });
-    expect(toggles[0]).toHaveAttribute("aria-expanded", "true");
-    expect(toggles[1]).toHaveAttribute("aria-expanded", "false");
-    fireEvent.click(toggles[1]);
-    expect(toggles[0]).toHaveAttribute("aria-expanded", "true");
-    expect(toggles[1]).toHaveAttribute("aria-expanded", "true");
-    expect(dialog.querySelectorAll(".session-detail-subagent-block .session-detail-usage-item")).toHaveLength(16);
-    expect(screen.getAllByText("推理 Token")).toHaveLength(4);
-    expect(screen.getAllByLabelText("推理 Token：8")).toHaveLength(4);
-    expect(dialog.querySelectorAll('[aria-label="缓存写入：未知"]')).toHaveLength(3);
-    expect(dialog.querySelectorAll('[aria-label="缓存写入：0"]')).toHaveLength(1);
-    expect(dialog.querySelectorAll('[aria-label="预估费用：未知"]')).toHaveLength(4);
+
+    const summary = screen.getByRole("region", { name: "Session 合计" });
+    const rows = summary.querySelectorAll("dl > div");
+    expect(rows).toHaveLength(4);
+    expect(summary).toHaveTextContent("Main Tokens");
+    expect(summary).toHaveTextContent("Subagent Tokens");
+    expect(summary).toHaveTextContent("Total Tokens");
+    expect(summary).toHaveTextContent("Estimated Cost");
+    expect(summary).toHaveTextContent("1,801");
+    expect(summary).toHaveTextContent("1,800");
+    expect(summary).toHaveTextContent("3,601");
+    expect(summary).toHaveTextContent("$1.20");
+    expect(screen.queryByText(/复制/)).not.toBeInTheDocument();
   });
 
-  it("T-MU04-E01 renders the four-item summary from inclusive cost/status without recomputing child costs", () => {
-    const completeDetail: SessionDetailResponse = {
-      ...detail,
-      main: {
-        ...detail.main,
-        inclusive_usage: { ...detail.main.inclusive_usage, estimated_cost: 12.34, estimated_cost_status: "complete" },
-      },
-    };
-    const partialDetail: SessionDetailResponse = {
-      ...completeDetail,
-      main: {
-        ...completeDetail.main,
-        inclusive_usage: { ...completeDetail.main.inclusive_usage, estimated_cost: 9.87, estimated_cost_status: "partial" },
-      },
-    };
-
-    const complete = render(<SessionDetailDrawer view={view({ detail: completeDetail })} timezone="Asia/Shanghai" />);
-    const completeSummary = screen.getByRole("region", { name: "Session 合计" });
-    expect(completeSummary.querySelectorAll(":scope > div")).toHaveLength(4);
-    expect(completeSummary.querySelector(".session-detail-summary-cost")).toHaveTextContent("$12.34");
-    expect(completeSummary.querySelector(".session-detail-summary-cost")).not.toHaveClass("is-partial");
-    complete.unmount();
-
-    render(<SessionDetailDrawer view={view({ detail: partialDetail })} timezone="Asia/Shanghai" />);
-    const partialCost = screen.getByRole("region", { name: "Session 合计" }).querySelector(".session-detail-summary-cost");
-    expect(partialCost).toHaveTextContent("$9.87");
-    expect(partialCost).toHaveClass("is-partial");
-  });
-
-  it("T-MU04-E02 keeps IDs while removing every Drawer copy control and keeps counts adjacent to headings", () => {
+  it("starts both accordion groups collapsed and enforces single-open within each group", () => {
     render(<SessionDetailDrawer view={view()} timezone="Asia/Shanghai" />);
-    const dialog = screen.getByRole("dialog");
-    expect(screen.getByRole("heading", { name: "Main (2)" }).textContent).toBe("Main (2)");
-    expect(screen.getByRole("heading", { name: "Subagent (2)" }).textContent).toBe("Subagent (2)");
-    expect(dialog.querySelectorAll(".session-detail-copy-button")).toHaveLength(0);
-    expect(screen.getByText("root-session-full-id", { selector: ".session-detail-id" })).toBeInTheDocument();
-    expect(screen.getByText("subagent-recent-full-id", { selector: ".session-detail-subagent-id" })).toBeInTheDocument();
-    expect(screen.getByText("subagent-old-full-id", { selector: ".session-detail-subagent-id" })).toBeInTheDocument();
+
+    const mainFirst = screen.getByRole("button", { name: "gpt-5 (high)" });
+    const mainSecond = screen.getByRole("button", { name: "o4-mini (—)" });
+    const subFirst = screen.getByRole("button", { name: "Recent subagent" });
+    const subSecond = screen.getByRole("button", { name: "Old subagent" });
+
+    for (const trigger of [mainFirst, mainSecond, subFirst, subSecond]) {
+      expect(trigger).toHaveAttribute("aria-expanded", "false");
+    }
+
+    fireEvent.click(mainFirst);
+    expect(mainFirst).toHaveAttribute("aria-expanded", "true");
+    expect(mainSecond).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(mainSecond);
+    expect(mainFirst).toHaveAttribute("aria-expanded", "false");
+    expect(mainSecond).toHaveAttribute("aria-expanded", "true");
+
+    fireEvent.click(subFirst);
+    expect(subFirst).toHaveAttribute("aria-expanded", "true");
+    expect(subSecond).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(subSecond);
+    expect(subFirst).toHaveAttribute("aria-expanded", "false");
+    expect(subSecond).toHaveAttribute("aria-expanded", "true");
   });
 
-  it("T-MU04-E03 puts Subagent identity on the left and model/time metadata on the right", () => {
+  it("keeps Subagent trigger title-only and exposes identity metadata plus fixed receipt order after expansion", () => {
     render(<SessionDetailDrawer view={view()} timezone="Asia/Shanghai" />);
-    const headers = screen.getByRole("dialog").querySelectorAll(".session-detail-subagent-header");
-    expect(headers).toHaveLength(2);
-    const firstHeader = headers[0];
-    const identity = firstHeader.querySelector(".session-detail-subagent-identity");
-    const rightMeta = firstHeader.querySelector(".session-detail-subagent-right-meta");
-    expect(identity).toHaveTextContent("Recent subagent");
-    expect(identity).toHaveTextContent("subagent-recent-full-id");
-    expect(identity).not.toHaveTextContent("gpt-5 (high)");
-    expect(identity?.querySelector(".session-detail-subagent-meta")).toBeNull();
-    expect(rightMeta?.children).toHaveLength(2);
-    expect(rightMeta?.children[0]).toHaveClass("session-detail-subagent-model");
-    expect(rightMeta?.children[0]).toHaveTextContent("gpt-5 (high)");
-    expect(rightMeta?.children[1]).toHaveClass("session-detail-subagent-time");
-    expect(rightMeta?.children[1].tagName).toBe("TIME");
-    expect(rightMeta?.children[1]).toHaveAttribute("datetime", new Date(detail.subagents[0].last_activity_at_ms).toISOString());
-    expect(screen.getAllByRole("button", { name: /Subagent 详情/ })[0]).toHaveAttribute("aria-expanded", "true");
+
+    const trigger = screen.getByRole("button", { name: "Recent subagent" });
+    expect(trigger).not.toHaveTextContent("subagent-recent-full-id");
+    expect(trigger).not.toHaveTextContent("gpt-5 (high)");
+
+    fireEvent.click(trigger);
+    const region = screen.getByRole("region", { name: "Recent subagent" });
+    expect(region).toHaveTextContent("Thread ID");
+    expect(region).toHaveTextContent("subagent-recent-full-id");
+    expect(region).toHaveTextContent("Model");
+    expect(region).toHaveTextContent("gpt-5 (high)");
+    expect(region).toHaveTextContent("Last Active");
+
+    const labels = Array.from(region.querySelectorAll("dl:last-child dt"), (node) => node.textContent);
+    expect(labels).toEqual([
+      "Total Tokens",
+      "Input",
+      "Output",
+      "Reasoning",
+      "Cache Read",
+      "Cache Write",
+      "Cache Hit Rate",
+      "Estimated Cost",
+    ]);
   });
 
-  it("T-MU03-F01 renders the real cost/effort fixture without splitting a Subagent", () => {
-    const f01Detail = f01SharedFixture.api_detail as SessionDetailResponse;
-    const f01Row = {
-      ...row,
-      root_session_id: f01Detail.root_session_id,
-      title: f01Detail.main.title,
-      last_activity_at_ms: f01Detail.last_activity_at_ms,
-      models_used: f01Detail.main.models_used,
-    };
-    render(<SessionDetailDrawer view={view({ detail: f01Detail, selected_row: f01Row })} timezone="Asia/Shanghai" />);
-    const dialog = screen.getByRole("dialog");
-    expect(screen.getByRole("heading", { name: "未命名 Session" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Main (3)" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "gpt-5.6-sol (high)" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "gpt-5.6-sol (medium)" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "gpt-5.6-terra (max)" })).toBeInTheDocument();
-    expect(screen.getByText("Gate b rereview", { selector: "h4" })).toBeInTheDocument();
-    expect(screen.getByText("gpt-5.6-luna (high)", { selector: ".session-detail-subagent-model" })).toBeInTheDocument();
-    expect(dialog.querySelectorAll(".session-detail-usage-block")).toHaveLength(3);
-    expect(dialog.querySelectorAll(".session-detail-subagent-block")).toHaveLength(1);
-    expect(screen.getAllByText("$0.50")).toHaveLength(1);
-    expect(screen.getAllByText("$1.00")).toHaveLength(1);
-    expect(screen.getAllByText("$1.20")).toHaveLength(1);
-    expect(screen.getAllByText("$0.02")).toHaveLength(1);
+  it("preserves rendered detail during refresh and reports refresh failure through toast", async () => {
+    const refreshDetail = vi.fn();
+    const rendered = render(
+      <SessionDetailDrawer
+        view={view({ load_state: "refreshing", refresh_detail: refreshDetail })}
+        timezone="Asia/Shanghai"
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: "A long Session title" })).toBeInTheDocument();
+    expect(screen.queryByText("Session 详情加载失败")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "刷新当前详情" })).toBeDisabled();
+
+    rendered.rerender(
+      <SessionDetailDrawer
+        view={view({ refresh_error_code: "HTTP_ERROR", refresh_detail: refreshDetail })}
+        timezone="Asia/Shanghai"
+      />,
+    );
+    expect(screen.getByRole("heading", { name: "A long Session title" })).toBeInTheDocument();
+    expect(await screen.findByText("详情更新失败")).toBeInTheDocument();
   });
 
-  it("keeps the dialog open for loading, error, and refreshing states", () => {
+  it("keeps loading/error fallbacks inside the open Drawer and wires retry/close", () => {
     const retry = vi.fn();
-    const loading = render(<SessionDetailDrawer view={view({ detail: null, load_state: "loading" })} timezone="Asia/Shanghai" />);
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    const close = vi.fn();
+    const loading = render(
+      <SessionDetailDrawer view={view({ detail: null, load_state: "loading", close_detail: close })} timezone="Asia/Shanghai" />,
+    );
+    expect(screen.getByRole("dialog", { name: "Session 详情" })).toBeInTheDocument();
     expect(screen.getByRole("status", { name: "Session 详情加载中" })).toBeInTheDocument();
-    expect(loading.container.querySelectorAll(".session-detail-skeleton-summary > span")).toHaveLength(4);
+    fireEvent.click(screen.getByRole("button", { name: "关闭 Session 详情" }));
+    expect(close).toHaveBeenCalledTimes(1);
     loading.unmount();
 
-    render(<SessionDetailDrawer view={view({ detail: null, load_state: "error", error_code: "HTTP_ERROR", retry_detail: retry })} timezone="Asia/Shanghai" />);
+    render(
+      <SessionDetailDrawer
+        view={view({ detail: null, load_state: "error", error_code: "HTTP_ERROR", retry_detail: retry })}
+        timezone="Asia/Shanghai"
+      />,
+    );
     expect(screen.getByRole("alert")).toHaveTextContent("Session 详情加载失败");
-    screen.getByRole("button", { name: "重试" }).click();
+    fireEvent.click(screen.getByRole("button", { name: "重试" }));
     expect(retry).toHaveBeenCalledTimes(1);
   });
 });

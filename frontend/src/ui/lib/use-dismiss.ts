@@ -11,7 +11,9 @@ export interface DismissOptions {
 const openScopes = new Set<(target: Element) => boolean>();
 
 function claimedByAnotherScope(self: (target: Element) => boolean, target: Element) {
-  for (const scope of openScopes) if (scope !== self && scope(target)) return true;
+  for (const scope of openScopes) {
+    if (scope !== self && scope(target)) return true;
+  }
   return false;
 }
 
@@ -40,18 +42,25 @@ export function useDismiss(
   open: boolean,
   onDismiss: () => void,
   ref: RefObject<HTMLElement | null> | null,
-  { behavior = "pass-through", escape: dismissOnEscape = true, ignore }: DismissOptions = {},
+  {
+    behavior = "pass-through",
+    escape: dismissOnEscape = true,
+    ignore,
+  }: DismissOptions = {},
 ) {
   useEffect(() => {
     if (!open) return;
-    const inside = (target: Element) => Boolean(ref?.current?.contains(target)) || Boolean(ignore?.(target));
+    const inside = (target: Element) =>
+      Boolean(ref?.current?.contains(target)) || Boolean(ignore?.(target));
     const onKey = (event: KeyboardEvent) => {
       if (dismissOnEscape && event.key === "Escape") onDismiss();
     };
     const onPointer = (event: PointerEvent) => {
       const target = event.target as Element | null;
       if (!target || inside(target)) return;
-      if (behavior === "consume" && !claimedByAnotherScope(inside, target)) consumeActivation(event);
+      if (behavior === "consume" && !claimedByAnotherScope(inside, target)) {
+        consumeActivation(event);
+      }
       onDismiss();
     };
     openScopes.add(inside);
@@ -62,5 +71,5 @@ export function useDismiss(
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("pointerdown", onPointer, true);
     };
-  }, [behavior, dismissOnEscape, ignore, onDismiss, open, ref]);
+  }, [open, onDismiss, ref, behavior, dismissOnEscape, ignore]);
 }

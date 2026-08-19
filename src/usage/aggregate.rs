@@ -277,6 +277,7 @@ pub struct UsageSummary {
     pub totals: TokenTotals,
     /// Healthy sessions contributing usage events. Kept for the existing KPI.
     pub session_count: i64,
+    pub cost_incomplete_session_count: i64,
     pub health: SessionHealthSummary,
 }
 
@@ -313,6 +314,7 @@ pub struct SessionSortIndexItem {
     pub model_sort_key: Option<String>,
     pub total_tokens: Option<i64>,
     pub combined_total_tokens: Option<i64>,
+    pub combined_estimated_cost_nanos_usd: Option<i64>,
     pub cache_hit_rate: Option<f64>,
     pub data_status: SessionDataStatus,
     pub error_code: Option<String>,
@@ -325,6 +327,7 @@ pub enum SessionSortField {
     Model,
     TotalTokens,
     CombinedTotalTokens,
+    CombinedEstimatedCost,
     CacheHitRate,
 }
 
@@ -363,6 +366,12 @@ impl SessionSortAggregate {
             model_sort_key: self.model_sort_key.clone(),
             total_tokens: Some(self.self_usage.total_tokens),
             combined_total_tokens: Some(self.inclusive_usage.total_tokens),
+            combined_estimated_cost_nanos_usd: match self.inclusive_usage.cost_completeness {
+                CostCompleteness::Complete | CostCompleteness::Partial => {
+                    self.inclusive_usage.estimated_cost_nanos_usd
+                }
+                CostCompleteness::Empty | CostCompleteness::Unknown => None,
+            },
             cache_hit_rate: self.inclusive_usage.cache_hit_rate,
             data_status: status_for_totals(&self.inclusive_usage),
             error_code: None,
@@ -529,6 +538,7 @@ impl<'connection> AggregateReader<'connection> {
         Ok(UsageSummary {
             totals,
             session_count,
+            cost_incomplete_session_count: incomplete_sessions,
             health: SessionHealthSummary {
                 total_sessions,
                 complete_sessions,
@@ -1646,6 +1656,7 @@ impl QuarantinedRoot {
             model_sort_key: None,
             total_tokens: None,
             combined_total_tokens: None,
+            combined_estimated_cost_nanos_usd: None,
             cache_hit_rate: None,
             data_status: SessionDataStatus::Error,
             error_code: Some(self.error_code.clone()),
@@ -1728,6 +1739,10 @@ fn compare_sort_index_items(
         SessionSortField::CombinedTotalTokens => {
             number(left.combined_total_tokens, right.combined_total_tokens)
         }
+        SessionSortField::CombinedEstimatedCost => number(
+            left.combined_estimated_cost_nanos_usd,
+            right.combined_estimated_cost_nanos_usd,
+        ),
         SessionSortField::CacheHitRate => ratio(left.cache_hit_rate, right.cache_hit_rate),
     };
     result.then_with(|| left.root_session_id.cmp(&right.root_session_id))
@@ -1752,6 +1767,15 @@ fn compare_sort_aggregates(
     let compare_number = |left: i64, right: i64| match order {
         SessionSortOrder::Asc => left.cmp(&right),
         SessionSortOrder::Desc => right.cmp(&left),
+    };
+    let compare_optional_number = |left: Option<i64>, right: Option<i64>| match (left, right) {
+        (None, None) => Ordering::Equal,
+        (None, Some(_)) => Ordering::Greater,
+        (Some(_), None) => Ordering::Less,
+        (Some(left), Some(right)) => match order {
+            SessionSortOrder::Asc => left.cmp(&right),
+            SessionSortOrder::Desc => right.cmp(&left),
+        },
     };
     let compare_ratio = |left: Option<f64>, right: Option<f64>| match (left, right) {
         (None, None) => Ordering::Equal,
@@ -1785,6 +1809,20 @@ fn compare_sort_aggregates(
         SessionSortField::CombinedTotalTokens => compare_number(
             left.inclusive_usage.total_tokens,
             right.inclusive_usage.total_tokens,
+        ),
+        SessionSortField::CombinedEstimatedCost => compare_optional_number(
+            match left.inclusive_usage.cost_completeness {
+                CostCompleteness::Complete | CostCompleteness::Partial => {
+                    left.inclusive_usage.estimated_cost_nanos_usd
+                }
+                CostCompleteness::Empty | CostCompleteness::Unknown => None,
+            },
+            match right.inclusive_usage.cost_completeness {
+                CostCompleteness::Complete | CostCompleteness::Partial => {
+                    right.inclusive_usage.estimated_cost_nanos_usd
+                }
+                CostCompleteness::Empty | CostCompleteness::Unknown => None,
+            },
         ),
         SessionSortField::CacheHitRate => compare_ratio(
             left.inclusive_usage.cache_hit_rate,

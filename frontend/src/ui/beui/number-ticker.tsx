@@ -1,6 +1,5 @@
 import { animate, motion, useInView, useReducedMotion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
-
 import { EASE_OUT } from "../lib/ease";
 import { cn } from "../lib/cn";
 
@@ -22,20 +21,7 @@ export interface NumberTickerProps {
 const DIGIT_HEIGHT_EM = 1.1;
 const DIGITS = Array.from({ length: 10 }, (_, n) => n);
 
-export function NumberTicker({
-  value,
-  pad,
-  duration = 0.9,
-  stagger = 0.04,
-  startOnView = true,
-  prefix,
-  suffix,
-  blur = false,
-  className,
-  digitClassName,
-  locale,
-  format,
-}: NumberTickerProps) {
+export function NumberTicker({ value, pad, duration = 0.9, stagger = 0.04, startOnView = true, prefix, suffix, blur = false, className, digitClassName, locale, format }: NumberTickerProps) {
   const containerRef = useRef<HTMLSpanElement>(null);
   const inView = useInView(containerRef, { once: true, amount: 0.6 });
   const [armed, setArmed] = useState(!startOnView);
@@ -59,8 +45,8 @@ export function NumberTicker({
   useEffect(() => {
     if (!armed || entered) return;
     const total = (duration + glyphs.length * stagger) * 1000;
-    const timeout = window.setTimeout(() => setEntered(true), total);
-    return () => window.clearTimeout(timeout);
+    const t = window.setTimeout(() => setEntered(true), total);
+    return () => window.clearTimeout(t);
   }, [armed, entered, duration, stagger, glyphs.length]);
 
   return (
@@ -69,23 +55,10 @@ export function NumberTicker({
       <span aria-hidden="true" className="inline-flex items-center">
         {prefix ? <span>{prefix}</span> : null}
         {glyphs.map(({ char, id }, i) => {
-          if (!/\d/.test(char)) {
-            return (
-              <span key={id} className="inline-block">
-                {char}
-              </span>
-            );
-          }
-          return (
-            <Digit
-              key={id}
-              digit={armed ? Number(char) : 0}
-              delay={entered ? 0 : i * stagger}
-              duration={duration}
-              blur={blur}
-              className={digitClassName}
-            />
-          );
+          const isDigit = /\d/.test(char);
+          if (!isDigit) return <span key={id} className="inline-block">{char}</span>;
+          const digit = Number(char);
+          return <Digit key={id} digit={armed ? digit : 0} delay={entered ? 0 : i * stagger} duration={duration} blur={blur} className={digitClassName} />;
         })}
         {suffix ? <span>{suffix}</span> : null}
       </span>
@@ -93,30 +66,14 @@ export function NumberTicker({
   );
 }
 
-function Digit({
-  digit,
-  delay,
-  duration,
-  blur,
-  className,
-}: {
-  digit: number;
-  delay: number;
-  duration: number;
-  blur: boolean;
-  className?: string;
-}) {
+function Digit({ digit, delay, duration, blur, className }: { digit: number; delay: number; duration: number; blur: boolean; className?: string }) {
   const reduce = useReducedMotion();
   const columnRef = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
     if (reduce || !blur || !columnRef.current || !Number.isFinite(digit)) return;
     const node = columnRef.current;
-    const controls = animate(
-      node,
-      { filter: ["blur(10px)", "blur(0px)"] },
-      { duration: Math.min(duration * 0.75, 0.32), delay, ease: EASE_OUT },
-    );
+    const controls = animate(node, { filter: ["blur(10px)", "blur(0px)"] }, { duration: Math.min(duration * 0.75, 0.32), delay, ease: EASE_OUT });
     return () => {
       controls.stop();
       node.style.filter = "blur(0px)";
@@ -125,18 +82,8 @@ function Digit({
 
   return (
     <span className={cn("relative inline-block overflow-hidden", className)} style={{ height: `${DIGIT_HEIGHT_EM}em`, width: "1ch" }}>
-      <motion.span
-        ref={columnRef}
-        initial={{ y: 0 }}
-        animate={{ y: `-${digit * DIGIT_HEIGHT_EM}em` }}
-        transition={reduce ? { duration: 0 } : { duration, delay, ease: EASE_OUT }}
-        className="absolute inset-x-0 top-0 flex flex-col items-center will-change-[transform,filter]"
-      >
-        {DIGITS.map((n) => (
-          <span key={n} className="flex h-[1.1em] items-center justify-center leading-none">
-            {n}
-          </span>
-        ))}
+      <motion.span ref={columnRef} initial={{ y: 0 }} animate={{ y: `-${digit * DIGIT_HEIGHT_EM}em` }} transition={reduce ? { duration: 0 } : { duration, delay, ease: EASE_OUT }} className="absolute inset-x-0 top-0 flex flex-col items-center will-change-[transform,filter]">
+        {DIGITS.map((n) => <span key={n} className="flex h-[1.1em] items-center justify-center leading-none">{n}</span>)}
       </motion.span>
     </span>
   );
