@@ -21,6 +21,6 @@ describe("distribution ranking", () => {
     const cost = buildDistribution(items, "cost");
     expect(cost.segments.some((segment) => segment.id === "m6")).toBe(false);
     expect(cost.total).toBe(27);
-    expect(cost.segments.some((segment) => segment.id === "m5")).toBe(true);
+    expect(cost.segments.at(-1)).toMatchObject({ label: "其他", value: 2 });
   });
 });
