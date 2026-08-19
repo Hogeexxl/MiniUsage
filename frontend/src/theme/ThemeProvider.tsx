@@ -12,12 +12,24 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 function readInitialTheme(): Theme {
   if (typeof window === "undefined") return DEFAULT_THEME;
-  const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
-  return isTheme(stored) ? stored : DEFAULT_THEME;
+  try {
+    const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+    return isTheme(stored) ? stored : DEFAULT_THEME;
+  } catch {
+    return DEFAULT_THEME;
+  }
 }
 
 function applyTheme(theme: Theme) {
   document.documentElement.classList.toggle("dark", theme === "dark");
+}
+
+function persistTheme(theme: Theme) {
+  try {
+    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+  } catch {
+    // Storage can be blocked by browser/privacy policy; the in-memory theme still works.
+  }
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
@@ -25,7 +37,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     applyTheme(theme);
-    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+    persistTheme(theme);
   }, [theme]);
 
   const setTheme = useCallback((next: Theme) => {
