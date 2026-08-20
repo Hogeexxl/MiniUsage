@@ -177,7 +177,29 @@ describe("DashboardPage v0.2.0", () => {
     expect(screen.getByLabelText("KPI 指标").children).toHaveLength(4);
     expect(screen.queryByRole("navigation")).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Session 记录" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /切换到浅色主题/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Switch to light mode/ })).toBeInTheDocument();
+  });
+
+  it("uses Spec01 BeUI header parameters and one gap-8 top-level stack", async () => {
+    renderWithTheme(<DashboardPage options={{ client: fakeClient(), eventSourceFactory: () => fakeEvents() }} />);
+    await waitFor(() => expect(totalTokenCard()).toHaveTextContent("12"));
+
+    const main = document.querySelector("main.dashboard-content");
+    expect(main).toHaveClass("flex", "flex-col", "gap-8");
+    expect(screen.getByRole("heading", { name: "MiniUsage" })).toHaveClass("text-foreground");
+
+    const update = screen.getByRole("button", { name: "检查更新" });
+    const sync = screen.getByRole("button", { name: "同步数据" });
+    const stop = screen.getByRole("button", { name: "停止服务" });
+    for (const button of [update, sync, stop]) {
+      expect(button).toHaveClass("h-8", "px-3", "text-xs", "gap-1.5", "rounded-full");
+      expect(button).not.toHaveClass("h-10");
+    }
+
+    const theme = screen.getByRole("button", { name: "Switch to light mode" });
+    expect(theme).toHaveClass("rounded-xl", "border", "border-border", "bg-background", "p-2.5");
+    expect(theme.querySelector("svg")).toHaveClass("h-5", "w-5");
+    expect(screen.getByText(/上次同步：/)).toHaveClass("text-muted-foreground");
   });
 
   it("maps a failed range load to fixed text without leaking the private error", async () => {
