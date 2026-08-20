@@ -64,62 +64,64 @@ export function DashboardPage({ options }: { options?: DashboardPageOptions }) {
 
   return (
     <div className="dashboard-shell bg-background text-foreground">
-      <main className="dashboard-content flex flex-col gap-8">
-        <header className="dashboard-header">
-          <div className="flex min-w-0 items-center gap-3">
-            <h1 className="text-foreground">MiniUsage</h1>
-            <UpdateButton client={options?.client} />
-          </div>
-          <div className="dashboard-sync-group">
-            <span className="flex items-center whitespace-nowrap text-sm text-muted-foreground">
-              上次同步：
-              <ActionSwapText value={syncText} animation="blur">{syncText}</ActionSwapText>
-            </span>
-            <SyncButton disabled={!refreshEnabled} refreshState={view.refresh_state} lastSyncAtMs={view.last_scan_completed_at_ms} onClick={view.request_refresh} />
-            <ServiceButton client={options?.serviceClient} />
-            <ThemeToggle
-              variant="circle-blur"
-              start="bottom-up"
-              className="rounded-xl border border-border bg-background p-2.5"
-              iconClassName="h-5 w-5"
-            />
-          </div>
-        </header>
-
-        <section className="dashboard-controls" aria-label="Dashboard 控制">
-          <div className="dashboard-controls-row">
-            <RangeSelector value={view.range} onChange={view.select_range} />
-            <FilterControls
-              filters={view.filters}
-              options={view.filter_options}
-              optionsLoading={view.filter_options_loading}
-              optionsStale={view.filter_options_stale}
-              optionsErrorCode={view.filter_options_error_code}
-              anyFilterActive={view.anyFilterActive}
-              onChange={view.select_filters}
-              onClear={view.clear_filters}
-              onRetryOptions={view.retry_filter_options}
-            />
-          </div>
-          {loadError ? (
-            <div className="mt-3 flex items-center gap-2 text-xs text-destructive" role="alert" aria-live="polite">
-              <span>{loadError}</span>
-              <Button variant="ghost" size="sm" onClick={view.retry_load}>重试</Button>
+      <main className="dashboard-content">
+        <div className="flex flex-col gap-8">
+          <header className="dashboard-header">
+            <div className="flex min-w-0 items-center gap-3">
+              <h1 className="text-foreground">MiniUsage</h1>
+              <UpdateButton client={options?.client} />
             </div>
-          ) : null}
-          {refreshError ? (
-            <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground" aria-live="polite">
-              <span>{refreshError}</span>
-              {view.refresh_state === "tracking_error" ? <Button variant="ghost" size="sm" onClick={view.retry_refresh_status}>重试</Button> : null}
+            <div className="dashboard-sync-group">
+              <span className="flex items-center whitespace-nowrap text-sm text-muted-foreground">
+                上次同步：
+                <ActionSwapText value={syncText} animation="blur">{syncText}</ActionSwapText>
+              </span>
+              <SyncButton disabled={!refreshEnabled} refreshState={view.refresh_state} lastSyncAtMs={view.last_scan_completed_at_ms} onClick={view.request_refresh} />
+              <ServiceButton client={options?.serviceClient} />
+              <ThemeToggle
+                variant="circle-blur"
+                start="bottom-up"
+                className="rounded-xl border border-border bg-background p-2.5"
+                iconClassName="h-5 w-5"
+              />
             </div>
-          ) : null}
-        </section>
+          </header>
 
-        <section className="metrics-section" aria-label="关键指标" aria-busy={loading}>
-          <MetricGrid usage={view.metrics} modelFilterActive={view.modelFilterActive} />
-        </section>
-        <ChartSection view={charts} />
-        <SessionSection view={sessions} detail={detail} />
+          <section className="dashboard-controls" aria-label="Dashboard 控制">
+            <div className="dashboard-controls-row">
+              <RangeSelector value={view.range} onChange={view.select_range} />
+              <FilterControls
+                filters={view.filters}
+                options={view.filter_options}
+                optionsLoading={view.filter_options_loading}
+                optionsStale={view.filter_options_stale}
+                optionsErrorCode={view.filter_options_error_code}
+                anyFilterActive={view.anyFilterActive}
+                onChange={view.select_filters}
+                onClear={view.clear_filters}
+                onRetryOptions={view.retry_filter_options}
+              />
+            </div>
+            {loadError ? (
+              <div className="mt-3 flex items-center gap-2 text-xs text-destructive" role="alert" aria-live="polite">
+                <span>{loadError}</span>
+                <Button variant="ghost" size="sm" onClick={view.retry_load}>重试</Button>
+              </div>
+            ) : null}
+            {refreshError ? (
+              <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground" aria-live="polite">
+                <span>{refreshError}</span>
+                {view.refresh_state === "tracking_error" ? <Button variant="ghost" size="sm" onClick={view.retry_refresh_status}>重试</Button> : null}
+              </div>
+            ) : null}
+          </section>
+
+          <section className="metrics-section" aria-label="关键指标" aria-busy={loading}>
+            <MetricGrid usage={view.metrics} modelFilterActive={view.modelFilterActive} />
+          </section>
+          <ChartSection view={charts} />
+          <SessionSection view={sessions} detail={detail} />
+        </div>
         <div className="sr-only" aria-live="polite">{loading ? "数据加载中…" : loadError ?? refreshError}</div>
       </main>
       <SessionDetailDrawer view={detail} timezone={sessions.timezone} />
