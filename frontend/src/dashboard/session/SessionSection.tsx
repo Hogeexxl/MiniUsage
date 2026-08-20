@@ -7,7 +7,7 @@ import type { SessionDetailControllerViewModel } from "./useSessionDetailControl
 export function SessionSection({ view, detail }: { view: SessionTableViewModel; detail?: SessionDetailControllerViewModel }) {
   const refreshing = view.load_state === "refreshing";
   return (
-    <section className="mt-4" aria-labelledby="session-heading">
+    <section aria-labelledby="session-heading">
       <div className="mb-3 flex min-w-0 flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <h2 id="session-heading" className="m-0 text-sm font-medium leading-4 text-foreground">Session 记录</h2>
