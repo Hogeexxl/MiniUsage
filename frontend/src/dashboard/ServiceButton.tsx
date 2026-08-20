@@ -76,7 +76,11 @@ export function ServiceButton({ client = serviceClient }: { client?: ServiceClie
       >
         停止服务
       </StatefulButton>
-      <AnimatedToastStack toasts={toast.toasts} onDismiss={toast.dismissToast} fixed />
+      <AnimatedToastStack
+        toasts={toast.toasts}
+        onDismiss={toast.dismissToast}
+        placement="fixed"
+      />
     </>
   );
 }
