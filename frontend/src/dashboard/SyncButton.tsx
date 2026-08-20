@@ -28,7 +28,7 @@ export function SyncButton({ disabled, refreshState, lastSyncAtMs, onClick }: Sy
     <StatefulButton
       state={state}
       variant="outline"
-      size="md"
+      size="sm"
       ripple={false}
       disabled={disabled}
       loadingText="同步中…"
