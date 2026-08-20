@@ -43,7 +43,7 @@ describe("UpdateButton / useUpdateController (T-DIST-009)", () => {
     );
     await waitFor(() => expect(screen.getByRole("button", { name: "检查更新" })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "检查更新" }));
-    expect(screen.getByRole("button", { name: "检查中…" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /检查中…/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: "同步数据" })).toBeEnabled();
     resolveCheck(latest(false));
     await waitFor(() => expect(screen.getByRole("button", { name: "已是最新" })).toBeEnabled());
@@ -65,13 +65,14 @@ describe("UpdateButton / useUpdateController (T-DIST-009)", () => {
     expect(screen.getByRole("button", { name: "版本升级" })).toBeEnabled();
   });
 
-  it("shows the newer-version feedback after a manual check", async () => {
+  it("uses only the upgrade button after a manual check finds a newer version", async () => {
     const client = clientWith({ checkUpdate: vi.fn(async () => latest(true)) });
     render(<UpdateButton client={client} />);
     await waitFor(() => expect(screen.getByRole("button", { name: "检查更新" })).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: "检查更新" }));
-    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("发现新版本 v0.1.1"));
-    expect(screen.getByRole("button", { name: "版本升级" })).toBeEnabled();
+    await waitFor(() => expect(screen.getByRole("button", { name: "版本升级" })).toBeEnabled());
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.queryByText(/发现新版本/)).not.toBeInTheDocument();
   });
 
   it("reports manual failures while preserving a known upgrade, and keeps automatic failures silent", async () => {
