@@ -1,6 +1,8 @@
+"use client";
+
 import { AnimatePresence, motion, useReducedMotion, type HTMLMotionProps, type Variants } from "motion/react";
-import { useState, type ReactNode } from "react";
-import { EASE_OUT, SPRING_PRESS, SPRING_SWAP } from "../lib/ease";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { EASE_OUT, EASE_OUT_CSS, SPRING_PRESS, SPRING_SWAP } from "../lib/ease";
 import { cn } from "../lib/cn";
 
 export type ActionSwapItem = {
@@ -13,9 +15,13 @@ export type ActionSwapItem = {
 export type ActionSwapButtonVariant = "primary" | "secondary" | "outline" | "ghost";
 export type ActionSwapButtonSize = "sm" | "md" | "lg" | "icon";
 export type ActionSwapAnimation = "blur" | "roll" | "cascade";
+
 type CoreAnimation = "blur" | "roll";
 
-export interface ActionSwapButtonProps extends Omit<HTMLMotionProps<"button">, "children" | "onChange"> {
+export interface ActionSwapButtonProps extends Omit<
+  HTMLMotionProps<"button">,
+  "children" | "onChange"
+> {
   items: ActionSwapItem[];
   value?: string;
   defaultValue?: string;
@@ -50,33 +56,83 @@ const CASCADE_STAGGER = 0.025;
 
 const CASCADE_LETTER_VARIANTS: Variants = {
   initial: { opacity: 0, y: "105%", filter: ROLL_BLUR },
-  animate: (delay: number = 0) => ({ opacity: 1, y: "0%", filter: "blur(0px)", transition: { ...SPRING_SWAP, delay } }),
-  exit: (delay: number = 0) => ({ opacity: 0, y: "-105%", filter: ROLL_BLUR, transition: { duration: 0.16, ease: EASE_OUT, delay: delay * 0.5 } }),
+  animate: (delay: number = 0) => ({
+    opacity: 1,
+    y: "0%",
+    filter: "blur(0px)",
+    transition: { ...SPRING_SWAP, delay },
+  }),
+  exit: (delay: number = 0) => ({
+    opacity: 0,
+    y: "-105%",
+    filter: ROLL_BLUR,
+    transition: { duration: 0.16, ease: EASE_OUT, delay: delay * 0.5 },
+  }),
 };
 
 const TEXT_VARIANTS: Record<CoreAnimation, Variants> = {
   blur: {
     initial: { opacity: 0, scale: 0.94, filter: SWAP_BLUR },
-    animate: { opacity: 1, scale: 1, filter: "blur(0px)", transition: BLUR_TRANSITION },
-    exit: { opacity: 0, scale: 0.94, filter: SWAP_BLUR, transition: BLUR_TRANSITION },
+    animate: {
+      opacity: 1,
+      scale: 1,
+      filter: "blur(0px)",
+      transition: BLUR_TRANSITION,
+    },
+    exit: {
+      opacity: 0,
+      scale: 0.94,
+      filter: SWAP_BLUR,
+      transition: BLUR_TRANSITION,
+    },
   },
   roll: {
     initial: { opacity: 0, y: "90%", filter: ROLL_BLUR },
-    animate: { opacity: 1, y: "0%", filter: "blur(0px)", transition: ROLL_TRANSITION },
-    exit: { opacity: 0, y: "-90%", filter: ROLL_BLUR, transition: ROLL_EXIT_TRANSITION },
+    animate: {
+      opacity: 1,
+      y: "0%",
+      filter: "blur(0px)",
+      transition: ROLL_TRANSITION,
+    },
+    exit: {
+      opacity: 0,
+      y: "-90%",
+      filter: ROLL_BLUR,
+      transition: ROLL_EXIT_TRANSITION,
+    },
   },
 };
 
 const ICON_VARIANTS: Record<CoreAnimation, Variants> = {
   blur: {
     initial: { opacity: 0, scale: 0.25, filter: SWAP_BLUR },
-    animate: { opacity: 1, scale: 1, filter: "blur(0px)", transition: BLUR_TRANSITION },
-    exit: { opacity: 0, scale: 0.25, filter: SWAP_BLUR, transition: BLUR_TRANSITION },
+    animate: {
+      opacity: 1,
+      scale: 1,
+      filter: "blur(0px)",
+      transition: BLUR_TRANSITION,
+    },
+    exit: {
+      opacity: 0,
+      scale: 0.25,
+      filter: SWAP_BLUR,
+      transition: BLUR_TRANSITION,
+    },
   },
   roll: {
     initial: { opacity: 0, y: 12, filter: ROLL_BLUR },
-    animate: { opacity: 1, y: 0, filter: "blur(0px)", transition: ROLL_TRANSITION },
-    exit: { opacity: 0, y: -12, filter: ROLL_BLUR, transition: ROLL_EXIT_TRANSITION },
+    animate: {
+      opacity: 1,
+      y: 0,
+      filter: "blur(0px)",
+      transition: ROLL_TRANSITION,
+    },
+    exit: {
+      opacity: 0,
+      y: -12,
+      filter: ROLL_BLUR,
+      transition: ROLL_EXIT_TRANSITION,
+    },
   },
 };
 
@@ -94,29 +150,77 @@ const SIZE_CLASS: Record<ActionSwapButtonSize, string> = {
   icon: "h-10 w-10 rounded-full",
 };
 
-export function ActionSwapText({ value, children, animation = "blur", className }: ActionSwapTextProps) {
+export function ActionSwapText({
+  value,
+  children,
+  animation = "blur",
+  className,
+}: ActionSwapTextProps) {
   const reduce = useReducedMotion();
+  const measureRef = useRef<HTMLSpanElement>(null);
+  const [width, setWidth] = useState<number>();
+
+  useLayoutEffect(() => {
+    const nextWidth = measureRef.current?.offsetWidth;
+    if (!nextWidth) return;
+    setWidth((currentWidth) => (currentWidth === nextWidth ? currentWidth : nextWidth));
+  });
+
   const label = typeof children === "string" ? children : null;
   const cascade = animation === "cascade" && label !== null && !reduce;
-  const coreAnimation: CoreAnimation = animation === "cascade" ? "roll" : animation;
+  const coreAnimation: CoreAnimation =
+    animation === "cascade" ? "roll" : animation;
 
   return (
-    <span className={cn("relative -my-[0.08em] inline-block max-w-full whitespace-nowrap py-[0.08em] align-bottom", className)} style={{ clipPath: "inset(0 -999px)", WebkitClipPath: "inset(0 -999px)" }}>
-      <span aria-hidden className="invisible inline-block whitespace-nowrap">
-        {cascade ? label.split("").map((char, index) => <span key={index} className="inline-block whitespace-pre">{char}</span>) : children}
+    <span
+      className={cn("relative inline-block overflow-hidden whitespace-nowrap align-bottom", className)}
+      style={{
+        width,
+        transition: reduce ? undefined : `width 220ms ${EASE_OUT_CSS}`,
+      }}
+    >
+      <span
+        ref={measureRef}
+        aria-hidden
+        className="invisible inline-block whitespace-nowrap"
+      >
+        {children}
       </span>
-      <span className="sr-only">{children}</span>
       {cascade ? (
-        <AnimatePresence initial={false}>
-          <motion.span key={`cascade-${value}`} aria-hidden initial="initial" animate="animate" exit="exit" className="absolute left-0 top-[0.08em] inline-block whitespace-pre">
-            {label.split("").map((char, i) => (
-              <motion.span key={i} custom={i * CASCADE_STAGGER} variants={CASCADE_LETTER_VARIANTS} className="inline-block whitespace-pre will-change-[opacity,filter,transform]">{char}</motion.span>
-            ))}
-          </motion.span>
-        </AnimatePresence>
+        <>
+          <span className="sr-only">{label}</span>
+          <AnimatePresence initial={false}>
+            <motion.span
+              key={`cascade-${value}`}
+              aria-hidden
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              className="absolute left-0 top-0 inline-block whitespace-pre"
+            >
+              {label.split("").map((char, i) => (
+                <motion.span
+                  key={i}
+                  custom={i * CASCADE_STAGGER}
+                  variants={CASCADE_LETTER_VARIANTS}
+                  className="inline-block whitespace-pre will-change-[opacity,filter,transform]"
+                >
+                  {char}
+                </motion.span>
+              ))}
+            </motion.span>
+          </AnimatePresence>
+        </>
       ) : (
         <AnimatePresence initial={false}>
-          <motion.span aria-hidden key={`${animation}-${value}`} variants={TEXT_VARIANTS[coreAnimation]} initial={reduce ? false : "initial"} animate={reduce ? { opacity: 1, filter: "blur(0px)", scale: 1, y: 0 } : "animate"} exit={reduce ? undefined : "exit"} className="absolute left-0 top-[0.08em] inline-block max-w-full truncate will-change-[opacity,filter,transform]">
+          <motion.span
+            key={`${animation}-${value}`}
+            variants={TEXT_VARIANTS[coreAnimation]}
+            initial={reduce ? false : "initial"}
+            animate={reduce ? { opacity: 1, filter: "blur(0px)", scale: 1, y: 0 } : "animate"}
+            exit={reduce ? undefined : "exit"}
+            className="absolute left-0 top-0 inline-block will-change-[opacity,filter,transform]"
+          >
             {children}
           </motion.span>
         </AnimatePresence>
@@ -125,13 +229,28 @@ export function ActionSwapText({ value, children, animation = "blur", className 
   );
 }
 
-export function ActionSwapIcon({ value, children, animation = "blur", className }: ActionSwapIconProps) {
+export function ActionSwapIcon({
+  value,
+  children,
+  animation = "blur",
+  className,
+}: ActionSwapIconProps) {
   const reduce = useReducedMotion();
-  const coreAnimation: CoreAnimation = animation === "cascade" ? "roll" : animation;
+  const coreAnimation: CoreAnimation =
+    animation === "cascade" ? "roll" : animation;
+
   return (
     <span className={cn("relative inline-grid shrink-0 place-items-center overflow-hidden", className)}>
       <AnimatePresence mode="popLayout" initial={false}>
-        <motion.span key={`${animation}-${value}`} aria-hidden variants={ICON_VARIANTS[coreAnimation]} initial={reduce ? false : "initial"} animate={reduce ? { opacity: 1, filter: "blur(0px)", scale: 1, y: 0 } : "animate"} exit={reduce ? undefined : "exit"} className="col-start-1 row-start-1 inline-flex items-center justify-center will-change-[opacity,filter,transform]">
+        <motion.span
+          key={`${animation}-${value}`}
+          aria-hidden
+          variants={ICON_VARIANTS[coreAnimation]}
+          initial={reduce ? false : "initial"}
+          animate={reduce ? { opacity: 1, filter: "blur(0px)", scale: 1, y: 0 } : "animate"}
+          exit={reduce ? undefined : "exit"}
+          className="col-start-1 row-start-1 inline-flex items-center justify-center will-change-[opacity,filter,transform]"
+        >
           {children}
         </motion.span>
       </AnimatePresence>
@@ -139,7 +258,21 @@ export function ActionSwapIcon({ value, children, animation = "blur", className 
   );
 }
 
-export function ActionSwapButton({ items, value, defaultValue, onValueChange, variant = "secondary", size = "md", animation = "blur", iconOnly = size === "icon", cycle = true, className, disabled, onClick, ...rest }: ActionSwapButtonProps) {
+export function ActionSwapButton({
+  items,
+  value,
+  defaultValue,
+  onValueChange,
+  variant = "secondary",
+  size = "md",
+  animation = "blur",
+  iconOnly = size === "icon",
+  cycle = true,
+  className,
+  disabled,
+  onClick,
+  ...rest
+}: ActionSwapButtonProps) {
   const reduce = useReducedMotion();
   const [internalValue, setInternalValue] = useState(defaultValue ?? items[0]?.id);
   const currentValue = value ?? internalValue;
@@ -147,12 +280,42 @@ export function ActionSwapButton({ items, value, defaultValue, onValueChange, va
   const activeItem = items[activeIndex] ?? items[0];
   const hasIcon = items.some((item) => item.icon);
   const nextItem = cycle && items.length > 0 ? items[(activeIndex + 1) % items.length] : undefined;
+
   if (!activeItem) return null;
   const accessibleLabel = activeItem.ariaLabel ?? (iconOnly && typeof activeItem.label === "string" ? activeItem.label : undefined);
+
   return (
-    <motion.button type="button" disabled={disabled} whileTap={reduce || disabled ? undefined : { scale: 0.97 }} transition={SPRING_PRESS} className={cn("inline-flex items-center justify-center overflow-hidden font-medium transition-colors", "disabled:pointer-events-none disabled:opacity-50", VARIANT_CLASS[variant], SIZE_CLASS[size], className)} aria-label={accessibleLabel} onClick={(event) => { onClick?.(event); if (event.defaultPrevented || disabled || !cycle || !nextItem) return; if (value === undefined) setInternalValue(nextItem.id); onValueChange?.(nextItem.id, nextItem); }} {...rest}>
-      {hasIcon ? <ActionSwapIcon value={activeItem.id} animation={animation} className="h-4 w-4">{activeItem.icon ?? null}</ActionSwapIcon> : null}
-      {!iconOnly ? <ActionSwapText value={activeItem.id} animation={animation}>{activeItem.label}</ActionSwapText> : null}
+    <motion.button
+      type="button"
+      disabled={disabled}
+      whileTap={reduce || disabled ? undefined : { scale: 0.97 }}
+      transition={SPRING_PRESS}
+      className={cn(
+        "inline-flex items-center justify-center overflow-hidden font-medium transition-colors",
+        "disabled:pointer-events-none disabled:opacity-50",
+        VARIANT_CLASS[variant],
+        SIZE_CLASS[size],
+        className,
+      )}
+      aria-label={accessibleLabel}
+      onClick={(event) => {
+        onClick?.(event);
+        if (event.defaultPrevented || disabled || !cycle || !nextItem) return;
+        if (value === undefined) setInternalValue(nextItem.id);
+        onValueChange?.(nextItem.id, nextItem);
+      }}
+      {...rest}
+    >
+      {hasIcon ? (
+        <ActionSwapIcon value={activeItem.id} animation={animation} className="h-4 w-4">
+          {activeItem.icon ?? null}
+        </ActionSwapIcon>
+      ) : null}
+      {!iconOnly ? (
+        <ActionSwapText value={activeItem.id} animation={animation}>
+          {activeItem.label}
+        </ActionSwapText>
+      ) : null}
     </motion.button>
   );
 }
