@@ -1,3 +1,5 @@
+"use client";
+
 import { motion, MotionConfig, useReducedMotion, type Transition } from "motion/react";
 import {
   createContext,
@@ -28,6 +30,8 @@ function useTabs() {
   return ctx;
 }
 
+// Weighty spring for the active-tab indicator: a touch of overshoot so it
+// settles with life instead of snapping.
 const transition: Transition = {
   type: "spring",
   stiffness: 170,
@@ -69,6 +73,10 @@ export function Tabs({
   return (
     <MotionConfig transition={reduce ? { duration: 0 } : transition}>
       <TabsCtx.Provider value={contextValue}>
+        {/* layoutRoot: the indicator's layoutId measures in page coordinates, so
+            inside fixed/scrolled containers it would replay scroll offsets as
+            movement. The pill only ever travels within the list, so scoping
+            projection to the Tabs wrapper is always correct. */}
         <motion.div layoutRoot className={className}>
           {children}
         </motion.div>
@@ -121,14 +129,14 @@ export function TabsTrigger({
       >
         {children}
         {active ? (
-          <motion.span
-            layoutId={layoutId}
-            layout="position"
-            className={cn(
-              "absolute -bottom-px left-0 right-0 h-px bg-primary",
-              indicatorClassName,
-            )}
-          />
+        <motion.span
+          layoutId={layoutId}
+          layout="position"
+          className={cn(
+            "absolute -bottom-px left-0 right-0 h-px bg-primary",
+            indicatorClassName,
+          )}
+        />
         ) : null}
       </button>
     );
@@ -143,7 +151,11 @@ export function TabsTrigger({
           layoutId={layoutId}
           layout="position"
           style={{ borderRadius: variant === "pill" ? 9999 : 8 }}
-          className={cn("absolute inset-0 bg-primary", radius, indicatorClassName)}
+          className={cn(
+            "absolute inset-0 bg-primary",
+            radius,
+            indicatorClassName,
+          )}
         />
       ) : null}
       <button
@@ -171,6 +183,9 @@ export function TabsContent({ value, children, className }: { value: string; chi
   const { value: current } = useTabs();
   const reduce = useReducedMotion();
   const active = current === value;
+  // Inactive panels stay mounted but hidden, so their content (e.g. source
+  // code) is present in the server-rendered HTML for crawlers and assistive
+  // tech, instead of being dropped from the DOM.
   if (!active) {
     return (
       <div hidden className={className}>
