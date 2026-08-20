@@ -35,16 +35,29 @@ export function ServiceButton({ client = serviceClient }: { client?: ServiceClie
     const controller = new AbortController();
     requestRef.current = controller;
     setState("stopping");
-    const toastId = toast.showToast({ status: "loading", title: "正在停止服务", duration: 0, dismissible: false });
+    const toastId = toast.showToast({
+      status: "loading",
+      title: "正在停止服务",
+      duration: 0,
+      dismissible: false,
+    });
     void client.stop(controller.signal).then(
       (next) => {
         setState(next);
-        toast.updateToast(toastId, { status: "success", title: "服务已停止", duration: 4200, dismissible: true });
+        toast.updateToast(toastId, {
+          status: "success",
+          title: "服务已停止",
+          dismissible: true,
+        });
       },
       (error: unknown) => {
         if (isAbortError(error)) return;
         setState("running");
-        toast.updateToast(toastId, { status: "error", title: "停止服务失败", duration: 4200, dismissible: true });
+        toast.updateToast(toastId, {
+          status: "error",
+          title: "停止服务失败",
+          dismissible: true,
+        });
       },
     );
   };
@@ -54,7 +67,7 @@ export function ServiceButton({ client = serviceClient }: { client?: ServiceClie
       <StatefulButton
         state={state === "stopping" ? "loading" : "idle"}
         variant="outline"
-        size="md"
+        size="sm"
         ripple={false}
         loadingText="停止中…"
         disabled={state !== "running"}
@@ -63,7 +76,7 @@ export function ServiceButton({ client = serviceClient }: { client?: ServiceClie
       >
         停止服务
       </StatefulButton>
-      <AnimatedToastStack toasts={toast.toasts} onDismiss={toast.dismissToast} />
+      <AnimatedToastStack toasts={toast.toasts} onDismiss={toast.dismissToast} fixed />
     </>
   );
 }
