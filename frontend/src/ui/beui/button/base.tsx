@@ -1,3 +1,5 @@
+"use client";
+
 import {
   AnimatePresence,
   type HTMLMotionProps,
@@ -26,6 +28,7 @@ export interface ButtonProps extends Omit<
   variant?: ButtonVariant;
   size?: ButtonSize;
   pressScale?: number;
+  /** Spawn a Material-style ripple from the press point. Off by default. */
   ripple?: boolean;
   children?: ReactNode;
 }
