@@ -3,6 +3,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const html = readFileSync(new URL("../../index.html", import.meta.url), "utf8");
 const inlineScript = html.match(/<script>\s*([\s\S]*?)\s*<\/script>/)?.[1];
+const bootstrapCases: Array<[string | null, boolean]> = [
+  [null, true],
+  ["dark", true],
+  ["light", false],
+  ["system", true],
+];
 
 function runBootstrap(stored: string | null, storageReadable = true) {
   window.localStorage.clear();
@@ -27,12 +33,7 @@ afterEach(() => {
 });
 
 describe("Theme first-paint bootstrap", () => {
-  it.each([
-    [null, true],
-    ["dark", true],
-    ["light", false],
-    ["system", true],
-  ])("maps stored theme %s to dark=%s before React", (stored, dark) => {
+  it.each(bootstrapCases)("maps stored theme %s to dark=%s before React", (stored, dark) => {
     expect(runBootstrap(stored, true)).toBe(dark);
   });
 
