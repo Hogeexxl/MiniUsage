@@ -27,7 +27,7 @@ export function ChartSection({ view }: { view: DashboardChartsView }) {
   });
 
   return (
-    <section className="mt-4" aria-label="使用分布图表" aria-busy={view.loading}>
+    <section aria-label="使用分布图表" aria-busy={view.loading}>
       {view.error ? <div className="mb-3 text-xs text-destructive" role="status">图表数据加载失败</div> : null}
       <div className="grid grid-cols-2 gap-4 max-[1279px]:grid-cols-1">
         <DistributionDonutCard title="模型分布" items={modelItems} />
