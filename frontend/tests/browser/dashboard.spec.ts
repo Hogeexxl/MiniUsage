@@ -318,9 +318,21 @@ test("C1 desktop 1512px matches the approved v0.2.0 dashboard geometry", async (
 
   const shell = page.locator(".dashboard-shell");
   const content = page.locator(".dashboard-content");
+  const topLevelStack = content.locator(":scope > div.flex.flex-col.gap-8").first();
   const kpi = page.getByLabel("KPI 指标");
   const cards = kpi.locator(":scope > *");
   await expect(cards).toHaveCount(4);
+  await expect(topLevelStack.locator(":scope > *")).toHaveCount(5);
+
+  const topLevelBoxes = await topLevelStack.locator(":scope > *").evaluateAll((nodes) => nodes.map((node) => {
+    const rect = node.getBoundingClientRect();
+    return { top: rect.top, bottom: rect.bottom };
+  }));
+  const topLevelGaps = topLevelBoxes.slice(1).map((box, index) => box.top - topLevelBoxes[index].bottom);
+  for (const gap of topLevelGaps) {
+    expect(gap).toBeGreaterThanOrEqual(31);
+    expect(gap).toBeLessThanOrEqual(33);
+  }
 
   const shellBox = await shell.boundingBox();
   const contentBox = await content.boundingBox();
@@ -369,10 +381,23 @@ test("C2 covers the approved v0.2.0 core interaction flow", async ({ page }) => 
   await waitForDashboard(page);
 
   await expect.poll(() => page.evaluate(() => document.documentElement.classList.contains("dark"))).toBe(true);
-  await page.getByRole("button", { name: "切换到浅色主题" }).click();
+  const themeToggle = page.getByRole("button", { name: "Switch to light mode" });
+  await expect(themeToggle).toHaveClass(/rounded-xl/);
+  await expect(themeToggle).toHaveClass(/border-border/);
+  await expect(themeToggle).toHaveClass(/bg-background/);
+  await expect(themeToggle).toHaveClass(/p-2\.5/);
+  const themeIconBox = await themeToggle.locator("svg").boundingBox();
+  expect(themeIconBox?.width).toBeCloseTo(20, 0);
+  expect(themeIconBox?.height).toBeCloseTo(20, 0);
+  const supportsViewTransition = await page.evaluate(() => "startViewTransition" in document);
+  await themeToggle.click();
+  if (supportsViewTransition) {
+    expect(await page.evaluate(() => document.documentElement.dataset.beuiVt)).toBe("circle-blur");
+    expect(await page.evaluate(() => document.documentElement.style.getPropertyValue("--beui-vt-origin"))).toBe("50% 100%");
+  }
   await expect.poll(() => page.evaluate(() => document.documentElement.classList.contains("dark"))).toBe(false);
   expect(await page.evaluate(() => localStorage.getItem("miniusage.theme"))).toBe("light");
-  await page.getByRole("button", { name: "切换到深色主题" }).click();
+  await page.getByRole("button", { name: "Switch to dark mode" }).click();
   await expect.poll(() => page.evaluate(() => document.documentElement.classList.contains("dark"))).toBe(true);
 
   await page.getByRole("tab", { name: "7d" }).click();
