@@ -14,24 +14,17 @@ export function UpdateButton({ client = miniUsageClient }: { client?: MiniUsageC
         : "idle";
 
   return (
-    <div className="flex min-w-0 items-center gap-2">
-      <StatefulButton
-        state={state}
-        variant="primary"
-        size="md"
-        ripple={false}
-        loadingText="检查中…"
-        successText="已是最新"
-        errorText="检查失败"
-        onClick={upgrade ? view.open_release : view.check_for_updates}
-      >
-        {upgrade ? "版本升级" : "检查更新"}
-      </StatefulButton>
-      {view.feedback && upgrade ? (
-        <span className="max-w-80 truncate text-[11px] leading-4 text-muted-foreground" role="status" aria-live="polite">
-          {view.feedback}
-        </span>
-      ) : null}
-    </div>
+    <StatefulButton
+      state={state}
+      variant="primary"
+      size="sm"
+      ripple={false}
+      loadingText="检查中…"
+      successText="已是最新"
+      errorText="检查失败"
+      onClick={upgrade ? view.open_release : view.check_for_updates}
+    >
+      {upgrade ? "版本升级" : "检查更新"}
+    </StatefulButton>
   );
 }
