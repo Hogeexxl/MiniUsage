@@ -1,3 +1,5 @@
+"use client";
+
 import { Check, Loader2, X } from "lucide-react";
 import {
   AnimatePresence,
@@ -46,6 +48,8 @@ const CASCADE_LETTER_VARIANTS: Variants = {
 };
 
 const ICON_VARIANTS: Variants = {
+  // Width collapses too, so the icon adds/removes its own space smoothly
+  // instead of popping the row width in a single frame.
   initial: { opacity: 0, width: 0, scale: 0.7, filter: ROLL_BLUR },
   animate: {
     opacity: 1,
@@ -68,7 +72,6 @@ function IconSlot({ keyId, children }: { keyId: string; children: ReactNode }) {
   return (
     <motion.span
       key={keyId}
-      aria-hidden
       variants={ICON_VARIANTS}
       initial={reduce ? { opacity: 0 } : "initial"}
       animate={reduce ? { opacity: 1 } : "animate"}
@@ -94,6 +97,9 @@ function TextSlot({
   const label = typeof children === "string" ? children : null;
   const cascade = label !== null && !reduce;
 
+  // Measure strings with the same per-letter layout as the cascade. Measuring
+  // the whole string preserves kerning, which can make it narrower than the
+  // inline-block letters and clip the final glyph during the width animation.
   useLayoutEffect(() => {
     const nextWidth = measureRef.current?.offsetWidth;
     if (!nextWidth) return;
@@ -114,41 +120,45 @@ function TextSlot({
       >
         {cascade
           ? label.split("").map((char, index) => (
-              <span key={index} className="inline-block whitespace-pre">
+              <span
+                key={index}
+                className="inline-block whitespace-pre"
+              >
                 {char}
               </span>
             ))
           : children}
       </span>
-      <span className="sr-only">{children}</span>
 
       {cascade ? (
-        <AnimatePresence initial={false}>
-          <motion.span
-            key={`cascade-${value}`}
-            aria-hidden
-            initial="initial"
-            animate="animate"
-            exit="exit"
-            className="absolute left-0 top-0 inline-block whitespace-pre"
-          >
-            {label.split("").map((char, index) => (
-              <motion.span
-                key={index}
-                custom={index * CASCADE_STAGGER}
-                variants={CASCADE_LETTER_VARIANTS}
-                className="inline-block whitespace-pre will-change-[opacity,filter,transform]"
-              >
-                {char}
-              </motion.span>
-            ))}
-          </motion.span>
-        </AnimatePresence>
+        <>
+          <span className="sr-only">{label}</span>
+          <AnimatePresence initial={false}>
+            <motion.span
+              key={`cascade-${value}`}
+              aria-hidden
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              className="absolute left-0 top-0 inline-block whitespace-pre"
+            >
+              {label.split("").map((char, index) => (
+                <motion.span
+                  key={index}
+                  custom={index * CASCADE_STAGGER}
+                  variants={CASCADE_LETTER_VARIANTS}
+                  className="inline-block whitespace-pre will-change-[opacity,filter,transform]"
+                >
+                  {char}
+                </motion.span>
+              ))}
+            </motion.span>
+          </AnimatePresence>
+        </>
       ) : (
         <AnimatePresence initial={false}>
           <motion.span
             key={`text-${value}`}
-            aria-hidden
             initial={reduce ? { opacity: 0 } : { opacity: 0, y: 14, filter: ROLL_BLUR }}
             animate={reduce ? { opacity: 1 } : { opacity: 1, y: 0, filter: "blur(0px)" }}
             exit={reduce ? { opacity: 0 } : { opacity: 0, y: -14, filter: ROLL_BLUR }}
@@ -183,9 +193,10 @@ export const StatefulButton = forwardRef<HTMLButtonElement, StatefulButtonProps>
       : state === "success"
         ? successText
         : state === "error"
-          ? errorText
-          : children;
-  const textKey = typeof stateText === "string" ? `${state}-${stateText}` : state;
+        ? errorText
+        : children;
+  const textKey =
+    typeof stateText === "string" ? `${state}-${stateText}` : state;
 
   return (
     <Button ref={ref} disabled={disabled || isBusy} aria-busy={isBusy} whileHover={undefined} {...rest}>
