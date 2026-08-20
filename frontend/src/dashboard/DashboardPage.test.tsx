@@ -185,7 +185,8 @@ describe("DashboardPage v0.2.0", () => {
     await waitFor(() => expect(totalTokenCard()).toHaveTextContent("12"));
 
     const main = document.querySelector("main.dashboard-content");
-    expect(main).toHaveClass("flex", "flex-col", "gap-8");
+    expect(main).toBeInTheDocument();
+    expect(main?.firstElementChild).toHaveClass("flex", "flex-col", "gap-8");
     expect(screen.getByRole("heading", { name: "MiniUsage" })).toHaveClass("text-foreground");
 
     const update = screen.getByRole("button", { name: "检查更新" });
