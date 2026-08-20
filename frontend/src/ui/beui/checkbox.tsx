@@ -1,3 +1,5 @@
+"use client";
+
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useId } from "react";
 import { EASE_OUT, SPRING_PRESS } from "../lib/ease";
@@ -15,10 +17,21 @@ export interface CheckboxProps {
   className?: string;
   id?: string;
   "aria-label"?: string;
+  /** Associates an external message (e.g. a form error) with the control. */
   "aria-describedby"?: string;
 }
 
-export function Checkbox({ checked, onCheckedChange, disabled, indeterminate, label, className, id: idProp, "aria-label": ariaLabel, "aria-describedby": ariaDescribedBy }: CheckboxProps) {
+export function Checkbox({
+  checked,
+  onCheckedChange,
+  disabled,
+  indeterminate,
+  label,
+  className,
+  id: idProp,
+  "aria-label": ariaLabel,
+  "aria-describedby": ariaDescribedBy,
+}: CheckboxProps) {
   const autoId = useId();
   const id = idProp ?? autoId;
   const reduce = useReducedMotion();
@@ -26,7 +39,14 @@ export function Checkbox({ checked, onCheckedChange, disabled, indeterminate, la
   const path = indeterminate ? INDETERMINATE_PATH : CHECK_PATH;
 
   return (
-    <label htmlFor={id} className={cn("inline-flex items-center gap-3", disabled ? "cursor-not-allowed" : "cursor-pointer", className)}>
+    <label
+      htmlFor={id}
+      className={cn(
+        "inline-flex items-center gap-3",
+        disabled ? "cursor-not-allowed" : "cursor-pointer",
+        className,
+      )}
+    >
       <motion.button
         id={id}
         type="button"
@@ -38,12 +58,16 @@ export function Checkbox({ checked, onCheckedChange, disabled, indeterminate, la
         onClick={() => !disabled && onCheckedChange(!checked)}
         whileTap={reduce || disabled ? undefined : { scale: 0.92 }}
         transition={SPRING_PRESS}
-        data-state={checked ? "checked" : indeterminate ? "indeterminate" : "unchecked"}
+        data-state={
+          checked ? "checked" : indeterminate ? "indeterminate" : "unchecked"
+        }
         className={cn(
           "inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md border-2 outline-none transition-colors duration-200",
           "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
           "disabled:cursor-not-allowed disabled:opacity-60",
-          showMark ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/50 bg-background hover:border-muted-foreground",
+          showMark
+            ? "border-primary bg-primary text-primary-foreground"
+            : "border-muted-foreground/50 bg-background hover:border-muted-foreground",
         )}
       >
         <AnimatePresence initial={false}>
@@ -60,17 +84,40 @@ export function Checkbox({ checked, onCheckedChange, disabled, indeterminate, la
               strokeLinejoin="round"
               initial={reduce ? { opacity: 1 } : { opacity: 0, scale: 0.5 }}
               animate={reduce ? { opacity: 1 } : { opacity: 1, scale: 1 }}
-              exit={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.5, filter: "blur(4px)" }}
-              transition={reduce ? { duration: 0 } : { duration: 0.16, ease: EASE_OUT }}
+              exit={
+                reduce
+                  ? { opacity: 0 }
+                  : { opacity: 0, scale: 0.5, filter: "blur(4px)" }
+              }
+              transition={
+                reduce ? { duration: 0 } : { duration: 0.16, ease: EASE_OUT }
+              }
               aria-hidden
             >
               <title>{indeterminate ? "Partially selected" : "Selected"}</title>
-              <motion.path d={path} initial={reduce ? { pathLength: 1 } : { pathLength: 0 }} animate={{ pathLength: 1 }} transition={reduce ? { duration: 0 } : { duration: indeterminate ? 0.2 : 0.3, ease: EASE_OUT, delay: 0.04 }} />
+              <motion.path
+                d={path}
+                initial={reduce ? { pathLength: 1 } : { pathLength: 0 }}
+                animate={{ pathLength: 1 }}
+                transition={
+                  reduce
+                    ? { duration: 0 }
+                    : {
+                        duration: indeterminate ? 0.2 : 0.3,
+                        ease: EASE_OUT,
+                        delay: 0.04,
+                      }
+                }
+              />
             </motion.svg>
           ) : null}
         </AnimatePresence>
       </motion.button>
-      {label ? <span className={cn("select-none text-sm text-foreground", disabled && "opacity-60")}>{label}</span> : null}
+      {label ? (
+        <span className={cn("select-none text-sm text-foreground", disabled && "opacity-60")}>
+          {label}
+        </span>
+      ) : null}
     </label>
   );
 }
