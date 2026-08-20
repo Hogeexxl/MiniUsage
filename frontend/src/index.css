@@ -87,19 +87,11 @@ input {
   min-width: 0;
 }
 
-.dashboard-controls {
-  margin-top: 32px;
-}
-
 .dashboard-controls-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-}
-
-.metrics-section {
-  margin-top: 32px;
 }
 
 @media (min-width: 1280px) {
