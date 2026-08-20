@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 
 import { StatefulButton } from "./stateful";
 
-describe("StatefulButton accessibility", () => {
-  it("exposes only the current state label while animated history stays aria-hidden", () => {
+describe("StatefulButton official behavior", () => {
+  it("keeps the current state visible and reports busy state while animated labels overlap", () => {
     const view = render(
       <StatefulButton state="idle" loadingText="检查中…" successText="已是最新">
         检查更新
@@ -17,15 +17,18 @@ describe("StatefulButton accessibility", () => {
         检查更新
       </StatefulButton>,
     );
-    expect(screen.getByRole("button", { name: "检查中…" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /检查更新检查中/ })).not.toBeInTheDocument();
+    const loadingButton = screen.getByRole("button", { name: /检查中…/ });
+    expect(loadingButton).toBeDisabled();
+    expect(loadingButton).toHaveAttribute("aria-busy", "true");
+    expect(loadingButton).toHaveTextContent("检查中…");
 
     view.rerender(
       <StatefulButton state="success" loadingText="检查中…" successText="已是最新">
         检查更新
       </StatefulButton>,
     );
-    expect(screen.getByRole("button", { name: "已是最新" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /检查中.*已是最新/ })).not.toBeInTheDocument();
+    const successButton = screen.getByRole("button", { name: /已是最新/ });
+    expect(successButton).toHaveAttribute("aria-busy", "false");
+    expect(successButton).toHaveTextContent("已是最新");
   });
 });
