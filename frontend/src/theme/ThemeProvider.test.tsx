@@ -1,5 +1,5 @@
 import { act, render, renderHook, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ThemeProvider, useTheme } from "./ThemeProvider";
 import { DEFAULT_THEME, THEME_STORAGE_KEY } from "./theme";
@@ -41,6 +41,16 @@ describe("ThemeProvider", () => {
     expect(screen.getByTestId("theme")).toHaveTextContent("dark");
     expect(document.documentElement).toHaveClass("dark");
     expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe("dark");
+  });
+
+  it("falls back to dark when storage reads are unavailable", () => {
+    const getItem = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new DOMException("blocked", "SecurityError");
+    });
+    render(<ThemeProvider><Probe /></ThemeProvider>);
+    expect(screen.getByTestId("theme")).toHaveTextContent("dark");
+    expect(document.documentElement).toHaveClass("dark");
+    getItem.mockRestore();
   });
 
   it("switches through the provider API and persists the next value", () => {
