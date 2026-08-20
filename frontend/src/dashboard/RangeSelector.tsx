@@ -20,7 +20,6 @@ export function RangeSelector({ value, onChange }: RangeSelectorProps) {
       value={value}
       onValueChange={(range) => onChange(range as RangeKey)}
       variant="pill"
-      className="range-selector"
     >
       <TabsList>
         {RANGE_KEYS.map((range) => (
