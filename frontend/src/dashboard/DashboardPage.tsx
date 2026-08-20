@@ -64,20 +64,25 @@ export function DashboardPage({ options }: { options?: DashboardPageOptions }) {
 
   return (
     <div className="dashboard-shell bg-background text-foreground">
-      <main className="dashboard-content">
+      <main className="dashboard-content flex flex-col gap-8">
         <header className="dashboard-header">
           <div className="flex min-w-0 items-center gap-3">
-            <h1 className="!text-foreground">MiniUsage</h1>
+            <h1 className="text-foreground">MiniUsage</h1>
             <UpdateButton client={options?.client} />
           </div>
           <div className="dashboard-sync-group">
             <span className="flex items-center whitespace-nowrap text-sm text-muted-foreground">
               上次同步：
-              <ActionSwapText value={syncText} animation="blur" className="text-foreground">{syncText}</ActionSwapText>
+              <ActionSwapText value={syncText} animation="blur">{syncText}</ActionSwapText>
             </span>
             <SyncButton disabled={!refreshEnabled} refreshState={view.refresh_state} lastSyncAtMs={view.last_scan_completed_at_ms} onClick={view.request_refresh} />
             <ServiceButton client={options?.serviceClient} />
-            <ThemeToggle variant="circle-blur" start="top-right" className="h-10 w-10 rounded-full border border-border bg-transparent text-foreground transition-colors hover:bg-primary/5" iconClassName="h-4 w-4" />
+            <ThemeToggle
+              variant="circle-blur"
+              start="bottom-up"
+              className="rounded-xl border border-border bg-background p-2.5"
+              iconClassName="h-5 w-5"
+            />
           </div>
         </header>
 
