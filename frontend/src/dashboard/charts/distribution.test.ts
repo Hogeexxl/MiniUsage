@@ -26,10 +26,10 @@ describe("distribution ranking", () => {
   });
 
   it("[T-S06-003] maps ranked series to the shared palette and keeps Other neutral", () => {
-    expect(chartSeriesColor(0)).toBe("var(--chart-mint-a)");
-    expect(chartSeriesColor(4)).toBe("var(--chart-butter-a)");
-    expect(chartSeriesColor(5)).toBe("var(--chart-mint-b)");
-    expect(chartSeriesColor(9)).toBe("var(--chart-butter-b)");
+    expect(chartSeriesColor(0)).toBe("var(--chart-series-1)");
+    expect(chartSeriesColor(4)).toBe("var(--chart-series-5)");
+    expect(chartSeriesColor(5)).toBe("var(--chart-series-6)");
+    expect(chartSeriesColor(9)).toBe("var(--chart-series-10)");
     expect(chartSeriesColor(0, true)).toBe("var(--chart-other)");
   });
 });

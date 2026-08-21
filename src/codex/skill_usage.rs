@@ -7,7 +7,7 @@
 use std::collections::BTreeSet;
 
 use chrono::DateTime;
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 use super::CompleteUsageLine;
 
@@ -45,7 +45,7 @@ impl SkillUsageParser {
         }
 
         let mut names = BTreeSet::new();
-        collect_argument_roots(payload, &mut names);
+        collect_call_arguments(item_type, payload, &mut names);
 
         (!names.is_empty()).then(|| SkillUsageEvidence {
             occurred_at_ms,
@@ -54,42 +54,282 @@ impl SkillUsageParser {
     }
 }
 
-fn collect_argument_roots(payload: &serde_json::Map<String, Value>, output: &mut BTreeSet<String>) {
-    if let Some(input) = payload.get("input") {
-        collect_locator_texts(input, output);
-    }
-
-    if let Some(arguments) = payload.get("arguments") {
-        if let Value::String(arguments) = arguments {
-            match serde_json::from_str::<Value>(arguments) {
-                Ok(value) => collect_locator_texts(&value, output),
-                Err(_) => extract_from_locator_text(arguments, output),
-            }
-        } else {
-            collect_locator_texts(arguments, output);
-        }
-    }
-
-    if let Some(action) = payload.get("action") {
-        collect_locator_texts(action, output);
-    }
-}
-
-fn collect_locator_texts(value: &Value, output: &mut BTreeSet<String>) {
-    match value {
-        Value::String(text) => extract_from_locator_text(text, output),
-        Value::Array(values) => {
-            for value in values {
-                collect_locator_texts(value, output);
+fn collect_call_arguments(
+    item_type: &str,
+    payload: &Map<String, Value>,
+    output: &mut BTreeSet<String>,
+) {
+    match item_type {
+        "function_call" if payload.get("name").and_then(Value::as_str) == Some("exec_command") => {
+            if let Some(arguments) = payload.get("arguments") {
+                collect_function_arguments(arguments, output);
             }
         }
-        Value::Object(object) => {
-            for value in object.values() {
-                collect_locator_texts(value, output);
+        "custom_tool_call" if payload.get("name").and_then(Value::as_str) == Some("exec") => {
+            if let Some(input) = payload.get("input").and_then(Value::as_str) {
+                collect_js_exec_commands(input, output);
+            }
+        }
+        "local_shell_call" => {
+            if let Some(action) = payload.get("action").and_then(Value::as_object) {
+                for key in ["cmd", "command"] {
+                    if let Some(value) = action.get(key) {
+                        collect_command_value(value, output);
+                    }
+                }
             }
         }
         _ => {}
     }
+}
+
+fn collect_function_arguments(arguments: &Value, output: &mut BTreeSet<String>) {
+    if let Value::String(text) = arguments {
+        let Ok(value) = serde_json::from_str::<Value>(text) else {
+            return;
+        };
+        collect_function_argument_object(&value, output);
+    } else {
+        collect_function_argument_object(arguments, output);
+    }
+}
+
+fn collect_function_argument_object(value: &Value, output: &mut BTreeSet<String>) {
+    let Some(object) = value.as_object() else {
+        return;
+    };
+    for key in ["cmd", "command"] {
+        if let Some(value) = object.get(key) {
+            collect_command_value(value, output);
+        }
+    }
+}
+
+fn collect_command_value(value: &Value, output: &mut BTreeSet<String>) {
+    match value {
+        Value::String(text) => extract_from_locator_text(text, output),
+        Value::Array(values) => {
+            for value in values {
+                if let Value::String(text) = value {
+                    extract_from_locator_text(text, output);
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+fn collect_js_exec_commands(input: &str, output: &mut BTreeSet<String>) {
+    const MARKER: &str = "tools.exec_command";
+    let mut cursor = 0usize;
+    while let Some(start) = find_js_code_marker(input, MARKER, cursor) {
+        let after_marker = start + MARKER.len();
+        let Some(open_offset) = input[after_marker..].find('(') else {
+            break;
+        };
+        let open = after_marker + open_offset;
+        let Some(close) = find_js_call_end(input, open) else {
+            break;
+        };
+        if let Some(command) = extract_js_property_string(&input[open + 1..close], "cmd") {
+            extract_from_locator_text(&command, output);
+        }
+        cursor = close.saturating_add(1);
+    }
+}
+
+fn find_js_code_marker(input: &str, marker: &str, from: usize) -> Option<usize> {
+    let bytes = input.as_bytes();
+    let marker_bytes = marker.as_bytes();
+    let mut index = from;
+    let mut quote = None;
+    let mut escaped = false;
+    let mut line_comment = false;
+    let mut block_comment = false;
+    while index < bytes.len() {
+        let byte = bytes[index];
+        if line_comment {
+            if byte == b'\n' {
+                line_comment = false;
+            }
+            index += 1;
+            continue;
+        }
+        if block_comment {
+            if byte == b'*' && bytes.get(index + 1) == Some(&b'/') {
+                block_comment = false;
+                index += 2;
+            } else {
+                index += 1;
+            }
+            continue;
+        }
+        if let Some(delimiter) = quote {
+            if escaped {
+                escaped = false;
+            } else if byte == b'\\' {
+                escaped = true;
+            } else if byte == delimiter {
+                quote = None;
+            }
+            index += 1;
+            continue;
+        }
+        if byte == b'\'' || byte == b'"' || byte == b'`' {
+            quote = Some(byte);
+            index += 1;
+            continue;
+        }
+        if byte == b'/' {
+            match bytes.get(index + 1) {
+                Some(b'/') => {
+                    line_comment = true;
+                    index += 2;
+                    continue;
+                }
+                Some(b'*') => {
+                    block_comment = true;
+                    index += 2;
+                    continue;
+                }
+                _ => {}
+            }
+        }
+        if bytes.get(index..index + marker_bytes.len()) == Some(marker_bytes) {
+            return Some(index);
+        }
+        index += 1;
+    }
+    None
+}
+
+fn find_js_call_end(input: &str, open: usize) -> Option<usize> {
+    let bytes = input.as_bytes();
+    let mut depth = 0usize;
+    let mut quote = None;
+    let mut escaped = false;
+    let mut line_comment = false;
+    let mut block_comment = false;
+    for index in open..bytes.len() {
+        let byte = bytes[index];
+        if line_comment {
+            if byte == b'\n' {
+                line_comment = false;
+            }
+            continue;
+        }
+        if block_comment {
+            if byte == b'*' && bytes.get(index + 1) == Some(&b'/') {
+                block_comment = false;
+            }
+            continue;
+        }
+        if let Some(delimiter) = quote {
+            if escaped {
+                escaped = false;
+            } else if byte == b'\\' {
+                escaped = true;
+            } else if byte == delimiter {
+                quote = None;
+            }
+            continue;
+        }
+        if byte == b'\'' || byte == b'"' || byte == b'`' {
+            quote = Some(byte);
+            continue;
+        }
+        if byte == b'/' {
+            match bytes.get(index + 1) {
+                Some(b'/') => {
+                    line_comment = true;
+                    continue;
+                }
+                Some(b'*') => {
+                    block_comment = true;
+                    continue;
+                }
+                _ => {}
+            }
+        }
+        match byte {
+            b'(' => depth += 1,
+            b')' => {
+                depth = depth.checked_sub(1)?;
+                if depth == 0 {
+                    return Some(index);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+fn extract_js_property_string(input: &str, property: &str) -> Option<String> {
+    let bytes = input.as_bytes();
+    let mut cursor = 0usize;
+    while let Some(relative) = input[cursor..].find(property) {
+        let start = cursor + relative;
+        let end = start + property.len();
+        let previous_is_identifier = start > 0 && is_js_identifier_byte(bytes[start - 1]);
+        let next_is_identifier = bytes
+            .get(end)
+            .is_some_and(|byte| is_js_identifier_byte(*byte));
+        if previous_is_identifier || next_is_identifier {
+            cursor = end;
+            continue;
+        }
+        let mut index = end;
+        while bytes
+            .get(index)
+            .is_some_and(|byte| byte.is_ascii_whitespace())
+        {
+            index += 1;
+        }
+        if bytes.get(index) != Some(&b':') {
+            cursor = end;
+            continue;
+        }
+        index += 1;
+        while bytes
+            .get(index)
+            .is_some_and(|byte| byte.is_ascii_whitespace())
+        {
+            index += 1;
+        }
+        let delimiter = *bytes.get(index)?;
+        if !matches!(delimiter, b'\'' | b'"' | b'`') {
+            cursor = end;
+            continue;
+        }
+        index += 1;
+        let mut value = String::new();
+        let mut escaped = false;
+        while let Some(byte) = bytes.get(index).copied() {
+            if escaped {
+                value.push(match byte {
+                    b'n' => '\n',
+                    b'r' => '\r',
+                    b't' => '\t',
+                    other => other as char,
+                });
+                escaped = false;
+            } else if byte == b'\\' {
+                escaped = true;
+            } else if byte == delimiter {
+                return Some(value);
+            } else {
+                value.push(byte as char);
+            }
+            index += 1;
+        }
+        return None;
+    }
+    None
+}
+
+fn is_js_identifier_byte(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'$'
 }
 
 fn extract_from_locator_text(text: &str, output: &mut BTreeSet<String>) {
@@ -97,6 +337,19 @@ fn extract_from_locator_text(text: &str, output: &mut BTreeSet<String>) {
     let mut cursor = 0usize;
     while let Some(relative) = normalized[cursor..].find("SKILL.md") {
         let index = cursor + relative;
+        let after = index.saturating_add("SKILL.md".len());
+        let before_is_component_boundary =
+            index > 0 && normalized.as_bytes().get(index - 1) == Some(&b'/');
+        let after_is_component_boundary = normalized.as_bytes().get(after).is_none_or(|byte| {
+            !byte.is_ascii_alphanumeric() && !matches!(byte, b'_' | b'-' | b'.')
+        });
+        if !before_is_component_boundary || !after_is_component_boundary {
+            cursor = after;
+            if cursor >= normalized.len() {
+                break;
+            }
+            continue;
+        }
         let before = normalized[..index].trim_end_matches('/');
         let components: Vec<_> = before
             .split('/')
@@ -104,15 +357,42 @@ fn extract_from_locator_text(text: &str, output: &mut BTreeSet<String>) {
             .collect();
         if let Some(skill_name) = components.last().copied() {
             let ancestors = &components[..components.len() - 1];
-            if valid_skill_name(skill_name) && ancestors.contains(&"skills") {
-                output.insert(skill_name.to_owned());
+            if valid_skill_name(skill_name)
+                && let Some(skills_index) = ancestors
+                    .iter()
+                    .rposition(|component| *component == "skills")
+            {
+                let prefix = &ancestors[..skills_index];
+                let key = prefix
+                    .len()
+                    .checked_sub(4)
+                    .and_then(|index| {
+                        (prefix.get(index) == Some(&"plugins")
+                            && prefix.get(index + 1) == Some(&"cache"))
+                        .then(|| (index, prefix.get(index + 2), prefix.get(index + 3)))
+                    })
+                    .and_then(|(_, plugin, version)| match (plugin, version) {
+                        (Some(plugin), Some(version))
+                            if valid_namespace_component(plugin)
+                                && valid_namespace_component(version) =>
+                        {
+                            Some(format!("{plugin}:{skill_name}"))
+                        }
+                        _ => None,
+                    })
+                    .unwrap_or_else(|| skill_name.to_owned());
+                output.insert(key);
             }
         }
-        cursor = index.saturating_add("SKILL.md".len());
+        cursor = after;
         if cursor >= normalized.len() {
             break;
         }
     }
+}
+
+fn valid_namespace_component(value: &str) -> bool {
+    !value.is_empty() && !value.chars().any(char::is_control)
 }
 
 fn valid_skill_name(value: &str) -> bool {
@@ -153,17 +433,16 @@ mod tests {
     }
 
     #[test]
-    fn t_s07_001_p1_direct_paths_are_cross_platform_and_deduplicated_per_call() {
+    fn t_s07_001_function_exec_command_reads_json_arguments_and_deduplicates() {
         let parser = SkillUsageParser;
-        let parsed = parser
-            .parse_line(&response(
-                &json!({
-                    "type": "custom_tool_call",
-                    "input": "cat /Users/me/.codex/skills/frontend-skill/SKILL.md && type C:\\Users\\me\\.codex\\skills\\diagnosing-bugs\\SKILL.md && cat /Users/me/.codex/skills/frontend-skill/SKILL.md"
-                })
-                .to_string(),
-            ))
-            .unwrap();
+        let payload = json!({
+            "type": "function_call",
+            "name": "exec_command",
+            "arguments": json!({
+                "cmd": "cat /Users/me/.codex/skills/frontend-skill/SKILL.md && sed -n '1,40p' C:\\Users\\me\\.codex\\skills\\diagnosing-bugs\\SKILL.md && cat /Users/me/.codex/skills/frontend-skill/SKILL.md"
+            }).to_string(),
+        });
+        let parsed = parser.parse_line(&response(&payload.to_string())).unwrap();
         assert_eq!(
             parsed.skill_names,
             vec!["diagnosing-bugs", "frontend-skill"]
@@ -171,117 +450,94 @@ mod tests {
     }
 
     #[test]
-    fn t_s07_001_p2_intermediate_skill_directory_is_accepted() {
+    fn t_s07_002_custom_exec_reads_only_actual_tools_exec_command_js() {
         let parser = SkillUsageParser;
-        let parsed = parser
-            .parse_line(&response(
-                &json!({
-                    "type": "custom_tool_call",
-                    "input": [
-                        {"nested": {"path": "/project/.agents/skills/.system/pdf/SKILL.md"}},
-                        {"nested": {"path": "C:\\project\\.agents\\skills\\.system\\pdf\\SKILL.md"}}
-                    ]
-                })
-                .to_string(),
-            ))
-            .unwrap();
-        assert_eq!(parsed.skill_names, vec!["pdf"]);
+        let payload = json!({
+            "type": "custom_tool_call",
+            "name": "exec",
+            "input": r#"const result = await tools.exec_command({cmd:"sed -n '1,120p' /Users/me/.codex/plugins/cache/browser/26.814.41407/skills/control-in-app-browser/SKILL.md"});"#,
+        });
+        let parsed = parser.parse_line(&response(&payload.to_string())).unwrap();
+        assert_eq!(parsed.skill_names, vec!["browser:control-in-app-browser"]);
     }
 
     #[test]
-    fn t_s07_001_p3_function_arguments_recurse_and_malformed_falls_back_to_text() {
-        let parser = SkillUsageParser;
-        let nested = json!({
-            "type": "function_call",
-            "arguments": json!({
-                "nested": {"files": ["/x/skills/foo/SKILL.md"]}
-            })
-            .to_string(),
-        });
-        let parsed = parser.parse_line(&response(&nested.to_string())).unwrap();
-        assert_eq!(parsed.skill_names, vec!["foo"]);
-
-        let malformed = json!({
-            "type": "function_call",
-            "arguments": r#"{"nested":"/x/skills/bar/SKILL.md""#,
-        });
-        let parsed = parser
-            .parse_line(&response(&malformed.to_string()))
-            .unwrap();
-        assert_eq!(parsed.skill_names, vec!["bar"]);
-    }
-
-    #[test]
-    fn t_s07_001_p4_future_call_scans_each_argument_root_shape() {
-        let parser = SkillUsageParser;
-        let nested = json!({
-            "type": "some_future_call",
-            "input": [{"nested": {"path": "/x/skills/future-input/SKILL.md"}}],
-            "arguments": {"nested": ["/x/skills/future-arguments-array/SKILL.md"]},
-            "action": {"nested": [{"path": "/x/skills/future-action/SKILL.md"}]},
-        });
-        let parsed = parser.parse_line(&response(&nested.to_string())).unwrap();
-        assert_eq!(
-            parsed.skill_names,
-            vec!["future-action", "future-arguments-array", "future-input",]
-        );
-
-        let array_roots = json!({
-            "type": "some_future_call",
-            "input": {"nested": {"path": "/x/skills/future-input-object/SKILL.md"}},
-            "arguments": ["/x/skills/future-arguments-root-array/SKILL.md"],
-            "action": [{"nested": "/x/skills/future-action-root-array/SKILL.md"}],
-        });
-        let parsed = parser
-            .parse_line(&response(&array_roots.to_string()))
-            .unwrap();
-        assert_eq!(
-            parsed.skill_names,
-            vec![
-                "future-action-root-array",
-                "future-arguments-root-array",
-                "future-input-object",
-            ]
-        );
-
-        let action_string = json!({
-            "type": "some_future_call",
-            "action": "/x/skills/future-action-string/SKILL.md",
-        });
-        let parsed = parser
-            .parse_line(&response(&action_string.to_string()))
-            .unwrap();
-        assert_eq!(parsed.skill_names, vec!["future-action-string"]);
-    }
-
-    #[test]
-    fn t_s07_001_p5_false_positive_path_components_are_rejected() {
+    fn t_s07_003_plugin_locators_use_stable_plugin_namespace_keys() {
         let parser = SkillUsageParser;
         let payload = json!({
             "type": "function_call",
-            "arguments": [
-                "/foo/bar/SKILL.md",
-                "/tmp/my-skills-backup/foo/SKILL.md",
-                "/tmp/skills-old/foo/SKILL.md",
-                "const r = \"SKILL.md\"",
-            ],
+            "name": "exec_command",
+            "arguments": json!({
+                "cmd": "cat /Users/me/.codex/plugins/cache/github/0.1.10/skills/github/SKILL.md && cat /Users/me/.codex/plugins/cache/computer-use/1.0.1000761/skills/computer-use/SKILL.md && cat /Users/me/.codex/skills/diagnosing-bugs/SKILL.md"
+            }).to_string(),
+        });
+        let parsed = parser.parse_line(&response(&payload.to_string())).unwrap();
+        assert_eq!(
+            parsed.skill_names,
+            vec![
+                "computer-use:computer-use",
+                "diagnosing-bugs",
+                "github:github"
+            ]
+        );
+    }
+
+    #[test]
+    fn t_s07_004_apply_patch_source_and_unrelated_call_text_are_ignored() {
+        let parser = SkillUsageParser;
+        let apply_patch = json!({
+            "type": "custom_tool_call",
+            "name": "apply_patch",
+            "input": "*** Begin Patch\n*** Update File: src/lib.rs\n+const path = \"/tmp/skills/foo/SKILL.md\";\n*** End Patch",
+        });
+        assert!(
+            parser
+                .parse_line(&response(&apply_patch.to_string()))
+                .is_none()
+        );
+
+        let source_text = json!({
+            "type": "custom_tool_call",
+            "name": "exec",
+            "input": "const note = \"source /x/skills/source/SKILL.md\";",
+            "source": "/x/skills/source-field/SKILL.md",
+            "log": "/x/skills/log-field/SKILL.md",
+            "note": "/x/skills/note-field/SKILL.md",
+        });
+        assert!(
+            parser
+                .parse_line(&response(&source_text.to_string()))
+                .is_none()
+        );
+
+        let future_call = json!({
+            "type": "some_future_call",
+            "input": "/x/skills/future-action/SKILL.md",
+            "action": {"cmd": "cat /x/skills/future-action/SKILL.md"},
+        });
+        assert!(
+            parser
+                .parse_line(&response(&future_call.to_string()))
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn t_s07_005_invalid_locator_shapes_are_rejected() {
+        let parser = SkillUsageParser;
+        let payload = json!({
+            "type": "function_call",
+            "name": "exec_command",
+            "arguments": json!({
+                "cmd": "cat /foo/bar/SKILL.md && cat /tmp/my-skills-backup/foo/SKILL.md && cat /tmp/skills-old/foo/SKILL.md && printf 'const r = \"SKILL.md\"'"
+            }).to_string(),
         });
         assert!(parser.parse_line(&response(&payload.to_string())).is_none());
     }
 
     #[test]
-    fn t_s07_001_p6_unrelated_message_note_and_missing_timestamp_are_ignored() {
+    fn t_s07_006_message_and_missing_timestamp_are_ignored() {
         let parser = SkillUsageParser;
-        let unrelated = json!({
-            "type": "function_call",
-            "arguments": {"value": "no skill"},
-            "note": "/x/skills/also-false/SKILL.md",
-        });
-        assert!(
-            parser
-                .parse_line(&response(&unrelated.to_string()))
-                .is_none()
-        );
         assert!(parser
             .parse_line(&response(
                 &json!({
@@ -293,7 +549,7 @@ mod tests {
             .is_none());
         assert!(parser
             .parse_line(&line(
-                r#"{"type":"response_item","payload":{"type":"function_call","input":"/x/skills/foo/SKILL.md"}}"#,
+                r#"{"type":"response_item","payload":{"type":"function_call","name":"exec_command","arguments":"{\"cmd\":\"cat /x/skills/foo/SKILL.md\"}"}}"#,
             ))
             .is_none());
     }

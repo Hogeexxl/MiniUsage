@@ -1,5 +1,5 @@
 import { X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { MainModelUsageDto, SessionDetailResponse, SubagentDetailDto, UsageDto } from "../../data/types";
 import { AnimatedToastStack, useAnimatedToastStack } from "../../ui/beui/animated-toast-stack";
@@ -162,12 +162,46 @@ export function SessionDetailDrawer({ view, timezone }: SessionDetailDrawerProps
   const toast = useAnimatedToastStack();
   const [mainOpen, setMainOpen] = useState<string | null>(null);
   const [subagentOpen, setSubagentOpen] = useState<string | null>(null);
+  const [mountedMainItems, setMountedMainItems] = useState<Set<string>>(() => new Set());
+  const [mountedSubagentItems, setMountedSubagentItems] = useState<Set<string>>(() => new Set());
   const previousRefreshError = useRef<string | undefined>(undefined);
   const detail = view.detail;
+  const handleOpenChange = useCallback(
+    (open: boolean) => {
+      if (!open) view.close_detail();
+    },
+    [view.close_detail],
+  );
+
+  const handleMainValueChange = useCallback((value: string | null) => {
+    if (value) {
+      setMountedMainItems((current) => {
+        if (current.has(value)) return current;
+        const next = new Set(current);
+        next.add(value);
+        return next;
+      });
+    }
+    setMainOpen(value);
+  }, []);
+
+  const handleSubagentValueChange = useCallback((value: string | null) => {
+    if (value) {
+      setMountedSubagentItems((current) => {
+        if (current.has(value)) return current;
+        const next = new Set(current);
+        next.add(value);
+        return next;
+      });
+    }
+    setSubagentOpen(value);
+  }, []);
 
   useEffect(() => {
     setMainOpen(null);
     setSubagentOpen(null);
+    setMountedMainItems(new Set());
+    setMountedSubagentItems(new Set());
   }, [view.selected_root_session_id]);
 
   useEffect(() => {
@@ -178,25 +212,31 @@ export function SessionDetailDrawer({ view, timezone }: SessionDetailDrawerProps
   }, [view.refresh_error_code, toast.showToast]);
 
   const mainItems = useMemo(
-    () => (detail?.main.model_usage ?? []).map((item, index) => ({
-      id: `${item.model}:${item.reasoning_effort ?? "unknown"}:${index}`,
-      title: formatModelWithReasoningEffort(item.model, item.reasoning_effort, false),
-      description: <MainReceipt item={item} />,
-    })),
-    [detail],
+    () => (detail?.main.model_usage ?? []).map((item, index) => {
+      const id = `${item.model}:${item.reasoning_effort ?? "unknown"}:${index}`;
+      return {
+        id,
+        title: formatModelWithReasoningEffort(item.model, item.reasoning_effort, false),
+        ...(mountedMainItems.has(id) ? { description: <MainReceipt item={item} /> } : {}),
+      };
+    }),
+    [detail, mountedMainItems],
   );
 
   const subagentItems = useMemo(
-    () => (detail?.subagents ?? []).map((item) => ({
-      id: item.thread_id,
-      title: (
-        <Tooltip content={formatSessionTitle(item.title)} side="top" wrapperClassName="max-w-full">
-          <span className="block truncate">{formatSessionTitle(item.title)}</span>
-        </Tooltip>
-      ),
-      description: <SubagentReceipt item={item} timezone={timezone} />,
-    })),
-    [detail, timezone],
+    () => (detail?.subagents ?? []).map((item) => {
+      const id = item.thread_id;
+      return {
+        id,
+        title: (
+          <Tooltip content={formatSessionTitle(item.title)} side="top" wrapperClassName="max-w-full">
+            <span className="block truncate">{formatSessionTitle(item.title)}</span>
+          </Tooltip>
+        ),
+        ...(mountedSubagentItems.has(id) ? { description: <SubagentReceipt item={item} timezone={timezone} /> } : {}),
+      };
+    }),
+    [detail, mountedSubagentItems, timezone],
   );
 
   if (!view.selected_row && !view.open) return null;
@@ -211,10 +251,11 @@ export function SessionDetailDrawer({ view, timezone }: SessionDetailDrawerProps
     <>
       <Drawer
         open={view.open}
-        onOpenChange={(open) => { if (!open) view.close_detail(); }}
+        onOpenChange={handleOpenChange}
         side="right"
         ariaLabel="Session 详情"
-        className="w-[480px] max-w-full max-[480px]:w-screen"
+        backdropClassName="backdrop-blur-none"
+        className="w-[480px] max-w-full max-[480px]:w-screen [contain:layout_paint]"
       >
         <div className="flex h-full min-w-0 flex-col overflow-hidden" aria-busy={view.load_state === "loading" || view.load_state === "refreshing"}>
           <header className="flex items-start justify-between gap-3 px-5 pt-5 pb-4">
@@ -226,9 +267,9 @@ export function SessionDetailDrawer({ view, timezone }: SessionDetailDrawerProps
               <time className="block text-sm leading-5 tabular-nums text-muted-foreground" dateTime={timeValue > 0 ? new Date(timeValue).toISOString() : undefined} title={time.title}>{time.text}</time>
             </div>
             <div className="shrink-0">
-              <Tooltip content="关闭" side="bottom">
-                <Button variant="ghost" size="icon" aria-label="关闭 Session 详情" onClick={view.close_detail}><X className="h-4 w-4" /></Button>
-              </Tooltip>
+              <Button variant="ghost" size="icon" aria-label="关闭 Session 详情" onClick={view.close_detail}>
+                <X className="h-4 w-4" />
+              </Button>
             </div>
           </header>
 
@@ -253,7 +294,7 @@ export function SessionDetailDrawer({ view, timezone }: SessionDetailDrawerProps
                   <BouncyAccordion
                     items={mainItems}
                     value={mainOpen}
-                    onValueChange={setMainOpen}
+                    onValueChange={handleMainValueChange}
                   />
                 </section>
 
@@ -263,7 +304,7 @@ export function SessionDetailDrawer({ view, timezone }: SessionDetailDrawerProps
                     <BouncyAccordion
                       items={subagentItems}
                       value={subagentOpen}
-                      onValueChange={setSubagentOpen}
+                      onValueChange={handleSubagentValueChange}
                     />
                   ) : (
                     <p className="m-0 rounded-xl border border-border p-4 text-sm text-muted-foreground">暂无 Subagent</p>

@@ -15,8 +15,8 @@ import {
 } from "../../data/types";
 import type { SessionControllerOptions, SessionLoadState, SessionPageState, SessionTableViewModel } from "./sessionTypes";
 
-export const FRONTEND_PAGE_SIZE = 15;
-export const ROW_BATCH_LIMIT = 60;
+export const FRONTEND_PAGE_SIZE = 10;
+export const ROW_BATCH_LIMIT = 40;
 
 type Snapshot = {
   query_key: string;

@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { describe, expect, it } from "vitest";
 
 import type { DistributionItem } from "./distribution";
+import { chartSeriesColor } from "./chartPalette";
 import { DistributionDonutCard } from "./DistributionDonutCard";
 
 function item(id: string, totalTokens: number, estimatedCost = totalTokens / 100): DistributionItem {
@@ -53,7 +54,7 @@ function motionOpacity(element: HTMLElement | SVGElement): string {
 }
 
 function segmentGeometry(svg: SVGSVGElement) {
-  return Array.from(svg.querySelectorAll("circle")).slice(1).map((circle) => ({
+  return Array.from(svg.querySelectorAll("circle")).map((circle) => ({
     cx: circle.getAttribute("cx"),
     cy: circle.getAttribute("cy"),
     r: circle.getAttribute("r"),
@@ -78,8 +79,9 @@ describe("DistributionDonutCard", () => {
     expect(oneSvg.parentElement?.parentElement).toHaveClass(
       "grid-cols-[140px_minmax(0,1fr)]",
       "items-start",
+      "gap-8",
     );
-    expect(oneSvg.querySelectorAll("circle")).toHaveLength(2);
+    expect(oneSvg.querySelectorAll("circle")).toHaveLength(1);
     for (const circle of oneSvg.querySelectorAll("circle")) {
       expect(circle).toHaveAttribute("cx", "70");
       expect(circle).toHaveAttribute("cy", "70");
@@ -87,23 +89,46 @@ describe("DistributionDonutCard", () => {
       expect(circle).toHaveAttribute("pathLength", "100");
       expect(circle).toHaveAttribute("stroke-width", "8");
     }
-    expect(oneSvg.querySelectorAll("circle")[1]).toHaveAttribute("stroke-linecap", "butt");
+    expect(oneSvg.querySelectorAll("circle")[0]).toHaveAttribute("stroke-linecap", "round");
     const oneTop = oneWrapper.getBoundingClientRect().top;
 
     rerender(<DistributionDonutCard title="模型分布" items={sixItems} />);
     const sixCard = cardFrom(container);
     const sixSvg = donutFrom(sixCard);
     const sixWrapper = sixSvg.parentElement as HTMLElement;
-    expect(sixSvg.querySelectorAll("circle")).toHaveLength(7);
+    expect(sixSvg.querySelectorAll("circle")).toHaveLength(6);
     expect(sixWrapper.getBoundingClientRect().top).toBeCloseTo(oneTop, 0);
-    expect(sixSvg.querySelectorAll("circle")).toHaveLength(7);
+    expect(sixSvg.querySelectorAll("circle")).toHaveLength(6);
     for (const circle of sixSvg.querySelectorAll("circle")) {
       expect(circle).toHaveAttribute("cx", "70");
       expect(circle).toHaveAttribute("cy", "70");
       expect(circle).toHaveAttribute("r", "65.5");
       expect(circle).toHaveAttribute("pathLength", "100");
       expect(circle).toHaveAttribute("stroke-width", "8");
+      expect(circle).toHaveAttribute("stroke-linecap", "round");
     }
+    expect(sixSvg.querySelector('circle[stroke="var(--border-strong)"]')).not.toBeInTheDocument();
+    expect(Array.from(sixSvg.querySelectorAll("circle")).every((circle) => {
+      const [dashLength] = (circle.getAttribute("stroke-dasharray") ?? "").split(" ").map(Number);
+      return dashLength > 0 && dashLength < 100;
+    })).toBe(true);
+  });
+
+  it("maps every ranked series to a fixed local token and keeps Other neutral", () => {
+    expect(Array.from({ length: 10 }, (_, index) => chartSeriesColor(index))).toEqual([
+      "var(--chart-series-1)",
+      "var(--chart-series-2)",
+      "var(--chart-series-3)",
+      "var(--chart-series-4)",
+      "var(--chart-series-5)",
+      "var(--chart-series-6)",
+      "var(--chart-series-7)",
+      "var(--chart-series-8)",
+      "var(--chart-series-9)",
+      "var(--chart-series-10)",
+    ]);
+    expect(chartSeriesColor(10)).toBe("var(--chart-series-1)");
+    expect(chartSeriesColor(0, true)).toBe("var(--chart-other)");
   });
 
   it("[T-S06-002] uses the official Pill tabs and compact muted legend without a hover surface", () => {
@@ -135,11 +160,11 @@ describe("DistributionDonutCard", () => {
       }
     }
     expect(legends.map((legend) => (legend.firstElementChild as HTMLElement).style.background)).toEqual([
-      "var(--chart-mint-a)",
-      "var(--chart-peach-a)",
-      "var(--chart-sky-a)",
-      "var(--chart-lavender-a)",
-      "var(--chart-butter-a)",
+      "var(--chart-series-1)",
+      "var(--chart-series-2)",
+      "var(--chart-series-3)",
+      "var(--chart-series-4)",
+      "var(--chart-series-5)",
       "var(--chart-other)",
     ]);
   });
@@ -162,7 +187,8 @@ describe("DistributionDonutCard", () => {
     fireEvent.click(within(card).getByRole("tab", { name: "Token" }));
     const firstLegend = legendButtons(card)[0];
     fireEvent.focus(firstLegend);
-    expect(within(center).getByText("Alpha 90.0%")).toBeInTheDocument();
+    expect(within(center).getByText("90.0%")).toBeInTheDocument();
+    expect(within(center).queryByText("Alpha 90.0%")).not.toBeInTheDocument();
     expect(ticker.querySelector(".sr-only")).toHaveTextContent("900");
   });
 
@@ -170,7 +196,7 @@ describe("DistributionDonutCard", () => {
     const { container } = render(<DistributionDonutCard title="模型分布" items={twoItems} />);
     const card = cardFrom(container);
     const svg = donutFrom(card);
-    const segments = Array.from(svg.querySelectorAll("circle")).slice(1) as SVGCircleElement[];
+    const segments = Array.from(svg.querySelectorAll("circle")) as SVGCircleElement[];
     const legends = legendButtons(card);
     const geometry = segmentGeometry(svg);
 
@@ -199,6 +225,8 @@ describe("DistributionDonutCard", () => {
     expect(within(card).getByText("暂无数据")).toBeInTheDocument();
     expect(legendButtons(card)).toHaveLength(0);
     expect(within(centerFrom(card)).getByText("Token")).toBeInTheDocument();
-    expect(donutFrom(card).querySelectorAll("circle")).toHaveLength(1);
+    const emptySvg = donutFrom(card);
+    expect(emptySvg.querySelectorAll("circle")).toHaveLength(1);
+    expect(emptySvg.querySelector("circle")).toHaveAttribute("stroke", "var(--border-strong)");
   });
 });

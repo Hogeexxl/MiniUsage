@@ -1,9 +1,9 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { StrictMode, type ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import type { MiniUsageClient } from "../data/miniUsageClient";
-import { MiniUsageClientError, type ApiErrorCode } from "../data/types";
+import { MiniUsageClientError, type ApiErrorCode, type StatusResponse } from "../data/types";
 import { ThemeProvider } from "../theme/ThemeProvider";
 import { DashboardPage } from "./DashboardPage";
 
@@ -56,6 +56,8 @@ const sessionSnapshot = {
   sort_index: [],
   items: [],
 };
+
+const offsetHeightDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "offsetHeight");
 
 function fakeClient(overrides: Partial<MiniUsageClient> = {}): MiniUsageClient {
   return {
@@ -139,6 +141,38 @@ describe("DashboardPage v0.2.0", () => {
     await waitFor(() => expect(screen.getByText(/上次同步：/)).toHaveTextContent(expected));
   });
 
+  it("does not stack ActionSwap layers when the initial sync timestamp arrives", async () => {
+    vi.spyOn(window, "matchMedia").mockImplementation((query) => ({
+      matches: !query.includes("prefers-reduced-motion"),
+      media: query,
+      onchange: null,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      dispatchEvent: () => false,
+    }));
+    const completedAt = Date.UTC(2026, 0, 2, 3, 4, 5);
+    const statusRequest = deferred<StatusResponse>();
+    const client = fakeClient({
+      getStatus: vi.fn(() => statusRequest.promise),
+    });
+    renderWithTheme(<DashboardPage options={{ client, eventSourceFactory: () => fakeEvents() }} />);
+    await waitFor(() => expect(screen.getByText(/上次同步：/)).toHaveTextContent("—"));
+    const expected = new Date(completedAt);
+    const syncTime = [expected.getHours(), expected.getMinutes(), expected.getSeconds()]
+      .map((part) => String(part).padStart(2, "0"))
+      .join(":");
+
+    await act(async () => {
+      statusRequest.resolve({ ...status, last_scan_completed_at_ms: completedAt });
+      await Promise.resolve();
+    });
+    const syncLabel = screen.getByText(/上次同步：/);
+    expect(syncLabel).toHaveTextContent(syncTime);
+    expect(syncLabel.querySelectorAll("span.absolute")).toHaveLength(1);
+  });
+
   it("uses an em dash before a sync has completed", async () => {
     renderWithTheme(<DashboardPage options={{ client: fakeClient(), eventSourceFactory: () => fakeEvents() }} />);
     await waitFor(() => expect(screen.getByText(/上次同步：/)).toHaveTextContent("—"));
@@ -180,6 +214,68 @@ describe("DashboardPage v0.2.0", () => {
     expect(screen.getByRole("button", { name: /Switch to light mode/ })).toBeInTheDocument();
   });
 
+  it("loads the Session detail Drawer only after a row is selected", async () => {
+    const sessionRow = {
+      root_session_id: "root-1",
+      title: "Session 1",
+      project_name: null,
+      project_path: null,
+      last_activity_at_ms: 1,
+      models_used: ["gpt-5"],
+      subagent_count: 0,
+      inclusive_usage: null,
+      self_usage: null,
+      subagent_usage: null,
+      data_status: "complete" as const,
+      error_code: null,
+    };
+    const client = fakeClient({
+      getSessionSnapshot: vi.fn(async () => ({
+        ...sessionSnapshot,
+        total_items: 1,
+        sort_index: [{
+          root_session_id: sessionRow.root_session_id,
+          last_activity_at_ms: sessionRow.last_activity_at_ms,
+          project_sort_key: null,
+          model_sort_key: "gpt-5",
+          total_tokens: null,
+          combined_total_tokens: null,
+          combined_estimated_cost: null,
+          cache_hit_rate: null,
+          data_status: "complete" as const,
+          error_code: null,
+        }],
+        items: [sessionRow],
+      })),
+      getSessionDetail: vi.fn(async () => {
+        throw new Error("detail unavailable");
+      }),
+    });
+    Object.defineProperty(HTMLElement.prototype, "offsetHeight", {
+      configurable: offsetHeightDescriptor?.configurable ?? true,
+      enumerable: offsetHeightDescriptor?.enumerable ?? true,
+      get() {
+        const inline = Number.parseFloat(this.style.height);
+        if (Number.isFinite(inline)) return inline;
+        return offsetHeightDescriptor?.get?.call(this) ?? 0;
+      },
+    });
+    try {
+      renderWithTheme(<DashboardPage options={{ client, eventSourceFactory: () => fakeEvents() }} />);
+
+      await waitFor(() => expect(document.querySelector('tbody tr[data-session-root-id="root-1"]')).toBeInTheDocument());
+      expect(screen.queryByRole("dialog", { name: "Session 详情" })).not.toBeInTheDocument();
+
+      const row = document.querySelector<HTMLElement>('tbody tr[data-session-root-id="root-1"]');
+      if (!row) throw new Error("Session row not found");
+      fireEvent.click(row);
+      await waitFor(() => expect(screen.getByRole("dialog", { name: "Session 详情" })).toBeInTheDocument());
+      expect(screen.getByRole("dialog", { name: "Session 详情" })).toHaveTextContent("Session 1");
+    } finally {
+      if (offsetHeightDescriptor) Object.defineProperty(HTMLElement.prototype, "offsetHeight", offsetHeightDescriptor);
+    }
+  });
+
   it("uses Spec01 BeUI header parameters and one gap-8 top-level stack", async () => {
     renderWithTheme(<DashboardPage options={{ client: fakeClient(), eventSourceFactory: () => fakeEvents() }} />);
     await waitFor(() => expect(totalTokenCard()).toHaveTextContent("12"));
@@ -189,10 +285,9 @@ describe("DashboardPage v0.2.0", () => {
     expect(main?.firstElementChild).toHaveClass("flex", "flex-col", "gap-8");
     expect(screen.getByRole("heading", { name: "MiniUsage" })).toHaveClass("text-foreground");
 
-    const update = screen.getByRole("button", { name: "检查更新" });
     const sync = screen.getByRole("button", { name: "同步数据" });
     const stop = screen.getByRole("button", { name: "停止服务" });
-    for (const button of [update, sync, stop]) {
+    for (const button of [sync, stop]) {
       expect(button).toHaveClass("h-8", "px-3", "text-xs", "gap-1.5", "rounded-full");
       expect(button).not.toHaveClass("h-10");
     }

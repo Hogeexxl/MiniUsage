@@ -348,8 +348,14 @@ pub enum ProjectFilterOptionDto {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct FilterOptionsResponse {
     pub data_revision: i64,
-    pub models: Vec<String>,
+    pub models: Vec<ModelFilterOptionDto>,
     pub projects: Vec<ProjectFilterOptionDto>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct ModelFilterOptionDto {
+    pub model: String,
+    pub provider: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -728,6 +734,15 @@ pub fn filter_options_response(
     snapshot: UsageSnapshot<FilterOptions>,
 ) -> Result<FilterOptionsResponse, ApiError> {
     ensure_safe(snapshot.data_revision)?;
+    let models = snapshot
+        .value
+        .models
+        .into_iter()
+        .map(|model| ModelFilterOptionDto {
+            model: model.model,
+            provider: model.provider,
+        })
+        .collect();
     let projects = snapshot
         .value
         .projects
@@ -736,7 +751,7 @@ pub fn filter_options_response(
         .collect();
     Ok(FilterOptionsResponse {
         data_revision: snapshot.data_revision,
-        models: snapshot.value.models,
+        models,
         projects,
     })
 }

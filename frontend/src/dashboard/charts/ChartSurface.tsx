@@ -5,7 +5,10 @@ export function ChartSurface({ className, children, ...articleProps }: HTMLAttri
   return (
     <article
       {...articleProps}
-      className={cn("min-w-0 rounded-[28px] border border-border bg-card p-5 text-card-foreground", className)}
+      className={cn(
+        "min-w-0 rounded-[28px] border border-border bg-[#fcfcfc] p-5 text-card-foreground dark:bg-[#151515]",
+        className,
+      )}
     >
       {children}
     </article>

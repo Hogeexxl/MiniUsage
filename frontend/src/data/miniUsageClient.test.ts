@@ -65,7 +65,10 @@ describe("miniUsageClient DTO seam", () => {
       new Response(
         JSON.stringify({
           data_revision: 7,
-          models: ["gpt-5.6-sol", "gpt-5.6"],
+          models: [
+            { model: "gpt-5.6-sol", provider: "openai" },
+            { model: "gpt-5.6", provider: "route-models" },
+          ],
           projects: [
             { kind: "project", project_name: "MiniUsage", project_path: "/work/MiniUsage" },
             { kind: "projectless" },
@@ -77,7 +80,10 @@ describe("miniUsageClient DTO seam", () => {
     );
     await expect(miniUsageClient.filterOptions()).resolves.toEqual({
       data_revision: 7,
-      models: ["gpt-5.6-sol", "gpt-5.6"],
+      models: [
+        { model: "gpt-5.6-sol", provider: "openai" },
+        { model: "gpt-5.6", provider: "route-models" },
+      ],
       projects: [
         { kind: "project", project_name: "MiniUsage", project_path: "/work/MiniUsage" },
         { kind: "projectless" },
@@ -89,6 +95,9 @@ describe("miniUsageClient DTO seam", () => {
       { data_revision: 1, models: [], projects: [{ kind: "projectless", project_path: "/fake" }] },
       { data_revision: 1, models: [], projects: [{ kind: "project", project_name: "MiniUsage" }] },
       { data_revision: 1, models: [""], projects: [] },
+      { data_revision: 1, models: [{ model: "gpt-a", provider: "unknown" }], projects: [] },
+      { data_revision: 1, models: [{ model: "gpt-a" }], projects: [] },
+      { data_revision: 1, models: [{ model: "gpt-a", provider: "openai", extra: true }], projects: [] },
     ]) {
       fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(invalid), { status: 200 }));
       await expect(miniUsageClient.filterOptions()).rejects.toBeInstanceOf(MiniUsageClientError);

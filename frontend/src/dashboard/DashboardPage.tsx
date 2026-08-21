@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { lazy, Suspense, useEffect, useRef } from "react";
 
 import { createRevisionFeed, type RevisionFeed } from "../data/revisionFeed";
 import type { ServiceClient } from "../data/serviceClient";
@@ -13,13 +13,16 @@ import { MetricGrid } from "./MetricGrid";
 import { RangeSelector } from "./RangeSelector";
 import { DASHBOARD_SCOPE_POLICIES, resolveDashboardScope } from "./scope";
 import { ServiceButton } from "./ServiceButton";
-import { SessionDetailDrawer } from "./session/SessionDetailDrawer";
 import { SessionSection } from "./session/SessionSection";
 import { useSessionDetailController } from "./session/useSessionDetailController";
 import { useSessionTableController } from "./session/useSessionTableController";
 import { SyncButton } from "./SyncButton";
 import { UpdateButton } from "./UpdateButton";
 import { useDashboardController, type DashboardControllerOptions } from "./useDashboardController";
+
+const LazySessionDetailDrawer = lazy(() =>
+  import("./session/SessionDetailDrawer").then(({ SessionDetailDrawer }) => ({ default: SessionDetailDrawer })),
+);
 
 function loadErrorMessage(loadState: string): string | null {
   return loadState === "error" ? "数据加载失败" : null;
@@ -74,7 +77,7 @@ export function DashboardPage({ options }: { options?: DashboardPageOptions }) {
             <div className="dashboard-sync-group">
               <span className="flex items-center whitespace-nowrap text-sm text-muted-foreground">
                 上次同步：
-                <ActionSwapText value={syncText} animation="blur">{syncText}</ActionSwapText>
+                <ActionSwapText key={syncText} value={syncText} animation="blur">{syncText}</ActionSwapText>
               </span>
               <SyncButton disabled={!refreshEnabled} refreshState={view.refresh_state} lastSyncAtMs={view.last_scan_completed_at_ms} onClick={view.request_refresh} />
               <ServiceButton client={options?.serviceClient} />
@@ -119,12 +122,16 @@ export function DashboardPage({ options }: { options?: DashboardPageOptions }) {
           <section className="metrics-section" aria-label="关键指标" aria-busy={loading}>
             <MetricGrid usage={view.metrics} modelFilterActive={view.modelFilterActive} />
           </section>
-          <ChartSection view={charts} />
           <SessionSection view={sessions} detail={detail} />
+          <ChartSection view={charts} />
         </div>
         <div className="sr-only" aria-live="polite">{loading ? "数据加载中…" : loadError ?? refreshError}</div>
       </main>
-      <SessionDetailDrawer view={detail} timezone={sessions.timezone} />
+      {detail.open || detail.selected_row ? (
+        <Suspense fallback={null}>
+          <LazySessionDetailDrawer view={detail} timezone={sessions.timezone} />
+        </Suspense>
+      ) : null}
     </div>
   );
 }

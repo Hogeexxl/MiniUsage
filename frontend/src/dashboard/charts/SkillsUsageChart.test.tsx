@@ -117,7 +117,7 @@ describe("SkillsUsageChart v0.2.0", () => {
     const heading = screen.getByRole("heading", { name: "Skills Used" });
     const surface = heading.closest("article");
     expect(surface).not.toBeNull();
-    expect(surface).toHaveClass("rounded-[28px]", "border-border", "bg-card", "p-5");
+    expect(surface).toHaveClass("rounded-[28px]", "border-border", "bg-[#fcfcfc]", "dark:bg-[#151515]", "p-5");
     expect(screen.getByTitle("35")).toBeInTheDocument();
 
     const svg = screen.getByRole("img", { name: "最近 7 个自然日 Skills 使用次数" });
@@ -185,16 +185,19 @@ describe("SkillsUsageChart v0.2.0", () => {
 
     for (const button of buttons) expect(button).toHaveAttribute("aria-haspopup", "dialog");
 
+    expect(document.querySelectorAll("[data-popover-portal]")).toHaveLength(0);
+
     fireEvent.focus(buttons[0]);
     await waitFor(() => expect(activePopoverDialog()).toHaveTextContent("2026-08-01"));
     expect(buttons[0]).toHaveAttribute("aria-expanded", "true");
+    expect(document.querySelectorAll("[data-popover-portal]")).toHaveLength(1);
 
     const dialog = activePopoverDialog();
     expect(dialog.closest("[data-popover-portal]")).not.toBeNull();
     expect(Array.from(dialog.querySelectorAll("span.truncate")).map((node) => node.textContent)).toEqual([
-      "alpha",
-      "zeta",
-      "beta",
+      "Alpha",
+      "Zeta",
+      "Beta",
     ]);
     expect(
       Array.from(dialog.querySelectorAll("span"))
@@ -220,6 +223,9 @@ describe("SkillsUsageChart v0.2.0", () => {
     }
     expect(within(dialog).getByText("Total")).toHaveClass("text-xs", "font-semibold", "text-foreground");
 
+    fireEvent.blur(buttons[0]);
+    await waitFor(() => expect(document.querySelectorAll("[data-popover-portal]")).toHaveLength(0));
+
     fireEvent.pointerEnter(buttons[1], { pointerId: 1, pointerType: "mouse", buttons: 0 });
     await waitFor(() => expect(buttons[1]).toHaveAttribute("aria-expanded", "true"));
     expect(activePopoverDialog()).toHaveTextContent("2026-08-02");
@@ -231,16 +237,16 @@ describe("SkillsUsageChart v0.2.0", () => {
     const paths = Array.from(svg.querySelectorAll<SVGPathElement>("path"));
     expect(paths).toHaveLength(11);
     expect(paths.map((path) => path.getAttribute("fill"))).toEqual([
-      "var(--chart-mint-a)",
-      "var(--chart-peach-a)",
-      "var(--chart-sky-a)",
-      "var(--chart-lavender-a)",
-      "var(--chart-butter-a)",
-      "var(--chart-mint-b)",
-      "var(--chart-peach-b)",
-      "var(--chart-sky-b)",
-      "var(--chart-lavender-b)",
-      "var(--chart-butter-b)",
+      "var(--chart-series-1)",
+      "var(--chart-series-2)",
+      "var(--chart-series-3)",
+      "var(--chart-series-4)",
+      "var(--chart-series-5)",
+      "var(--chart-series-6)",
+      "var(--chart-series-7)",
+      "var(--chart-series-8)",
+      "var(--chart-series-9)",
+      "var(--chart-series-10)",
       "var(--chart-other)",
     ]);
     expect(paths.every((path) => path.getAttribute("fill-opacity") === "0.72")).toBe(true);
@@ -259,12 +265,47 @@ describe("SkillsUsageChart v0.2.0", () => {
     expect(paths.map((path) => path.getAttribute("d"))).toEqual(beforeGeometry);
   });
 
+  it("[T-S06-007] shares one skill popover for area hover and legend focus, with series totals", async () => {
+    const { container } = render(<SkillsUsageChart response={chartResponse} />);
+    const svg = screen.getByRole("img", { name: "最近 7 个自然日 Skills 使用次数" });
+    const paths = Array.from(svg.querySelectorAll<SVGPathElement>("path"));
+    const legends = Array.from(container.querySelectorAll<HTMLButtonElement>("button:not([aria-label])"));
+
+    expect(screen.getByTitle("35")).toBeInTheDocument();
+    fireEvent.pointerMove(svg, { clientX: 100 + 44 });
+    fireEvent.pointerEnter(paths[0], { clientX: 144, clientY: 40 });
+    await waitFor(() => expect(activePopoverDialog()).toHaveTextContent("Alpha"));
+    expect(document.querySelectorAll("[data-popover-portal]")).toHaveLength(1);
+    expect(activePopoverDialog()).toHaveTextContent("2026-08-01");
+    expect(activePopoverDialog()).toHaveTextContent("2");
+    expect(activePopoverDialog()).toHaveTextContent("7日总数");
+    expect(activePopoverDialog()).toHaveTextContent("14");
+    expect(screen.getByTitle("14")).toBeInTheDocument();
+
+    fireEvent.pointerLeave(paths[0]);
+    fireEvent.pointerLeave(svg);
+    await waitFor(() => expect(document.querySelectorAll("[data-popover-portal]")).toHaveLength(0));
+    expect(screen.getByTitle("35")).toBeInTheDocument();
+
+    fireEvent.focus(legends[0]);
+    await waitFor(() => expect(activePopoverDialog()).toHaveTextContent("Alpha"));
+    expect(activePopoverDialog()).toHaveTextContent("2026-08-01");
+    expect(activePopoverDialog()).toHaveTextContent("2026-08-07");
+    expect(activePopoverDialog()).toHaveTextContent("7日总数");
+    expect(activePopoverDialog()).toHaveTextContent("14");
+    expect(screen.getByTitle("14")).toBeInTheDocument();
+
+    fireEvent.blur(legends[0]);
+    await waitFor(() => expect(document.querySelectorAll("[data-popover-portal]")).toHaveLength(0));
+    expect(screen.getByTitle("35")).toBeInTheDocument();
+  });
+
   it("[T-S06-021] uses the ChartSurface skeleton for loading and keeps old data visible while rebuilding", () => {
     const rebuildingEmpty = responseFromDays(sevenDays([]), "rebuilding");
     const { container, rerender } = render(<SkillsUsageChart response={null} />);
     const surface = () => container.querySelector("article");
 
-    expect(surface()).toHaveClass("rounded-[28px]", "border-border", "bg-card", "p-5");
+    expect(surface()).toHaveClass("rounded-[28px]", "border-border", "bg-[#fcfcfc]", "dark:bg-[#151515]", "p-5");
     expect(surface()?.querySelectorAll(".animate-pulse")).toHaveLength(3);
     rerender(<SkillsUsageChart response={rebuildingEmpty} />);
     expect(surface()?.querySelectorAll(".animate-pulse")).toHaveLength(3);

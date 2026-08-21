@@ -59,9 +59,16 @@ export type DashboardFilters = {
   projects: ProjectSelection[];
 };
 
+export type ModelFilterProvider = "openai" | "route-models";
+
+export type ModelFilterOption = {
+  model: string;
+  provider: ModelFilterProvider;
+};
+
 export type FilterOptionsResponse = {
   data_revision: number;
-  models: string[];
+  models: ModelFilterOption[];
   projects: ProjectFilterOption[];
 };
 

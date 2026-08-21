@@ -187,16 +187,17 @@ describe("SessionSection v0.2.0", () => {
       "标题",
       "项目",
       "模型",
-      "总 Token",
       "合计 Token",
       "缓存命中率",
       "合计费用",
+      "Subagent 数",
     ]);
 
     expect(headers[1].querySelector("button")).toBeNull();
-    expect(headers.filter((header) => header.querySelector("button")).length).toBe(7);
+    expect(headers[7].querySelector("button")).toBeNull();
+    expect(headers.filter((header) => header.querySelector("button")).length).toBe(6);
 
-    for (const label of ["总 Token", "合计 Token", "缓存命中率", "合计费用"]) {
+    for (const label of ["合计 Token", "缓存命中率", "合计费用"]) {
       expect(screen.getByRole("button", { name: label })).toHaveClass("justify-end");
     }
 
@@ -206,11 +207,65 @@ describe("SessionSection v0.2.0", () => {
     for (const index of [4, 5, 6, 7]) {
       expect(cells[index]).toHaveClass("text-right");
     }
+    expect(cells[4]).toHaveTextContent("5,678");
+    expect(cells[7]).toHaveTextContent("2");
+    expect(cells[4].querySelector(".tabular-nums")).toBeTruthy();
+    expect(cells[7].querySelector(".tabular-nums")).toBeTruthy();
+
+    const table = rendered.container.querySelector("table");
+    if (!table) throw new Error("Session table not found");
+    expect(Array.from(table.querySelectorAll("col"), (column) => column.style.width)).toEqual([
+      "128px",
+      "",
+      "150px",
+      "168px",
+      "150px",
+      "150px",
+      "120px",
+      "128px",
+      "0px",
+    ]);
+  });
+
+  it("T-S04-002 keeps table width styles stable when sorting changes", () => {
+    const rows = [row(1), row(2)];
+    const rendered = render(<SessionSection view={view({ rows })} />);
+    const table = rendered.container.querySelector("table");
+    if (!table) throw new Error("Session table not found");
+    const columns = Array.from(table.querySelectorAll("col"));
+    const filler = columns.at(-1);
+    if (!filler) throw new Error("Session table filler column not found");
+
+    const before = {
+      fillerWidth: filler.style.width,
+      columnWidths: columns.map((column) => column.style.width),
+    };
+    expect(table).not.toHaveClass("w-full");
+    expect(before.fillerWidth).toBe("0px");
+
+    fireEvent.click(screen.getByRole("button", { name: "模型" }));
+    rendered.rerender(
+      <SessionSection
+        view={view({
+          rows: [...rows].reverse(),
+          sort_by: "model",
+          sort_order: "asc",
+        })}
+      />,
+    );
+
+    const sortedTable = rendered.container.querySelector("table");
+    if (!sortedTable) throw new Error("Session table not found after sorting");
+    const sortedColumns = Array.from(sortedTable.querySelectorAll("col"));
+    expect(sortedTable).not.toHaveClass("w-full");
+    expect({
+      fillerWidth: sortedColumns.at(-1)?.style.width,
+      columnWidths: sortedColumns.map((column) => column.style.width),
+    }).toEqual(before);
   });
 
   it("T-S04-004 computes the table height from ready rows", () => {
     for (const [count, height] of [
-      [15, 768],
       [10, 528],
       [3, 192],
     ] as const) {
@@ -342,8 +397,8 @@ describe("SessionSection v0.2.0", () => {
     const loading = render(<SessionSection view={view({ rows: [], load_state: "initial" })} />);
     expect(screen.getByRole("table")).toBeInTheDocument();
     expect(screen.queryByText("当前时间范围暂无 Session 记录")).not.toBeInTheDocument();
-    expect(tableViewport(loading.container)).toHaveStyle({ height: "720px" });
-    expect(loading.container.querySelectorAll("tbody tr")).toHaveLength(15);
+    expect(tableViewport(loading.container)).toHaveStyle({ height: "480px" });
+    expect(loading.container.querySelectorAll("tbody tr")).toHaveLength(10);
     loading.unmount();
 
     render(<SessionSection view={view({ rows: [], total_items: 0, total_pages: 0 })} />);

@@ -24,15 +24,14 @@ type SessionTableProps = {
 };
 
 const TABLE_ROW_HEIGHT = 48;
-const TABLE_PAGE_SIZE = 15;
+const TABLE_PAGE_SIZE = 10;
 const TABLE_EMPTY_HEIGHT = 192;
-const TABLE_INITIAL_LOADING_HEIGHT = 720;
+const TABLE_INITIAL_LOADING_HEIGHT = 480;
 
 export const sortableColumns: Array<{ field: SessionSortField; label: string }> = [
   { field: "last_activity", label: "最后活动" },
   { field: "project", label: "项目" },
   { field: "model", label: "模型" },
-  { field: "total_tokens", label: "总 Token" },
   { field: "combined_total_tokens", label: "合计 Token" },
   { field: "cache_hit_rate", label: "缓存命中率" },
   { field: "combined_estimated_cost", label: "合计费用" },
@@ -107,7 +106,7 @@ export function SessionTable({
     {
       key: "model",
       header: "模型",
-      width: "150px",
+      width: "168px",
       sortable: true,
       cell: (item) => {
         const model = formatSessionModel(item.models_used);
@@ -115,19 +114,9 @@ export function SessionTable({
       },
     },
     {
-      key: "total_tokens",
-      header: "总 Token",
-      width: "120px",
-      sortable: true,
-      align: "right",
-      cell: (item) => item.self_usage
-        ? <span className="tabular-nums" title={String(item.self_usage.total_tokens)}>{formatSessionTokenInteger(item.self_usage.total_tokens).text}</span>
-        : <span className="tabular-nums">—</span>,
-    },
-    {
       key: "combined_total_tokens",
       header: "合计 Token",
-      width: "120px",
+      width: "150px",
       sortable: true,
       align: "right",
       cell: (item) => item.inclusive_usage
@@ -137,7 +126,7 @@ export function SessionTable({
     {
       key: "cache_hit_rate",
       header: "缓存命中率",
-      width: "112px",
+      width: "150px",
       sortable: true,
       align: "right",
       cell: (item) => item.inclusive_usage
@@ -147,12 +136,19 @@ export function SessionTable({
     {
       key: "combined_estimated_cost",
       header: "合计费用",
-      width: "96px",
+      width: "120px",
       sortable: true,
       align: "right",
       cell: (item) => item.data_status === "error"
         ? <span className="tabular-nums">—</span>
         : <span className="tabular-nums" title={formatCost(item.inclusive_usage?.estimated_cost ?? null).title}>{formatCost(item.inclusive_usage?.estimated_cost ?? null).text}</span>,
+    },
+    {
+      key: "subagent_count",
+      header: "Subagent 数",
+      width: "128px",
+      align: "right",
+      cell: (item) => <span className="tabular-nums">{item.subagent_count}</span>,
     },
   ];
 
@@ -166,7 +162,7 @@ export function SessionTable({
       rowHeight={TABLE_ROW_HEIGHT}
       height={tableHeight}
       loading={loading}
-      skeletonRows={15}
+      skeletonRows={10}
       emptyState="当前时间范围暂无 Session 记录"
       sort={controlledSort}
       onSortChange={(next) => onSort((next?.key ?? sortBy) as SessionSortField)}

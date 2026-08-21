@@ -178,7 +178,7 @@ describe("useDashboardController", () => {
         optionCalls += 1;
         if (optionCalls === 2) throw new Error("options unavailable");
         return optionCalls === 1
-          ? { data_revision: 1, models: ["gpt-a"], projects: [{ kind: "projectless" as const }] }
+          ? { data_revision: 1, models: [{ model: "gpt-a", provider: "openai" as const }], projects: [{ kind: "projectless" as const }] }
           : { data_revision: 2, models: [], projects: [] };
       }),
       refresh: vi.fn(async () => ({ http_status: 202 as const, disposition: "started" as const, scan_id: "scan-options", status_revision: 2 })),
@@ -214,7 +214,11 @@ describe("useDashboardController", () => {
     await waitFor(() => expect(result.current.refresh_state).toBe("idle"));
     expect(optionCalls).toBe(2);
     expect(result.current.filters).toEqual({ models: ["gpt-a"], projects: [{ kind: "projectless" }] });
-    expect(result.current.filter_options).toEqual({ data_revision: 1, models: ["gpt-a"], projects: [{ kind: "projectless" }] });
+    expect(result.current.filter_options).toEqual({
+      data_revision: 1,
+      models: [{ model: "gpt-a", provider: "openai" }],
+      projects: [{ kind: "projectless" }],
+    });
     expect(result.current.filter_options_stale).toBe(true);
     await act(async () => result.current.retry_filter_options());
     expect(optionCalls).toBe(3);

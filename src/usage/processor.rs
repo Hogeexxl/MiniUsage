@@ -1729,7 +1729,7 @@ mod tests {
             crate::usage::canonical_algorithm_for(crate::usage::USAGE_PARSER_VERSION),
             Some(5)
         );
-        assert_eq!(crate::usage::USAGE_PARSER_VERSION, 10);
+        assert_eq!(crate::usage::USAGE_PARSER_VERSION, 11);
         assert_eq!(crate::usage::USAGE_CANONICAL_ALGORITHM_VERSION, 5);
         assert_eq!(high.event_id, event_id(&high), "replay is stable");
         assert_ne!(

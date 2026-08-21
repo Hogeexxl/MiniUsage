@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import type { SessionDetailResponse, SessionItemDto, UsageDto } from "../../data/types";
@@ -101,7 +101,7 @@ describe("SessionDetailDrawer v0.2.0", () => {
     render(<SessionDetailDrawer view={view()} timezone="Asia/Shanghai" />);
 
     const dialog = screen.getByRole("dialog", { name: "Session 详情" });
-    expect(dialog).toHaveClass("w-[480px]", "max-[480px]:w-screen");
+    expect(dialog).toHaveClass("w-[480px]", "max-[480px]:w-screen", "[contain:layout_paint]");
     expect(screen.getByRole("heading", { name: "A long Session title" })).toBeInTheDocument();
     const rootSessionId = screen.getByText("root-session-full-id");
     expect(rootSessionId).toBeInTheDocument();
@@ -123,6 +123,15 @@ describe("SessionDetailDrawer v0.2.0", () => {
     expect(screen.queryByText(/复制/)).not.toBeInTheDocument();
   });
 
+  it("keeps the backdrop surface free of border and outline layers", () => {
+    render(<SessionDetailDrawer view={view()} timezone="Asia/Shanghai" />);
+
+    const backdrop = screen.getByRole("button", { name: "Close" });
+    expect(backdrop).toHaveClass("fixed", "inset-0", "bg-black/40", "backdrop-blur-none");
+    expect(backdrop).not.toHaveClass("backdrop-blur-sm");
+    expect(backdrop.className).not.toMatch(/(?:^|\s)(?:border|outline)(?:[-\s]|$)/);
+  });
+
   it("starts both accordion groups collapsed and enforces single-open within each group", () => {
     render(<SessionDetailDrawer view={view()} timezone="Asia/Shanghai" />);
 
@@ -130,26 +139,34 @@ describe("SessionDetailDrawer v0.2.0", () => {
     const mainSecond = screen.getByRole("button", { name: "o4-mini (—)" });
     const subFirst = screen.getByRole("button", { name: "Recent subagent" });
     const subSecond = screen.getByRole("button", { name: "Old subagent" });
+    const mainFirstContent = document.getElementById(mainFirst.getAttribute("aria-controls") ?? "");
+    const subFirstContent = document.getElementById(subFirst.getAttribute("aria-controls") ?? "");
 
     for (const trigger of [mainFirst, mainSecond, subFirst, subSecond]) {
       expect(trigger).toHaveAttribute("aria-expanded", "false");
     }
+    expect(mainFirstContent?.querySelector("dl")).toBeNull();
+    expect(subFirstContent?.querySelector("dl")).toBeNull();
 
     fireEvent.click(mainFirst);
     expect(mainFirst).toHaveAttribute("aria-expanded", "true");
     expect(mainSecond).toHaveAttribute("aria-expanded", "false");
+    expect(mainFirstContent?.querySelector("dl")).toBeInTheDocument();
     fireEvent.click(mainSecond);
     expect(mainFirst).toHaveAttribute("aria-expanded", "false");
     expect(mainSecond).toHaveAttribute("aria-expanded", "true");
+    expect(mainFirstContent?.querySelector("dl")).toBeInTheDocument();
 
     fireEvent.click(subFirst);
     expect(subFirst).toHaveAttribute("aria-expanded", "true");
     expect(subSecond).toHaveAttribute("aria-expanded", "false");
     expect(mainSecond).toHaveAttribute("aria-expanded", "true");
+    expect(subFirstContent?.querySelector("dl")).toBeInTheDocument();
     fireEvent.click(subSecond);
     expect(subFirst).toHaveAttribute("aria-expanded", "false");
     expect(subSecond).toHaveAttribute("aria-expanded", "true");
     expect(mainSecond).toHaveAttribute("aria-expanded", "true");
+    expect(subFirstContent?.querySelector("dl")).toBeInTheDocument();
   });
 
   it("resets both accordion groups when the selected root Session changes", () => {
@@ -331,5 +348,54 @@ describe("SessionDetailDrawer v0.2.0", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("Session 详情加载失败");
     fireEvent.click(screen.getByRole("button", { name: "重试" }));
     expect(retry).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not open the Close tooltip when the Drawer content scrolls", () => {
+    vi.useFakeTimers();
+    const requestAnimationFrame = vi
+      .spyOn(window, "requestAnimationFrame")
+      .mockImplementation((callback) => {
+        callback(0);
+        return 0;
+      });
+    try {
+      render(<SessionDetailDrawer view={view()} timezone="Asia/Shanghai" />);
+      const dialog = screen.getByRole("dialog", { name: "Session 详情" });
+      const scrollViewport = dialog.querySelector(".overflow-y-auto");
+      if (!(scrollViewport instanceof HTMLElement)) throw new Error("Drawer scroll viewport not found");
+
+      fireEvent.scroll(scrollViewport);
+      act(() => {
+        vi.advanceTimersByTime(120);
+      });
+
+      expect(screen.queryByRole("tooltip", { name: "关闭", hidden: true })).not.toBeInTheDocument();
+    } finally {
+      requestAnimationFrame.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not show the Close tooltip when a Subagent accordion opens", () => {
+    vi.useFakeTimers();
+    const requestAnimationFrame = vi
+      .spyOn(window, "requestAnimationFrame")
+      .mockImplementation((callback) => {
+        callback(0);
+        return 0;
+      });
+    try {
+      render(<SessionDetailDrawer view={view()} timezone="Asia/Shanghai" />);
+      const subagent = screen.getByRole("button", { name: "Recent subagent" });
+      subagent.focus();
+      fireEvent.click(subagent);
+      act(() => {
+        vi.advanceTimersByTime(240);
+      });
+      expect(screen.queryByRole("tooltip", { hidden: true })).not.toBeInTheDocument();
+    } finally {
+      requestAnimationFrame.mockRestore();
+      vi.useRealTimers();
+    }
   });
 });

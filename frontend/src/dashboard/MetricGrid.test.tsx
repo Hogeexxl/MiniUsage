@@ -81,9 +81,9 @@ describe("MetricGrid v0.2.0", () => {
     render(<MetricGrid usage={usage} modelFilterActive={false} />);
 
     const bar = screen.getByLabelText(TOKEN_BAR_LABEL) as HTMLElement;
-    const input = segmentByClass(bar, "bg-accent");
-    const output = segmentByClass(bar, "bg-violet");
-    const reasoning = segmentByClass(bar, "bg-neon");
+    const input = segmentByClass(bar, "bg-[#68c0e8]");
+    const output = segmentByClass(bar, "bg-[#be753e]");
+    const reasoning = segmentByClass(bar, "bg-[#a6333d]");
     expect(bar.children).toHaveLength(3);
 
     expect(input).toHaveStyle({ width: "75%" });
@@ -111,23 +111,23 @@ describe("MetricGrid v0.2.0", () => {
     render(<MetricGrid usage={usage} modelFilterActive={false} />);
 
     const card = cardByTitle("缓存命中");
-    const cached = card.querySelector(".bg-accent")?.parentElement as HTMLElement;
+    const cached = card.querySelector(".bg-\\[\\#be506e\\]")?.parentElement as HTMLElement;
     const remaining = cached.children[1] as HTMLElement;
     expect(cached.children).toHaveLength(2);
     expect((cached.children[0] as HTMLElement).style.width).toBe("40%");
     expect(remaining.style.width).toBe("60%");
-    expect(remaining).toHaveClass("bg-muted");
+    expect(remaining).toHaveClass("bg-[#4057a5]");
     expect(screen.getByTitle("40.0%")).toBeInTheDocument();
 
     const legends = within(card).getAllByRole("button");
     expect(legends).toHaveLength(2);
     expect(legends[0]).toHaveAttribute("type", "button");
-    expect(legends[0]).toHaveTextContent("缓存读取");
+    expect(legends[0]).toHaveTextContent("缓存读");
     expect(legends[1]).toHaveTextContent("输入");
     expect(legends[0].firstElementChild).toHaveAttribute("aria-hidden", "true");
     expect(legends[1].firstElementChild).toHaveAttribute("aria-hidden", "true");
-    expect(legends[0].firstElementChild).toHaveClass("bg-accent");
-    expect(legends[1].firstElementChild).toHaveClass("bg-muted-foreground");
+    expect(legends[0].firstElementChild).toHaveClass("bg-[#be506e]");
+    expect(legends[1].firstElementChild).toHaveClass("bg-[#4057a5]");
 
     const before = widths(Array.from(cached.children) as HTMLElement[]);
     for (const legend of legends) {

@@ -25,7 +25,7 @@ describe("Skills chart data", () => {
     const result = buildSkillSeries(days);
     expect(result.days).toHaveLength(7);
     expect(result.series).toHaveLength(11);
-    expect(result.series.slice(0, 3).map((series) => series.label)).toEqual(["skill-01", "skill-02", "skill-03"]);
+    expect(result.series.slice(0, 3).map((series) => series.label)).toEqual(["Skill 01", "Skill 02", "Skill 03"]);
     expect(result.series.at(-1)).toMatchObject({ id: "__other__", label: "其他", isOther: true });
     expect(result.series.at(-1)?.counts).toEqual(Array(7).fill(3));
     expect(result.total).toBe(days.reduce((sum, entry) => sum + entry.total, 0));
@@ -36,7 +36,22 @@ describe("Skills chart data", () => {
       day("2026-08-01", [["zeta", 1], ["alpha", 1]]),
       ...Array.from({ length: 6 }, (_, index) => day(`2026-08-0${index + 2}`, [])),
     ]);
-    expect(result.series.map((series) => series.label)).toEqual(["alpha", "zeta"]);
+    expect(result.series.map((series) => series.label)).toEqual(["Alpha", "Zeta"]);
+  });
+
+  it("formats canonical skill keys for display without changing their IDs", () => {
+    const result = buildSkillSeries([
+      day("2026-08-01", [
+        ["diagnosing-bugs", 1],
+        ["browser:control-in-app-browser", 2],
+        ["github:github", 3],
+      ]),
+    ]);
+    expect(result.series.map((series) => [series.id, series.label])).toEqual([
+      ["github:github", "Github: Github"],
+      ["browser:control-in-app-browser", "Browser: Control In App Browser"],
+      ["diagnosing-bugs", "Diagnosing Bugs"],
+    ]);
   });
 
   it.each([

@@ -19,6 +19,8 @@ import {
   type TargetScanDto,
   type DashboardFilters,
   type FilterOptionsResponse,
+  type ModelFilterOption,
+  type ModelFilterProvider,
   type ProjectFilterOption,
   type ProjectSelection,
   type EstimatedCostStatus,
@@ -250,6 +252,22 @@ function parseProjectFilterOption(value: unknown): ProjectFilterOption {
   throw new MiniUsageClientError("HTTP_ERROR", 200);
 }
 
+function parseModelFilterOption(value: unknown): ModelFilterOption {
+  const record = requiredRecord(value);
+  if (!hasOnlyKeys(record, ["model", "provider"])) {
+    throw new MiniUsageClientError("HTTP_ERROR", 200);
+  }
+  const model = requiredString(record, "model");
+  if ([...model].some((character) => character.charCodeAt(0) < 32)) {
+    throw new MiniUsageClientError("HTTP_ERROR", 200);
+  }
+  const provider = record.provider;
+  if (provider !== "openai" && provider !== "route-models") {
+    throw new MiniUsageClientError("HTTP_ERROR", 200);
+  }
+  return { model, provider: provider as ModelFilterProvider };
+}
+
 function parseFilterOptions(value: unknown): FilterOptionsResponse {
   const record = requiredRecord(value);
   if (!hasOnlyKeys(record, ["data_revision", "models", "projects"])) {
@@ -257,21 +275,12 @@ function parseFilterOptions(value: unknown): FilterOptionsResponse {
   }
   const modelsValue = record.models;
   const projectsValue = record.projects;
-  if (
-    !Array.isArray(modelsValue) ||
-    modelsValue.some(
-      (model) =>
-        typeof model !== "string" ||
-        model.length === 0 ||
-        [...model].some((character) => character.charCodeAt(0) < 32),
-    ) ||
-    !Array.isArray(projectsValue)
-  ) {
+  if (!Array.isArray(modelsValue) || !Array.isArray(projectsValue)) {
     throw new MiniUsageClientError("HTTP_ERROR", 200);
   }
   return {
     data_revision: requiredSafeInteger(record, "data_revision"),
-    models: [...modelsValue],
+    models: modelsValue.map(parseModelFilterOption),
     projects: projectsValue.map(parseProjectFilterOption),
   };
 }

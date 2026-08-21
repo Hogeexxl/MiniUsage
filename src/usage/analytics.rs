@@ -10,7 +10,7 @@ use super::{
     ledger::UsageLedgerError,
 };
 
-pub const SKILL_USAGE_PARSER_VERSION: i64 = 10;
+pub const SKILL_USAGE_PARSER_VERSION: i64 = 11;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DistributionCostStatus {
@@ -423,9 +423,9 @@ mod tests {
     }
 
     #[test]
-    fn t_s07_002_skills_ready_requires_parser_v10() {
-        assert_eq!(SKILL_USAGE_PARSER_VERSION, 10);
-        for (parser_version, expected_ready) in [(9, false), (10, true)] {
+    fn t_s07_002_skills_ready_requires_parser_v11() {
+        assert_eq!(SKILL_USAGE_PARSER_VERSION, 11);
+        for (parser_version, expected_ready) in [(10, false), (11, true)] {
             let (ledger, root) = ledger_with_active_parser(parser_version);
             let snapshot = skills_usage_snapshot(&ledger, &[], &UsageFilter::default()).unwrap();
             assert_eq!(snapshot.value.ready, expected_ready);

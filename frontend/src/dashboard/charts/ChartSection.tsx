@@ -1,9 +1,11 @@
+import { memo } from "react";
+
 import { projectDisplay } from "../shared/projectDisplay";
 import { DistributionDonutCard } from "./DistributionDonutCard";
 import { SkillsUsageChart } from "./SkillsUsageChart";
 import type { DashboardChartsView } from "./useDashboardChartsController";
 
-export function ChartSection({ view }: { view: DashboardChartsView }) {
+export const ChartSection = memo(function ChartSection({ view }: { view: DashboardChartsView }) {
   const modelItems = (view.models?.items ?? []).map((item) => ({
     id: item.model,
     label: item.model,
@@ -27,7 +29,11 @@ export function ChartSection({ view }: { view: DashboardChartsView }) {
   });
 
   return (
-    <section aria-label="使用分布图表" aria-busy={view.loading}>
+    <section
+      aria-label="使用分布图表"
+      aria-busy={view.loading}
+      className="[content-visibility:auto] [contain-intrinsic-size:520px]"
+    >
       {view.error ? <div className="mb-3 text-xs text-destructive" role="status">图表数据加载失败</div> : null}
       <div className="grid grid-cols-2 gap-4 max-[1279px]:grid-cols-1">
         <DistributionDonutCard title="模型分布" items={modelItems} />
@@ -36,4 +42,4 @@ export function ChartSection({ view }: { view: DashboardChartsView }) {
       </div>
     </section>
   );
-}
+});

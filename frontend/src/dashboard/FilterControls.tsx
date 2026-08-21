@@ -2,7 +2,13 @@ import { ChevronRight, Cpu, Folder } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { forwardRef, useMemo, useState } from "react";
 
-import type { DashboardFilters, FilterOptionsResponse, ProjectFilterOption, ProjectSelection } from "../data/types";
+import type {
+  DashboardFilters,
+  FilterOptionsResponse,
+  ModelFilterProvider,
+  ProjectFilterOption,
+  ProjectSelection,
+} from "../data/types";
 import { Button, type ButtonProps } from "../ui/beui/button";
 import { Checkbox } from "../ui/beui/checkbox";
 import { MorphPopover, MorphPopoverContent, MorphPopoverTrigger } from "../ui/beui/morph-popover";
@@ -21,12 +27,37 @@ type FilterControlsProps = {
   onRetryOptions: () => void;
 };
 
-function isGptModel(model: string): boolean {
-  return /(?:^|[\/_:.\-])gpt(?:[-_.:/]|$)/i.test(model);
-}
+type ModelGroup = {
+  provider: ModelFilterProvider;
+  label: "OpenAI" | "Route-models";
+  models: string[];
+};
 
-function modelList(options: FilterOptionsResponse | null, selected: readonly string[]): string[] {
-  return [...new Set([...(options?.models ?? []), ...selected])];
+const MODEL_GROUPS: readonly { provider: ModelFilterProvider; label: ModelGroup["label"] }[] = [
+  { provider: "openai", label: "OpenAI" },
+  { provider: "route-models", label: "Route-models" },
+];
+
+function modelGroups(options: FilterOptionsResponse | null, selected: readonly string[]): ModelGroup[] {
+  const optionModels = options?.models ?? [];
+  const knownModels = new Set(optionModels.map(({ model }) => model));
+  const modelsByProvider = new Map<ModelFilterProvider, Set<string>>();
+  for (const { model, provider } of optionModels) {
+    const models = modelsByProvider.get(provider) ?? new Set<string>();
+    models.add(model);
+    modelsByProvider.set(provider, models);
+  }
+  const selectedOrphans = selected.filter((model) => !knownModels.has(model));
+  if (selectedOrphans.length > 0) {
+    const routeModels = modelsByProvider.get("route-models") ?? new Set<string>();
+    for (const model of selectedOrphans) routeModels.add(model);
+    modelsByProvider.set("route-models", routeModels);
+  }
+  return MODEL_GROUPS.flatMap(({ provider, label }) => {
+    const models = modelsByProvider.get(provider);
+    if (!models || models.size === 0) return [];
+    return [{ provider, label, models: [...models].sort((left, right) => left.localeCompare(right)) }];
+  });
 }
 
 function projectSelections(options: FilterOptionsResponse | null, selected: readonly ProjectSelection[]): ProjectLike[] {
@@ -51,20 +82,22 @@ const FilterTrigger = forwardRef<HTMLButtonElement, FilterTriggerProps>(function
 });
 
 export function FilterControls({ filters, options, optionsLoading, optionsStale, optionsErrorCode, anyFilterActive, onChange, onClear, onRetryOptions }: FilterControlsProps) {
-  const [gptExpanded, setGptExpanded] = useState(true);
+  const [expandedGroups, setExpandedGroups] = useState<Record<ModelFilterProvider, boolean>>({
+    openai: true,
+    "route-models": true,
+  });
   const reduce = useReducedMotion();
-  const models = useMemo(() => modelList(options, filters.models), [options, filters.models]);
+  const groups = useMemo(() => modelGroups(options, filters.models), [options, filters.models]);
   const projects = useMemo(() => projectSelections(options, filters.projects), [options, filters.projects]);
-  const gptModels = models.filter(isGptModel);
-  const otherModels = models.filter((model) => !isGptModel(model));
   const selectedModels = new Set(filters.models);
   const selectedProjects = new Set(filters.projects.map(projectKey));
-  const allGptSelected = gptModels.length > 0 && gptModels.every((model) => selectedModels.has(model));
-  const someGptSelected = gptModels.some((model) => selectedModels.has(model));
 
   const updateModels = (nextModels: string[]) => onChange({ ...filters, models: nextModels });
   const toggleModel = (model: string) => updateModels(selectedModels.has(model) ? filters.models.filter((value) => value !== model) : [...filters.models, model]);
-  const toggleGpt = () => updateModels(allGptSelected ? filters.models.filter((model) => !gptModels.includes(model)) : [...new Set([...filters.models, ...gptModels])]);
+  const toggleGroup = (groupModels: readonly string[]) => {
+    const allSelected = groupModels.every((model) => selectedModels.has(model));
+    updateModels(allSelected ? filters.models.filter((model) => !groupModels.includes(model)) : [...new Set([...filters.models, ...groupModels])]);
+  };
   const toggleProject = (project: ProjectFilterOption | ProjectSelection) => {
     const key = projectKey(project);
     const addition: ProjectSelection = project.kind === "project" ? { kind: "project", project_path: project.project_path } : { kind: project.kind };
@@ -78,16 +111,20 @@ export function FilterControls({ filters, options, optionsLoading, optionsStale,
       <MorphPopover>
         <MorphPopoverTrigger><FilterTrigger label="模型" count={filters.models.length} icon={<Cpu className="h-4 w-4" />} /></MorphPopoverTrigger>
         <MorphPopoverContent side="bottom" align="start" className="w-72 p-2">
-          <OptionStatus loading={optionsLoading} stale={optionsStale} error={optionsErrorCode} hasOptions={models.length > 0} onRetry={onRetryOptions} />
-          {!optionsLoading && models.length === 0 ? <div className="px-2 py-3 text-xs text-muted-foreground">暂无模型</div> : null}
-          {gptModels.length > 0 ? <div>
-            <div className={rowClass}>
-              <Checkbox checked={allGptSelected} indeterminate={someGptSelected && !allGptSelected} aria-label="GPT" onCheckedChange={toggleGpt} />
-              <button type="button" className="flex min-w-0 flex-1 items-center gap-1.5 text-left" aria-expanded={gptExpanded} onClick={() => setGptExpanded((value) => !value)}><span className="flex-1">GPT</span><motion.span animate={{ rotate: gptExpanded ? 90 : 0 }} transition={reduce ? { duration: 0 } : SPRING_LAYOUT}><ChevronRight className="h-4 w-4 text-muted-foreground" /></motion.span></button>
-            </div>
-            {gptExpanded ? <div className="pl-5">{gptModels.map((model) => <div key={model} className={rowClass}><Checkbox checked={selectedModels.has(model)} onCheckedChange={() => toggleModel(model)} label={model} /></div>)}</div> : null}
-          </div> : null}
-          {otherModels.map((model) => <div key={model} className={rowClass}><Checkbox checked={selectedModels.has(model)} onCheckedChange={() => toggleModel(model)} label={model} /></div>)}
+          <OptionStatus loading={optionsLoading} stale={optionsStale} error={optionsErrorCode} hasOptions={groups.length > 0} onRetry={onRetryOptions} />
+          {!optionsLoading && groups.length === 0 ? <div className="px-2 py-3 text-xs text-muted-foreground">暂无模型</div> : null}
+          {groups.map((group) => {
+            const expanded = expandedGroups[group.provider];
+            const allSelected = group.models.every((model) => selectedModels.has(model));
+            const someSelected = group.models.some((model) => selectedModels.has(model));
+            return <div key={group.provider}>
+              <div className={rowClass}>
+                <Checkbox checked={allSelected} indeterminate={someSelected && !allSelected} aria-label={group.label} onCheckedChange={() => toggleGroup(group.models)} />
+                <button type="button" className="flex min-w-0 flex-1 items-center gap-1.5 text-left" aria-expanded={expanded} onClick={() => setExpandedGroups((current) => ({ ...current, [group.provider]: !current[group.provider] }))}><span className="flex-1">{group.label}</span><motion.span animate={{ rotate: expanded ? 90 : 0 }} transition={reduce ? { duration: 0 } : SPRING_LAYOUT}><ChevronRight className="h-4 w-4 text-muted-foreground" /></motion.span></button>
+              </div>
+              {expanded ? <div className="pl-5">{group.models.map((model) => <div key={model} className={rowClass}><Checkbox checked={selectedModels.has(model)} onCheckedChange={() => toggleModel(model)} label={model} /></div>)}</div> : null}
+            </div>;
+          })}
         </MorphPopoverContent>
       </MorphPopover>
 

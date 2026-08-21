@@ -9,7 +9,14 @@ import { FilterControls } from "./FilterControls";
 
 const modelOptions: FilterOptionsResponse = {
   data_revision: 1,
-  models: ["gpt-4o", "gpt-4o-mini", "claude-3"],
+  models: [
+    { model: "gpt-4o", provider: "openai" },
+    { model: "gpt-4o-mini", provider: "openai" },
+    { model: "codex-auto-review", provider: "openai" },
+    { model: "claude-3", provider: "route-models" },
+    { model: "github-copilot/gpt-5.6-luna", provider: "route-models" },
+    { model: "gemini-2.5", provider: "route-models" },
+  ],
   projects: [],
 };
 
@@ -97,30 +104,63 @@ describe("FilterControls", () => {
   it.each([
     { name: "0/N", selected: [], ariaChecked: "false" },
     { name: "partial", selected: ["gpt-4o"], ariaChecked: "mixed" },
-    { name: "N/N", selected: ["gpt-4o", "gpt-4o-mini"], ariaChecked: "true" },
-  ])("exposes GPT $name state", async ({ selected, ariaChecked }) => {
+    { name: "N/N", selected: ["gpt-4o", "gpt-4o-mini", "codex-auto-review"], ariaChecked: "true" },
+  ])("exposes OpenAI $name state", async ({ selected, ariaChecked }) => {
     renderControls({ filters: { models: selected, projects: [] } });
     const triggerName = selected.length
       ? `模型筛选，已选${selected.length}项`
       : "模型筛选，全部";
     const dialog = await openPopover(triggerName);
 
-    expect(within(dialog).getByRole("checkbox", { name: "GPT" })).toHaveAttribute(
+    expect(within(dialog).getByRole("checkbox", { name: "OpenAI" })).toHaveAttribute(
       "aria-checked",
       ariaChecked,
     );
   });
 
-  it("expands and collapses the GPT model group", async () => {
+  it("renders OpenAI and Route-models as independent collapsible groups", async () => {
     renderControls();
     const dialog = await openPopover("模型筛选，全部");
-    const gptToggle = within(dialog).getByRole("button", { name: "GPT" });
+    const openAiToggle = within(dialog).getByRole("button", { name: "OpenAI" });
+    const routeModelsToggle = within(dialog).getByRole("button", { name: "Route-models" });
 
     expect(within(dialog).getByRole("checkbox", { name: "gpt-4o" })).toBeInTheDocument();
-    fireEvent.click(gptToggle);
+    expect(within(dialog).getByRole("checkbox", { name: "claude-3" })).toBeInTheDocument();
+    fireEvent.click(openAiToggle);
     expect(within(dialog).queryByRole("checkbox", { name: "gpt-4o" })).not.toBeInTheDocument();
-    fireEvent.click(gptToggle);
+    expect(within(dialog).getByRole("checkbox", { name: "claude-3" })).toBeInTheDocument();
+    fireEvent.click(routeModelsToggle);
+    expect(within(dialog).queryByRole("checkbox", { name: "claude-3" })).not.toBeInTheDocument();
+    fireEvent.click(openAiToggle);
+    fireEvent.click(routeModelsToggle);
     expect(within(dialog).getByRole("checkbox", { name: "gpt-4o" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("checkbox", { name: "claude-3" })).toBeInTheDocument();
+  });
+
+  it("uses backend provider metadata instead of guessing from model names", async () => {
+    renderControls();
+    const dialog = await openPopover("模型筛选，全部");
+
+    expect(within(dialog).getByRole("button", { name: "OpenAI" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Route-models" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("checkbox", { name: "github-copilot/gpt-5.6-luna" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("checkbox", { name: "gemini-2.5" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("checkbox", { name: "codex-auto-review" })).toBeInTheDocument();
+  });
+
+  it("keeps a selected orphan model cancellable in the Route-models fallback group", async () => {
+    const onChange = vi.fn();
+    renderControls({
+      filters: { models: ["orphan-rollout"], projects: [] },
+      onChange,
+    });
+    const dialog = await openPopover("模型筛选，已选1项");
+    const orphan = within(dialog).getByRole("checkbox", { name: "orphan-rollout" });
+
+    expect(within(dialog).getByRole("button", { name: "Route-models" })).toBeInTheDocument();
+    fireEvent.click(orphan);
+
+    expect(onChange).toHaveBeenCalledWith({ models: [], projects: [] });
   });
 
   it("selects normal, projectless, and unknown projects using their labels", async () => {

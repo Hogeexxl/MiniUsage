@@ -2,6 +2,18 @@ import type { SkillDayDto } from "../../data/types";
 
 export type SkillSeries = { id: string; label: string; counts: number[]; total: number; isOther?: boolean };
 
+function skillLabel(skillKey: string) {
+  return skillKey
+    .split(":")
+    .map((namespace) =>
+      namespace
+        .split("-")
+        .map((word) => (word.length === 0 ? word : `${word[0].toUpperCase()}${word.slice(1)}`))
+        .join(" "),
+    )
+    .join(": ");
+}
+
 export function buildSkillSeries(days: SkillDayDto[]) {
   const totals = new Map<string, number>();
   for (const day of days) for (const skill of day.skills) totals.set(skill.skill_name, (totals.get(skill.skill_name) ?? 0) + skill.count);
@@ -10,7 +22,7 @@ export function buildSkillSeries(days: SkillDayDto[]) {
   const otherNames = new Set(ranked.slice(10).map(([name]) => name));
   const series: SkillSeries[] = topNames.map((name) => {
     const counts = days.map((day) => day.skills.find((skill) => skill.skill_name === name)?.count ?? 0);
-    return { id: name, label: name, counts, total: counts.reduce((sum, value) => sum + value, 0) };
+    return { id: name, label: skillLabel(name), counts, total: counts.reduce((sum, value) => sum + value, 0) };
   });
   if (otherNames.size > 0) {
     const counts = days.map((day) => day.skills.reduce((sum, skill) => sum + (otherNames.has(skill.skill_name) ? skill.count : 0), 0));

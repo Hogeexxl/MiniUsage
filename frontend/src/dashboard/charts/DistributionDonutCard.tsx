@@ -9,6 +9,14 @@ import { focusOpacity } from "./chartMotion";
 import { ChartSurface } from "./ChartSurface";
 import { buildDistribution, type DistributionItem, type DistributionMetric } from "./distribution";
 
+const DONUT_RADIUS = 65.5;
+const DONUT_STROKE_WIDTH = 8;
+const DONUT_PATH_LENGTH = 100;
+const DONUT_GAP_PX = 2;
+const DONUT_PATH_UNITS_PER_PIXEL = DONUT_PATH_LENGTH / (2 * Math.PI * DONUT_RADIUS);
+const DONUT_CAP_UNITS = DONUT_STROKE_WIDTH * DONUT_PATH_UNITS_PER_PIXEL;
+const DONUT_GAP_UNITS = DONUT_GAP_PX * DONUT_PATH_UNITS_PER_PIXEL;
+
 function metricText(metric: DistributionMetric, value: number) {
   return metric === "cost" ? formatCompactCost(value) : formatCompact(Math.round(value));
 }
@@ -19,10 +27,13 @@ export function DistributionDonutCard({ title, items }: { title: string; items: 
   const reduce = useReducedMotion();
   const data = useMemo(() => buildDistribution(items, metric), [items, metric]);
   const focused = data.segments.find((segment) => segment.id === focusedId) ?? null;
+  const visibleSegments = data.segments.filter((segment) => segment.percentage > 0);
+  const hasData = visibleSegments.length > 0;
+  const hasMultipleSegments = visibleSegments.length > 1;
   let offset = 0;
   const centerValue = focused ? focused.value : data.total;
   const centerLabel = focused
-    ? `${focused.label} ${(focused.percentage * 100).toFixed(1)}%`
+    ? `${(focused.percentage * 100).toFixed(1)}%`
     : metric === "tokens"
       ? "Token"
       : "Cost";
@@ -38,7 +49,7 @@ export function DistributionDonutCard({ title, items }: { title: string; items: 
           </TabsList>
         </Tabs>
       </header>
-      <div className="mt-4 grid min-w-0 grid-cols-[140px_minmax(0,1fr)] items-start gap-4">
+      <div className="mt-4 grid min-w-0 grid-cols-[140px_minmax(0,1fr)] items-start gap-8">
         <div className="relative h-[140px] w-[140px]">
           <svg
             className="h-[140px] w-[140px] -rotate-90"
@@ -48,24 +59,27 @@ export function DistributionDonutCard({ title, items }: { title: string; items: 
             role="img"
             aria-label={`${title}${metric === "tokens" ? "Token" : "费用"}分布`}
           >
-            <circle cx="70" cy="70" r="65.5" pathLength="100" fill="none" stroke={chartMuted} strokeWidth="8" />
+            {!hasData ? <circle cx="70" cy="70" r={DONUT_RADIUS} pathLength={DONUT_PATH_LENGTH} fill="none" stroke={chartMuted} strokeWidth={DONUT_STROKE_WIDTH} /> : null}
             {data.segments.map((segment, index) => {
               if (segment.percentage <= 0) return null;
               const percent = segment.percentage * 100;
               const current = offset;
               offset += percent;
+              const inset = hasMultipleSegments ? DONUT_CAP_UNITS + DONUT_GAP_UNITS : 0;
+              const dashLength = hasMultipleSegments ? Math.max(0, percent - inset) : percent;
+              const dashStart = hasMultipleSegments ? current + inset / 2 : current;
               return (
                 <motion.circle
                   key={segment.id}
                   cx="70"
                   cy="70"
-                  r="65.5"
-                  pathLength="100"
+                  r={DONUT_RADIUS}
+                  pathLength={DONUT_PATH_LENGTH}
                   fill="none"
                   stroke={chartSeriesColor(index, segment.isOther === true)}
-                  strokeWidth="8"
-                  strokeLinecap="butt"
-                  strokeDasharray={`${percent} ${100 - percent}`} strokeDashoffset={-current}
+                  strokeWidth={DONUT_STROKE_WIDTH}
+                  strokeLinecap="round"
+                  strokeDasharray={`${dashLength} ${DONUT_PATH_LENGTH - dashLength}`} strokeDashoffset={-dashStart}
                   animate={{ opacity: focusOpacity(focusedId, segment.id) }}
                   transition={reduce ? { duration: 0 } : SPRING_LAYOUT}
                   onPointerEnter={() => setFocusedId(segment.id)} onPointerLeave={() => setFocusedId(null)}

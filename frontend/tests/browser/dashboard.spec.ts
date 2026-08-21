@@ -231,7 +231,10 @@ async function routeStableDashboardData(page: Page) {
   await page.route("**/api/service", (route) => json(route, { state: "running" }));
   await page.route("**/api/usage/filter-options*", (route) => json(route, {
     data_revision: REVISION,
-    models: ["gpt-5", "o4-mini"],
+    models: [
+      { model: "gpt-5", provider: "openai" },
+      { model: "o4-mini", provider: "route-models" },
+    ],
     projects: [{ kind: "project", project_name: "MiniUsage", project_path: "/work/MiniUsage" }],
   }));
   await page.route("**/api/usage/summary*", (route) => {

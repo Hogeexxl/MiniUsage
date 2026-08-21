@@ -46,7 +46,7 @@ function item(id: string, total = 3): SessionItemDto {
   };
 }
 
-function snapshot(count: number, seedCount = 60, key: RangeKey = "today"): SessionSnapshotResponse {
+function snapshot(count: number, seedCount = 40, key: RangeKey = "today"): SessionSnapshotResponse {
   const sort_index: SessionSortIndexItem[] = Array.from({ length: count }, (_, index) => ({
     root_session_id: `root-${index + 1}`,
     last_activity_at_ms: count - index,
@@ -105,7 +105,7 @@ function clientWith(overrides: Partial<MiniUsageClient> = {}): MiniUsageClient {
 afterEach(() => vi.useRealTimers());
 
 describe("useSessionTableController", () => {
-  it("T-S05-001 keeps a full index, shows 15/page, jumps windows, and isolates QueryKey caches", async () => {
+  it("T-S05-001 keeps a full index, shows 10/page, jumps windows, and isolates QueryKey caches", async () => {
     const first = snapshot(200);
     const getSessionSnapshot = vi.fn(async ({ range: key }: Parameters<MiniUsageClient["getSessionSnapshot"]>[0]) => ({ ...first, range: range(key) }));
     const getSessionRows = vi.fn(async ({ range: key, root_session_ids }: Parameters<MiniUsageClient["getSessionRows"]>[0]) => ({
@@ -120,9 +120,9 @@ describe("useSessionTableController", () => {
       { initialProps: { key: "today", selectedFilters: emptyFilters } },
     );
 
-    await waitFor(() => expect(result.current.rows).toHaveLength(15));
+    await waitFor(() => expect(result.current.rows).toHaveLength(10));
     expect(result.current.total_items).toBe(200);
-    expect(result.current.total_pages).toBe(14);
+    expect(result.current.total_pages).toBe(20);
     expect(getSessionSnapshot).toHaveBeenCalledTimes(1);
 
     await act(async () => result.current.next_page());
@@ -132,9 +132,9 @@ describe("useSessionTableController", () => {
     await act(async () => result.current.go_to_page(6));
     await waitFor(() => expect(result.current.page).toBe(6));
     await waitFor(() => expect(getSessionRows).toHaveBeenCalledTimes(1));
-    expect(getSessionRows.mock.calls[0][0].root_session_ids).toHaveLength(60);
-    expect(getSessionRows.mock.calls[0][0].root_session_ids[0]).toBe("root-61");
-    expect(getSessionRows.mock.calls[0][0].root_session_ids[59]).toBe("root-120");
+    expect(getSessionRows.mock.calls[0][0].root_session_ids).toHaveLength(40);
+    expect(getSessionRows.mock.calls[0][0].root_session_ids[0]).toBe("root-41");
+    expect(getSessionRows.mock.calls[0][0].root_session_ids[39]).toBe("root-80");
 
     await act(async () => result.current.select_sort("project"));
     expect(result.current.page).toBe(6);
@@ -164,7 +164,7 @@ describe("useSessionTableController", () => {
       data_revision: 1,
       total_items: sortIndex.length,
       sort_index: sortIndex,
-      items: sortIndex.slice(0, 60).map(({ root_session_id }) => item(root_session_id)),
+      items: sortIndex.slice(0, 40).map(({ root_session_id }) => item(root_session_id)),
     };
     const getSessionSnapshot = vi.fn(async ({ range: key }: Parameters<MiniUsageClient["getSessionSnapshot"]>[0]) => ({ ...full, range: range(key) }));
     const getSessionRows = vi.fn(async ({ range: key, root_session_ids }: Parameters<MiniUsageClient["getSessionRows"]>[0]) => ({
@@ -175,7 +175,7 @@ describe("useSessionTableController", () => {
     const client = clientWith({ getSessionSnapshot, getSessionRows });
     const { feed } = sourceAndFeed(client);
     const { result, unmount } = renderHook(() => useSessionTableController("today", emptyFilters, { client, revisionFeed: feed }));
-    await waitFor(() => expect(result.current.rows).toHaveLength(15));
+    await waitFor(() => expect(result.current.rows).toHaveLength(10));
 
     const validText = (value: string | null) => value !== null && value.length > 0;
     const valueFor = (entry: SessionSortIndexItem, field: SessionSortField): string | number | null => {
@@ -206,7 +206,7 @@ describe("useSessionTableController", () => {
     };
     const expectedPage = (field: SessionSortField, order: "asc" | "desc", page: number) => [...sortIndex]
       .sort((left, right) => compare(left, right, field, order))
-      .slice((page - 1) * 15, page * 15)
+      .slice((page - 1) * 10, page * 10)
       .map((entry) => entry.root_session_id);
     const setSort = async (field: SessionSortField, order: "asc" | "desc") => {
       if (result.current.sort_by !== field) await act(async () => result.current.select_sort(field));
@@ -224,8 +224,8 @@ describe("useSessionTableController", () => {
     }
 
     await setSort("combined_estimated_cost", "desc");
-    await act(async () => result.current.go_to_page(14));
-    await waitFor(() => expect(result.current.rows.map((row) => row.root_session_id)).toEqual(expectedPage("combined_estimated_cost", "desc", 14)));
+    await act(async () => result.current.go_to_page(20));
+    await waitFor(() => expect(result.current.rows.map((row) => row.root_session_id)).toEqual(expectedPage("combined_estimated_cost", "desc", 20)));
     expect(result.current.rows.at(-1)?.root_session_id).toBe(
       sortIndex.find((entry) => entry.combined_estimated_cost === null)?.root_session_id,
     );
@@ -244,26 +244,26 @@ describe("useSessionTableController", () => {
     });
     const { feed: prefetchFeed } = sourceAndFeed(prefetchClient);
     const { result: prefetchResult } = renderHook(() => useSessionTableController("today", emptyFilters, { client: prefetchClient, revisionFeed: prefetchFeed }));
-    await waitFor(() => expect(prefetchResult.current.rows).toHaveLength(15));
+    await waitFor(() => expect(prefetchResult.current.rows).toHaveLength(10));
     const requestCountBeforePrefetch = prefetchRows.mock.calls.length;
     await act(async () => prefetchResult.current.go_to_page(3));
     await waitFor(() => expect(prefetchRows.mock.calls.length).toBeGreaterThan(requestCountBeforePrefetch));
     const page3Request = prefetchRows.mock.calls.at(-1)?.[0].root_session_ids ?? [];
-    expect(page3Request).toHaveLength(60);
-    expect(page3Request[0]).toBe("root-061");
-    expect(page3Request.at(-1)).toBe("root-120");
+    expect(page3Request).toHaveLength(40);
+    expect(page3Request[0]).toBe("root-041");
+    expect(page3Request.at(-1)).toBe("root-080");
     const countAfterPage3 = prefetchRows.mock.calls.length;
     await waitFor(() => expect(prefetchRows.mock.calls.length).toBe(countAfterPage3));
     await act(async () => prefetchResult.current.go_to_page(7));
     await waitFor(() => expect(prefetchRows.mock.calls.length).toBeGreaterThan(countAfterPage3));
     const page7Request = prefetchRows.mock.calls.at(-1)?.[0].root_session_ids ?? [];
-    expect(page7Request).toHaveLength(60);
-    expect(page7Request[0]).toBe("root-121");
-    expect(page7Request.at(-1)).toBe("root-180");
+    expect(page7Request).toHaveLength(40);
+    expect(page7Request[0]).toBe("root-081");
+    expect(page7Request.at(-1)).toBe("root-120");
     const countAfterPage7 = prefetchRows.mock.calls.length;
     await waitFor(() => expect(prefetchRows.mock.calls.length).toBe(countAfterPage7));
     await act(async () => prefetchResult.current.select_sort("last_activity"));
-    expect(prefetchRows.mock.calls.length).toBe(countAfterPage7);
+    expect(prefetchRows.mock.calls.length).toBe(countAfterPage7 + 1);
     prefetchFeed.dispose();
   });
 
@@ -281,11 +281,11 @@ describe("useSessionTableController", () => {
     });
     const { feed } = sourceAndFeed(client);
     const { result } = renderHook(() => useSessionTableController("today", emptyFilters, { client, revisionFeed: feed }));
-    await waitFor(() => expect(result.current.rows).toHaveLength(15));
+    await waitFor(() => expect(result.current.rows).toHaveLength(10));
 
     await act(async () => result.current.go_to_page(3));
     await waitFor(() => expect(getSessionRows).toHaveBeenCalledTimes(1));
-    expect(getSessionRows.mock.calls[0][0].root_session_ids).toHaveLength(60);
+    expect(getSessionRows.mock.calls[0][0].root_session_ids).toHaveLength(40);
     expect(result.current.page_state).toBe("idle");
 
     await act(async () => {
@@ -297,7 +297,7 @@ describe("useSessionTableController", () => {
 
     await act(async () => resolveBatch());
     await waitFor(() => expect(result.current.page_state).toBe("idle"));
-    await waitFor(() => expect(result.current.rows).toHaveLength(15));
+    await waitFor(() => expect(result.current.rows).toHaveLength(10));
     expect(result.current.page).toBe(6);
     expect(getSessionRows).toHaveBeenCalledTimes(1);
     feed.dispose();
@@ -311,7 +311,7 @@ describe("useSessionTableController", () => {
     });
     const { feed } = sourceAndFeed(client);
     const { result, rerender } = renderHook(({ key }: { key: RangeKey }) => useSessionTableController(key, emptyFilters, { client, revisionFeed: feed }), { initialProps: { key: "today" } });
-    await waitFor(() => expect(result.current.rows).toHaveLength(15));
+    await waitFor(() => expect(result.current.rows).toHaveLength(10));
     await act(async () => result.current.go_to_page(6));
     rerender({ key: "yesterday" });
     resolveRows({ range: range("today"), data_revision: 1, items: [item("root-61")] });

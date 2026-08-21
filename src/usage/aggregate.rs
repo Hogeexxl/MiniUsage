@@ -5,6 +5,8 @@ use std::{collections::BTreeMap, fmt, path::Path};
 use rusqlite::{Connection, Row, params};
 use rusqlite::{params_from_iter, types::Value};
 
+use crate::cost::ModelRegistry;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TimeRange {
     pub start_ms: i64,
@@ -446,9 +448,15 @@ pub enum ProjectFilterOption {
     Unknown,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ModelFilterOption {
+    pub model: String,
+    pub provider: String,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct FilterOptions {
-    pub models: Vec<String>,
+    pub models: Vec<ModelFilterOption>,
     pub projects: Vec<ProjectFilterOption>,
 }
 
@@ -1103,7 +1111,16 @@ impl<'connection> AggregateReader<'connection> {
             .query_map(params![epoch], |row| row.get(0))
             .map_err(map_sql_error)?
             .collect::<rusqlite::Result<Vec<String>>>()
-            .map_err(map_sql_error)?;
+            .map_err(map_sql_error)?
+            .into_iter()
+            .map(|model| {
+                let provider = ModelRegistry::new().resolve(&model).provider;
+                ModelFilterOption {
+                    model,
+                    provider: provider.as_str().to_owned(),
+                }
+            })
+            .collect();
 
         let mut projects_statement = self
             .connection
@@ -3244,10 +3261,22 @@ mod tests {
         assert_eq!(
             options.models,
             vec![
-                "gpt-a".to_owned(),
-                "gpt-alt".to_owned(),
-                "gpt-b".to_owned(),
-                "gpt-c".to_owned(),
+                ModelFilterOption {
+                    model: "gpt-a".to_owned(),
+                    provider: "route-models".to_owned(),
+                },
+                ModelFilterOption {
+                    model: "gpt-alt".to_owned(),
+                    provider: "route-models".to_owned(),
+                },
+                ModelFilterOption {
+                    model: "gpt-b".to_owned(),
+                    provider: "route-models".to_owned(),
+                },
+                ModelFilterOption {
+                    model: "gpt-c".to_owned(),
+                    provider: "route-models".to_owned(),
+                },
             ]
         );
         assert_eq!(
@@ -3274,6 +3303,36 @@ mod tests {
             ProjectFilterOption::Project { project_path, .. }
                 if project_path == &fixture_path("Users/me/generated-cwd")
         )));
+        transaction.commit().unwrap();
+    }
+
+    #[test]
+    fn t_s05_002_filter_options_classify_openai_provider() {
+        let mut connection = filter_fixture();
+        insert_event(
+            &connection,
+            "openai-model",
+            250,
+            "root-a",
+            "root-a",
+            "gpt-5.6-luna",
+            1,
+            0,
+            Some(0),
+            1,
+            0,
+        );
+
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Deferred)
+            .unwrap();
+        let options = AggregateReader::new(&transaction).filter_options().unwrap();
+        assert!(
+            options
+                .models
+                .iter()
+                .any(|option| { option.model == "gpt-5.6-luna" && option.provider == "openai" })
+        );
         transaction.commit().unwrap();
     }
 }

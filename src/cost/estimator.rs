@@ -181,7 +181,7 @@ fn to_non_negative_i64(value: i128) -> Result<i64, CostEstimationError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cost::pricing::{GPT_5_6_SOL_PRICING, TokenRates};
+    use crate::cost::pricing::{BundledPricingRepository, GPT_5_6_SOL_PRICING, TokenRates};
 
     fn usage(
         input_tokens: i64,
@@ -328,5 +328,59 @@ mod tests {
             long_compensation,
             CostEstimateOutcome::Unknown(UnknownCostReason::AmbiguousLongContextGranularity)
         );
+    }
+
+    #[test]
+    fn t_mu04_a05_snapshot_models_without_cache_write_rate_are_unknown_only_on_write() {
+        let repository = BundledPricingRepository::new();
+        let with_write = usage(100, 0, Some(1), 10, 0);
+        let without_write = usage(100, 0, None, 10, 0);
+
+        for model in ["gpt-5.4", "gpt-5.5"] {
+            let pricing = repository.resolve(model, 0).expect(model);
+            assert_eq!(
+                CostEstimator::estimate(&with_write, pricing, UsageCostGranularity::RequestScoped,),
+                Ok(CostEstimateOutcome::Unknown(
+                    UnknownCostReason::MissingCacheWriteRate
+                ))
+            );
+            assert!(matches!(
+                CostEstimator::estimate(
+                    &without_write,
+                    pricing,
+                    UsageCostGranularity::RequestScoped,
+                ),
+                Ok(CostEstimateOutcome::Known(_))
+            ));
+        }
+    }
+
+    #[test]
+    fn t_mu04_a06_long_context_boundary_applies_to_current_gpt5_catalog() {
+        let repository = BundledPricingRepository::new();
+        let short = usage(272_000, 0, Some(0), 0, 0);
+        let long = usage(272_001, 0, Some(0), 0, 0);
+
+        for model in ["gpt-5.4", "gpt-5.5", "gpt-5.6-sol"] {
+            let pricing = repository.resolve(model, 0).expect(model);
+            assert!(matches!(
+                CostEstimator::estimate(&short, pricing, UsageCostGranularity::RequestScoped,),
+                Ok(CostEstimateOutcome::Known(_))
+            ));
+            assert!(matches!(
+                CostEstimator::estimate(&long, pricing, UsageCostGranularity::RequestScoped,),
+                Ok(CostEstimateOutcome::Known(_))
+            ));
+            assert_eq!(
+                CostEstimator::estimate(
+                    &long,
+                    pricing,
+                    UsageCostGranularity::AggregateCompensation,
+                ),
+                Ok(CostEstimateOutcome::Unknown(
+                    UnknownCostReason::AmbiguousLongContextGranularity
+                ))
+            );
+        }
     }
 }

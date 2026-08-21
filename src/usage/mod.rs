@@ -18,10 +18,10 @@ pub use skills::SkillUsageEvent;
 
 pub use aggregate::{
     AggregateError, AggregateReader, FilterOptions, MAX_SESSION_ROWS, MainModelUsage,
-    MainSessionDetail, ModelUsageRow, ModelUsageRows, ProjectFilterOption, SessionCursor,
-    SessionDetail, SessionPageRequest, SessionSnapshot, SessionSortField, SessionSortIndexItem,
-    SessionSortOrder, SessionUsagePage, SessionUsageRow, SubagentDetail, SummaryQuery, TimeRange,
-    TokenTotals, UsageFilter, UsageSummary,
+    MainSessionDetail, ModelFilterOption, ModelUsageRow, ModelUsageRows, ProjectFilterOption,
+    SessionCursor, SessionDetail, SessionPageRequest, SessionSnapshot, SessionSortField,
+    SessionSortIndexItem, SessionSortOrder, SessionUsagePage, SessionUsageRow, SubagentDetail,
+    SummaryQuery, TimeRange, TokenTotals, UsageFilter, UsageSummary,
 };
 pub use pipeline::{
     CheckpointExpectation, ClassifiedOversizedUsageLine, ClassifiedUsageItem, ClassifiedUsageLine,

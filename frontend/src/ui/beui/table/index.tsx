@@ -207,6 +207,7 @@ export function Table<T>({
     selectable,
     widths,
   ]);
+  const tableWidth = `max(100%, ${minTableWidth}px)`;
 
   // Infinite scroll: fire onEndReached once per near-bottom dwell, paused while
   // loading; the guard resets when the load completes.
@@ -271,7 +272,8 @@ export function Table<T>({
           className={cn("border-collapse", sized ? "w-max" : undefined)}
           style={{
             tableLayout: "fixed",
-            minWidth: `max(100%, ${minTableWidth}px)`,
+            width: tableWidth,
+            minWidth: tableWidth,
           }}
         >
           <colgroup>
@@ -283,8 +285,8 @@ export function Table<T>({
                 <col key={column.key} style={width ? { width } : undefined} />
               );
             })}
-            {/* Empty filler owns the leftover space — no gap, content unpinned. */}
-            <col />
+            {/* Keep the un-sized title column as the only flexible column. */}
+            <col style={{ width: 0 }} />
           </colgroup>
 
           <TableHeader

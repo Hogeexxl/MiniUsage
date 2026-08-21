@@ -1104,7 +1104,7 @@ mod tests {
     }
 
     #[test]
-    fn t_mu04_a02_open_reprices_pricing_v2_atomically() {
+    fn t_mu04_a02_open_reprices_pricing_catalog_atomically() {
         let root = TempDir::new();
         let opts = options(&root);
         let first = Ledger::open(opts.clone()).unwrap();
@@ -1166,7 +1166,7 @@ mod tests {
                 Some(229_000),
                 Some("codex-auto-review".to_owned()),
                 1,
-                2,
+                3,
                 before_revision + 1,
                 parser_version_before,
             )

@@ -11,6 +11,9 @@ import { ChartSurface } from "./ChartSurface";
 import { buildMonotoneAreaPath } from "./monotoneArea";
 import { buildSkillSeries, niceScale } from "./skillSeries";
 
+type SkillPopoverState = { id: string; mode: "area" | "legend" } | null;
+type SkillPopoverAnchor = { left: number; top: number };
+
 function formatShortDate(date: string) {
   return date.slice(5);
 }
@@ -18,7 +21,11 @@ function formatShortDate(date: string) {
 export function SkillsUsageChart({ response, className }: { response: SkillsUsageResponse | null; className?: string }) {
   const [plotHoveredDay, setPlotHoveredDay] = useState<number | null>(null);
   const [popoverDay, setPopoverDay] = useState<number | null>(null);
-  const [focusedId, setFocusedId] = useState<string | null>(null);
+  const [areaHoverId, setAreaHoverId] = useState<string | null>(null);
+  const [legendHoverId, setLegendHoverId] = useState<string | null>(null);
+  const [legendFocusId, setLegendFocusId] = useState<string | null>(null);
+  const [skillPopover, setSkillPopover] = useState<SkillPopoverState>(null);
+  const [skillPopoverAnchor, setSkillPopoverAnchor] = useState<SkillPopoverAnchor>({ left: 0, top: 0 });
   const reduce = useReducedMotion();
   const data = useMemo(() => buildSkillSeries(response?.days ?? []), [response]);
 
@@ -48,10 +55,46 @@ export function SkillsUsageChart({ response, className }: { response: SkillsUsag
     return { ...series, index, color: chartSeriesColor(index, series.isOther), path };
   });
   const activeDay = plotHoveredDay ?? popoverDay;
+  const focusedId = skillPopover?.id ?? legendFocusId ?? legendHoverId ?? areaHoverId;
+  const activeSkill = skillPopover ? data.series.find((series) => series.id === skillPopover.id) ?? null : null;
+  const skillDayIndex = data.days.length === 0
+    ? 0
+    : Math.max(0, Math.min(data.days.length - 1, plotHoveredDay ?? 0));
+  const displayedTotal = activeSkill?.total ?? data.total;
   const rowsForDay = (dayIndex: number) => data.series
     .map((series, index) => ({ id: series.id, label: series.label, count: series.counts[dayIndex], index, isOther: series.isOther }))
     .filter((row) => row.count > 0)
     .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+
+  const updateSkillPopoverAnchor = (target: Element, clientX?: number, clientY?: number) => {
+    const rect = target.getBoundingClientRect();
+    const left = Number.isFinite(clientX) ? clientX as number : rect.left + rect.width / 2;
+    const top = Number.isFinite(clientY) ? clientY as number : rect.top + rect.height / 2;
+    setSkillPopoverAnchor((current) => current.left === left && current.top === top ? current : { left, top });
+  };
+
+  const showSkillPopover = (
+    id: string,
+    mode: "area" | "legend",
+    target: Element,
+    clientX?: number,
+    clientY?: number,
+  ) => {
+    updateSkillPopoverAnchor(target, clientX, clientY);
+    setSkillPopover({ id, mode });
+  };
+
+  const resetSkillInteraction = () => {
+    setAreaHoverId(null);
+    setLegendHoverId(null);
+    setLegendFocusId(null);
+    setSkillPopover(null);
+  };
+
+  const handleDateIntent = () => {
+    setPlotHoveredDay(null);
+    resetSkillInteraction();
+  };
 
   const handlePlotPointerMove = (event: PointerEvent<SVGSVGElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -61,18 +104,75 @@ export function SkillsUsageChart({ response, className }: { response: SkillsUsag
     const ratio = (clampedX - left) / plotWidth;
     const index = Math.round(ratio * (data.days.length - 1));
     setPlotHoveredDay(Math.max(0, Math.min(data.days.length - 1, index)));
+    if (skillPopover?.mode === "area") {
+      setSkillPopoverAnchor((current) =>
+        current.left === event.clientX && current.top === event.clientY
+          ? current
+          : { left: event.clientX, top: event.clientY },
+      );
+    }
   };
 
   return (
     <ChartSurface className={className}>
       <header>
         <h2 className="m-0 text-sm font-medium text-foreground">Skills Used</h2>
-        <span title={String(data.total)}>
-          <NumberTicker value={data.total} blur format={formatCompact} className="mt-1 text-[28px] font-semibold leading-8 tracking-tight text-foreground" />
+        <span title={String(displayedTotal)}>
+          <NumberTicker value={displayedTotal} blur format={formatCompact} className="mt-1 text-[28px] font-semibold leading-8 tracking-tight text-foreground" />
         </span>
       </header>
       {data.days.length === 7 ? (
         <div className="mt-3 min-w-0">
+          <Popover
+            open={skillPopover !== null}
+            onOpenChange={(open) => {
+              if (!open) setSkillPopover(null);
+            }}
+            side="top"
+            align="center"
+            className="pointer-events-none h-0 w-0"
+          >
+            <PopoverTrigger>
+              <span
+                aria-hidden="true"
+                data-skill-popover-anchor=""
+                className="block h-px w-px"
+                style={{
+                  position: "fixed",
+                  left: `${skillPopoverAnchor.left}px`,
+                  top: `${skillPopoverAnchor.top}px`,
+                  width: "1px",
+                  height: "1px",
+                  opacity: 0,
+                  pointerEvents: "none",
+                }}
+              />
+            </PopoverTrigger>
+            {activeSkill && skillPopover ? (
+              <PopoverContent className="w-max max-w-[min(320px,80vw)]">
+                <div className="mb-2 text-xs font-medium text-foreground">{activeSkill.label}</div>
+                {skillPopover.mode === "area" ? (
+                  <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1">
+                    <span className="text-xs font-normal text-muted-foreground">{data.days[skillDayIndex]?.date}</span>
+                    <span className="text-right text-xs font-normal tabular-nums text-muted-foreground">{activeSkill.counts[skillDayIndex] ?? 0}</span>
+                    <span className="mt-1 border-t border-border pt-1 text-xs font-semibold text-foreground">7日总数</span>
+                    <span className="mt-1 border-t border-border pt-1 text-right text-xs font-semibold tabular-nums text-foreground">{activeSkill.total}</span>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1">
+                    {data.days.map((day, index) => (
+                      <div key={day.date} className="contents">
+                        <span className="text-xs font-normal text-muted-foreground">{day.date}</span>
+                        <span className="text-right text-xs font-normal tabular-nums text-muted-foreground">{activeSkill.counts[index] ?? 0}</span>
+                      </div>
+                    ))}
+                    <span className="mt-1 border-t border-border pt-1 text-xs font-semibold text-foreground">7日总数</span>
+                    <span className="mt-1 border-t border-border pt-1 text-right text-xs font-semibold tabular-nums text-foreground">{activeSkill.total}</span>
+                  </div>
+                )}
+              </PopoverContent>
+            ) : null}
+          </Popover>
           <div className="relative min-w-0">
             <svg
               viewBox={`0 0 ${width} ${svgHeight}`}
@@ -96,8 +196,14 @@ export function SkillsUsageChart({ response, className }: { response: SkillsUsag
                   fillOpacity="0.72"
                   animate={{ opacity: focusOpacity(focusedId, area.id) }}
                   transition={reduce ? { duration: 0 } : SPRING_LAYOUT}
-                  onPointerEnter={() => setFocusedId(area.id)}
-                  onPointerLeave={() => setFocusedId(null)}
+                  onPointerEnter={(event) => {
+                    setAreaHoverId(area.id);
+                    showSkillPopover(area.id, "area", event.currentTarget, event.clientX, event.clientY);
+                  }}
+                  onPointerLeave={() => {
+                    setAreaHoverId(null);
+                    setSkillPopover((current) => current?.mode === "area" && current.id === area.id ? null : current);
+                  }}
                 />
               ))}
               {activeDay !== null ? <line x1={x(activeDay)} y1={top} x2={x(activeDay)} y2={top + plotHeight} stroke="var(--foreground)" strokeOpacity="0.4" strokeWidth="1" pointerEvents="none" /> : null}
@@ -116,33 +222,44 @@ export function SkillsUsageChart({ response, className }: { response: SkillsUsag
                   <Popover
                     key={day.date}
                     trigger="hover"
-                    open={activeDay === index}
-                    onOpenChange={(open) => setPopoverDay((current) => open || current !== index ? (open ? index : current) : null)}
+                    open={skillPopover === null && activeDay === index}
+                    onOpenChange={(open) => {
+                      if (open) handleDateIntent();
+                      setPopoverDay((current) => open || current !== index ? (open ? index : current) : null);
+                    }}
                     side="top"
                     align="center"
                     className="h-full w-full"
                   >
                     <PopoverTrigger>
-                      <button type="button" aria-label={day.date} className="h-full w-full text-center text-xs leading-4 text-muted-foreground hover:text-foreground focus-visible:text-foreground">
+                      <button
+                        type="button"
+                        aria-label={day.date}
+                        className="h-full w-full text-center text-xs leading-4 text-muted-foreground hover:text-foreground focus-visible:text-foreground"
+                        onPointerEnter={handleDateIntent}
+                        onFocus={handleDateIntent}
+                      >
                         {formatShortDate(day.date)}
                       </button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-max max-w-[min(320px,80vw)]">
-                      <div className="mb-2 text-xs font-medium text-foreground">{day.date}</div>
-                      <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1">
-                        {rowsForDay(index).map((row) => (
-                          <div key={row.id} className="contents">
-                            <span className="flex min-w-0 items-center gap-1.5 text-xs font-normal text-muted-foreground">
-                              <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: chartSeriesColor(row.index, row.isOther) }} />
-                              <span className="truncate">{row.label}</span>
-                            </span>
-                            <span className="text-right text-xs font-normal tabular-nums text-muted-foreground">{row.count}</span>
-                          </div>
-                        ))}
-                        <span className="mt-1 border-t border-border pt-1 text-xs font-semibold text-foreground">Total</span>
-                        <span className="mt-1 border-t border-border pt-1 text-right text-xs font-semibold tabular-nums text-foreground">{day.total}</span>
-                      </div>
-                    </PopoverContent>
+                    {skillPopover === null && popoverDay === index ? (
+                      <PopoverContent className="w-max max-w-[min(320px,80vw)]">
+                        <div className="mb-2 text-xs font-medium text-foreground">{day.date}</div>
+                        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1">
+                          {rowsForDay(index).map((row) => (
+                            <div key={row.id} className="contents">
+                              <span className="flex min-w-0 items-center gap-1.5 text-xs font-normal text-muted-foreground">
+                                <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: chartSeriesColor(row.index, row.isOther) }} />
+                                <span className="truncate">{row.label}</span>
+                              </span>
+                              <span className="text-right text-xs font-normal tabular-nums text-muted-foreground">{row.count}</span>
+                            </div>
+                          ))}
+                          <span className="mt-1 border-t border-border pt-1 text-xs font-semibold text-foreground">Total</span>
+                          <span className="mt-1 border-t border-border pt-1 text-right text-xs font-semibold tabular-nums text-foreground">{day.total}</span>
+                        </div>
+                      </PopoverContent>
+                    ) : null}
                   </Popover>
                 ))}
               </div>
@@ -156,10 +273,24 @@ export function SkillsUsageChart({ response, className }: { response: SkillsUsag
                 className="flex min-w-0 items-center gap-1.5 text-xs leading-4 text-muted-foreground"
                 animate={{ opacity: focusOpacity(focusedId, series.id) }}
                 transition={reduce ? { duration: 0 } : SPRING_LAYOUT}
-                onPointerEnter={() => setFocusedId(series.id)}
-                onPointerLeave={() => setFocusedId(null)}
-                onFocus={() => setFocusedId(series.id)}
-                onBlur={() => setFocusedId(null)}
+                aria-haspopup="dialog"
+                aria-expanded={skillPopover?.mode === "legend" && skillPopover.id === series.id}
+                onPointerEnter={(event) => {
+                  setLegendHoverId(series.id);
+                  showSkillPopover(series.id, "legend", event.currentTarget, event.clientX, event.clientY);
+                }}
+                onPointerLeave={() => {
+                  setLegendHoverId(null);
+                  setSkillPopover((current) => current?.mode === "legend" && current.id === series.id && legendFocusId === null ? null : current);
+                }}
+                onFocus={(event) => {
+                  setLegendFocusId(series.id);
+                  showSkillPopover(series.id, "legend", event.currentTarget);
+                }}
+                onBlur={() => {
+                  setLegendFocusId(null);
+                  setSkillPopover((current) => current?.mode === "legend" && current.id === series.id && legendHoverId === null ? null : current);
+                }}
               >
                 <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: chartSeriesColor(index, series.isOther) }} />
                 <span className="max-w-44 truncate">{series.label}</span>

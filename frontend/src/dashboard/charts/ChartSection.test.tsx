@@ -38,6 +38,7 @@ describe("ChartSection", () => {
     render(<ChartSection view={view} />);
 
     const section = screen.getByRole("region", { name: "使用分布图表" });
+    expect(section).toHaveClass("[content-visibility:auto]", "[contain-intrinsic-size:520px]");
     const directGrids = Array.from(section.children).filter(
       (child): child is HTMLElement => child instanceof HTMLElement && child.classList.contains("grid"),
     );
@@ -62,7 +63,8 @@ describe("ChartSection", () => {
         "rounded-[28px]",
         "border",
         "border-border",
-        "bg-card",
+        "bg-[#fcfcfc]",
+        "dark:bg-[#151515]",
         "p-5",
         "text-card-foreground",
       );

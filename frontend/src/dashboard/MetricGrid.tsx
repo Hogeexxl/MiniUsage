@@ -1,6 +1,6 @@
 import { CircleAlert } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
-import { useState } from "react";
+import { memo, useState } from "react";
 
 import type { SummaryUsageDto } from "../data/types";
 import { EASE_OUT } from "../ui/lib/ease";
@@ -64,19 +64,19 @@ function TotalTokenMetric({ usage }: { usage: SummaryUsageDto }) {
       <CompactTicker value={total} formatter={formatIntegerFull} />
       <div className="relative mt-2 h-[5px] overflow-hidden rounded-full bg-muted" aria-label="输入与输出 Token 构成；推理 Token 包含在输出 Token 中">
         <motion.div
-          className="absolute inset-y-0 left-0 bg-accent"
+          className="absolute inset-y-0 left-0 bg-[#68c0e8]"
           style={{ width: `${inputPct}%` }}
           animate={{ opacity: dim("input") ? 0.3 : 1, scaleY: focus === "input" && !reduce ? 1.25 : 1 }}
           transition={transition}
         />
         <motion.div
-          className="absolute inset-y-0 bg-violet"
+          className="absolute inset-y-0 bg-[#be753e]"
           style={{ left: `${inputPct}%`, width: `${outputPct}%`, zIndex: focus === "output" ? 3 : 1 }}
           animate={{ opacity: dim("output") ? 0.3 : 1, scaleY: focus === "output" && !reduce ? 1.25 : 1 }}
           transition={transition}
         />
         <motion.div
-          className="absolute inset-y-0 right-0 bg-neon"
+          className="absolute inset-y-0 right-0 bg-[#a6333d]"
           style={{ width: `${reasoningPct}%`, zIndex: focus === "output" ? 0 : 2 }}
           animate={{ opacity: focus === "output" ? 0 : dim("reasoning") ? 0.3 : 1, scaleY: focus === "reasoning" && !reduce ? 1.25 : 1 }}
           transition={transition}
@@ -84,13 +84,13 @@ function TotalTokenMetric({ usage }: { usage: SummaryUsageDto }) {
       </div>
       <div className="mt-2 flex min-w-0 items-center gap-4 whitespace-nowrap">
         <button type="button" className={`${LEGEND} flex items-center gap-1.5`} onPointerEnter={() => setFocus("input")} onPointerLeave={() => setFocus(null)} onFocus={() => setFocus("input")} onBlur={() => setFocus(null)}>
-          <Dot className="bg-accent" />输入 <CompactTicker value={input} formatter={formatIntegerFull} className="text-foreground" />
+          <Dot className="bg-[#68c0e8]" />输入 <CompactTicker value={input} formatter={formatIntegerFull} className="text-foreground" />
         </button>
         <button type="button" className={`${LEGEND} flex items-center gap-1.5`} onPointerEnter={() => setFocus("output")} onPointerLeave={() => setFocus(null)} onFocus={() => setFocus("output")} onBlur={() => setFocus(null)}>
-          <Dot className="bg-violet" />输出 <CompactTicker value={output} formatter={formatIntegerFull} className="text-foreground" />
+          <Dot className="bg-[#be753e]" />输出 <CompactTicker value={output} formatter={formatIntegerFull} className="text-foreground" />
         </button>
         <button type="button" className={`${LEGEND} flex items-center gap-1.5`} onPointerEnter={() => setFocus("reasoning")} onPointerLeave={() => setFocus(null)} onFocus={() => setFocus("reasoning")} onBlur={() => setFocus(null)} aria-label={`推理 ${formatIntegerFull(reasoning).accessibleName}，包含在输出 Token 中`}>
-          <Dot className="bg-neon" />推理 <CompactTicker value={reasoning} formatter={formatIntegerFull} className="text-foreground" />
+          <Dot className="bg-[#a6333d]" />推理 <CompactTicker value={reasoning} formatter={formatIntegerFull} className="text-foreground" />
         </button>
       </div>
     </TiltCard>
@@ -114,15 +114,15 @@ function CacheHitMetric({ usage }: { usage: SummaryUsageDto }) {
         <CompactTicker value={rate} tickerValue={Math.round(rate * 1000)} formatter={formatRatio} tickerFormatter={(next) => formatRatio(next / 1000).text} />
       )}
       <motion.div className="relative mt-2 h-[5px] overflow-hidden rounded-full bg-muted" animate={{ scaleY: focus !== null && !reduce ? 1.12 : 1 }} transition={reduce ? { duration: 0 } : { ease: EASE_OUT }}>
-        <motion.div className="absolute inset-y-0 left-0 bg-accent" style={{ width: `${cachedPct}%` }} transition={reduce ? { duration: 0 } : { ease: EASE_OUT }} />
-        <motion.div className="absolute inset-y-0 right-0 bg-muted" style={{ width: `${100 - cachedPct}%` }} animate={{ opacity: focus === "cached" ? 0.3 : 1 }} transition={reduce ? { duration: 0 } : { ease: EASE_OUT }} />
+        <motion.div className="absolute inset-y-0 left-0 bg-[#be506e]" style={{ width: `${cachedPct}%` }} transition={reduce ? { duration: 0 } : { ease: EASE_OUT }} />
+        <motion.div className="absolute inset-y-0 right-0 bg-[#4057a5]" style={{ width: `${100 - cachedPct}%` }} animate={{ opacity: focus === "cached" ? 0.3 : 1 }} transition={reduce ? { duration: 0 } : { ease: EASE_OUT }} />
       </motion.div>
       <div className="mt-2 flex items-center gap-4 whitespace-nowrap">
         <button type="button" className={`${LEGEND} flex items-center gap-1.5`} onPointerEnter={() => setFocus("cached")} onPointerLeave={() => setFocus(null)} onFocus={() => setFocus("cached")} onBlur={() => setFocus(null)}>
-          <Dot className="bg-accent" />缓存读取 <CompactTicker value={cached} formatter={formatIntegerFull} className="text-foreground" />
+          <Dot className="bg-[#be506e]" />缓存读 <CompactTicker value={cached} formatter={formatIntegerFull} className="text-foreground" />
         </button>
         <button type="button" className={`${LEGEND} flex items-center gap-1.5`} onPointerEnter={() => setFocus("input")} onPointerLeave={() => setFocus(null)} onFocus={() => setFocus("input")} onBlur={() => setFocus(null)}>
-          <Dot className="bg-muted-foreground" />输入 <CompactTicker value={input} formatter={formatIntegerFull} className="text-foreground" />
+          <Dot className="bg-[#4057a5]" />输入 <CompactTicker value={input} formatter={formatIntegerFull} className="text-foreground" />
         </button>
       </div>
     </TiltCard>
@@ -179,7 +179,7 @@ function SkeletonCard({ wide = false, bar = false }: { wide?: boolean; bar?: boo
   );
 }
 
-export function MetricGrid({ usage, modelFilterActive }: MetricGridProps) {
+export const MetricGrid = memo(function MetricGrid({ usage, modelFilterActive }: MetricGridProps) {
   return (
     <div className="grid gap-4 [grid-template-columns:minmax(488px,1fr)_repeat(3,236px)] max-[1279px]:[grid-template-columns:minmax(0,1fr)_236px] max-[767px]:grid-cols-1" aria-label={usage ? "KPI 指标" : "KPI 加载中"}>
       {!usage ? (
@@ -199,4 +199,4 @@ export function MetricGrid({ usage, modelFilterActive }: MetricGridProps) {
       )}
     </div>
   );
-}
+});

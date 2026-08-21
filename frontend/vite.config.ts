@@ -4,6 +4,30 @@ import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes("/node_modules/")) return undefined;
+          if (
+            id.includes("/node_modules/react/") ||
+            id.includes("/node_modules/react-dom/") ||
+            id.includes("/node_modules/scheduler/")
+          ) {
+            return "vendor-react";
+          }
+          if (id.includes("/node_modules/motion/")) return "vendor-motion";
+          if (
+            id.includes("/node_modules/@tanstack/react-virtual/") ||
+            id.includes("/node_modules/@tanstack/virtual-core/")
+          ) {
+            return "vendor-virtual";
+          }
+          return undefined;
+        },
+      },
+    },
+  },
   server: {
     proxy: {
       "/api": {
