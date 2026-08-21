@@ -75,7 +75,7 @@ function runBootstrap(stored: string | null, storageReadable = true) {
   if (stored !== null) testStorage().setItem("miniusage.theme", stored);
   const getItem = storageReadable
     ? null
-    : vi.spyOn(testStorage(), "getItem").mockImplementation(() => {
+    : vi.spyOn(Object.getPrototypeOf(testStorage()), "getItem").mockImplementation(() => {
         throw new DOMException("blocked", "SecurityError");
       });
 
