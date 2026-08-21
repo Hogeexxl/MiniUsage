@@ -952,13 +952,12 @@ fn resolve_thread_title(
         return None;
     }
 
-    if state_complete {
-        if let Some(title) = state
+    if state_complete
+        && let Some(title) = state
             .and_then(|fact| fact.agent_path.as_deref())
             .and_then(subagent_title_from_agent_path)
-        {
-            return Some(title);
-        }
+    {
+        return Some(title);
     }
 
     rollouts.iter().find_map(|fact| {

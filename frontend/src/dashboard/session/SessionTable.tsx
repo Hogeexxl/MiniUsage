@@ -1,6 +1,15 @@
+import { CircleAlert, CircleX } from "lucide-react";
 import type { SessionItemDto, SessionSortField, SessionSortOrder } from "../../data/types";
-import { SessionTableRow } from "./SessionTableRow";
-import { SessionTableSkeleton } from "./SessionTableSkeleton";
+import { Table, type SortState, type TableColumn } from "../../ui/beui/table";
+import { Tooltip } from "../../ui/beui/tooltip";
+import { formatCost, formatRatio } from "../format";
+import {
+  formatSessionModel,
+  formatSessionProject,
+  formatSessionTime,
+  formatSessionTitle,
+  formatSessionTokenInteger,
+} from "./sessionFormat";
 
 type SessionTableProps = {
   rows: SessionItemDto[];
@@ -14,58 +23,176 @@ type SessionTableProps = {
   onSort: (sortBy: SessionSortField) => void;
 };
 
-const sortableColumns: Array<{ field: SessionSortField; label: string }> = [
+const TABLE_ROW_HEIGHT = 48;
+const TABLE_PAGE_SIZE = 10;
+const TABLE_EMPTY_HEIGHT = 192;
+const TABLE_INITIAL_LOADING_HEIGHT = 480;
+
+export const sortableColumns: Array<{ field: SessionSortField; label: string }> = [
   { field: "last_activity", label: "最后活动" },
   { field: "project", label: "项目" },
   { field: "model", label: "模型" },
-  { field: "total_tokens", label: "总 Token" },
   { field: "combined_total_tokens", label: "合计 Token" },
   { field: "cache_hit_rate", label: "缓存命中率" },
+  { field: "combined_estimated_cost", label: "合计费用" },
 ];
 
-function sortableHeader(
-  field: SessionSortField,
-  label: string,
-  sortBy: SessionSortField,
-  sortOrder: SessionSortOrder,
-  onSort: (sortBy: SessionSortField) => void,
-) {
-  const active = sortBy === field;
-  const arrow = active ? (sortOrder === "asc" ? " ↑" : " ↓") : "";
+export function SessionTable({
+  rows,
+  timezone,
+  selectedRootSessionId = null,
+  onOpenSession,
+  loadState,
+  pageState,
+  sortBy,
+  sortOrder,
+  onSort,
+}: SessionTableProps) {
+  const loading =
+    loadState === "initial" ||
+    loadState === "loading" ||
+    loadState === "refreshing" ||
+    pageState === "loading";
+  const tableHeight =
+    rows.length === 0
+      ? loading
+        ? TABLE_INITIAL_LOADING_HEIGHT
+        : TABLE_EMPTY_HEIGHT
+      : TABLE_ROW_HEIGHT * (Math.min(rows.length, TABLE_PAGE_SIZE) + 1);
+  const columns: TableColumn<SessionItemDto>[] = [
+    {
+      key: "last_activity",
+      header: "最后活动",
+      width: "128px",
+      sortable: true,
+      cell: (item) => {
+        const value = formatSessionTime(item.last_activity_at_ms, timezone);
+        return <span className="block truncate" title={value.title}>{value.text}</span>;
+      },
+    },
+    {
+      key: "title",
+      header: "标题",
+      cell: (item) => {
+        const title = formatSessionTitle(item.title);
+        const status =
+          item.data_status === "incomplete"
+            ? { label: "数据不完整", icon: <CircleAlert className="h-4 w-4 text-warning" /> }
+            : item.data_status === "error"
+              ? { label: "数据计算异常", icon: <CircleX className="h-4 w-4 text-destructive" /> }
+              : null;
+        return (
+          <span className="flex min-w-0 items-center gap-1.5">
+            {status ? (
+              <Tooltip content={status.label} side="top">
+                <span aria-label={status.label} className="inline-flex shrink-0">{status.icon}</span>
+              </Tooltip>
+            ) : null}
+            <span className="min-w-0 truncate" title={title}>{title}</span>
+          </span>
+        );
+      },
+    },
+    {
+      key: "project",
+      header: "项目",
+      width: "150px",
+      sortable: true,
+      cell: (item) => {
+        const project = formatSessionProject(item.project_name);
+        return <span className="block truncate" title={item.project_path ?? project}>{project}</span>;
+      },
+    },
+    {
+      key: "model",
+      header: "模型",
+      width: "168px",
+      sortable: true,
+      cell: (item) => {
+        const model = formatSessionModel(item.models_used);
+        return <span className="block truncate" title={model.title} aria-label={model.accessibleName}>{model.text}</span>;
+      },
+    },
+    {
+      key: "combined_total_tokens",
+      header: "合计 Token",
+      width: "150px",
+      sortable: true,
+      align: "right",
+      cell: (item) => item.inclusive_usage
+        ? <span className="tabular-nums" title={String(item.inclusive_usage.total_tokens)}>{formatSessionTokenInteger(item.inclusive_usage.total_tokens).text}</span>
+        : <span className="tabular-nums">—</span>,
+    },
+    {
+      key: "cache_hit_rate",
+      header: "缓存命中率",
+      width: "150px",
+      sortable: true,
+      align: "right",
+      cell: (item) => item.inclusive_usage
+        ? <span className="tabular-nums" title={formatRatio(item.inclusive_usage.cache_hit_rate).title}>{formatRatio(item.inclusive_usage.cache_hit_rate).text}</span>
+        : <span className="tabular-nums">—</span>,
+    },
+    {
+      key: "combined_estimated_cost",
+      header: "合计费用",
+      width: "120px",
+      sortable: true,
+      align: "right",
+      cell: (item) => item.data_status === "error"
+        ? <span className="tabular-nums">—</span>
+        : <span className="tabular-nums" title={formatCost(item.inclusive_usage?.estimated_cost ?? null).title}>{formatCost(item.inclusive_usage?.estimated_cost ?? null).text}</span>,
+    },
+    {
+      key: "subagent_count",
+      header: "Subagent 数",
+      width: "128px",
+      align: "right",
+      cell: (item) => <span className="tabular-nums">{item.subagent_count}</span>,
+    },
+  ];
+
+  const controlledSort: SortState = { key: sortBy, direction: sortOrder };
+
   return (
-    <button type="button" className="session-sort-button" aria-label={`${label}排序${active ? (sortOrder === "asc" ? "升序" : "降序") : ""}`} aria-pressed={active} onClick={() => onSort(field)}>
-      {label}{arrow}
-    </button>
+    <Table
+      data={rows}
+      columns={columns}
+      getRowId={(row) => row.root_session_id}
+      rowHeight={TABLE_ROW_HEIGHT}
+      height={tableHeight}
+      loading={loading}
+      skeletonRows={10}
+      emptyState="当前时间范围暂无 Session 记录"
+      sort={controlledSort}
+      onSortChange={(next) => onSort((next?.key ?? sortBy) as SessionSortField)}
+      manualSort
+      selectable={false}
+      resizable={false}
+      reorderable={false}
+      className="rounded-2xl"
+      getRowProps={(item) => {
+        const error = item.data_status === "error";
+        const activate = () => {
+          if (!error) onOpenSession?.(item);
+        };
+        return {
+          "data-session-root-id": item.root_session_id,
+          tabIndex: onOpenSession && !error ? 0 : -1,
+          "aria-disabled": error || undefined,
+          "aria-selected": item.root_session_id === selectedRootSessionId,
+          onClick: onOpenSession && !error ? activate : undefined,
+          onKeyDown: onOpenSession && !error
+            ? (event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  activate();
+                }
+              }
+            : undefined,
+          className: error ? "cursor-default" : onOpenSession ? "cursor-pointer" : undefined,
+        };
+      }}
+    />
   );
 }
-
-export function SessionTable({ rows, timezone, selectedRootSessionId = null, onOpenSession, loadState, pageState, sortBy, sortOrder, onSort }: SessionTableProps) {
-  const loading = loadState === "initial" || loadState === "loading" || pageState === "loading";
-  return (
-    <div className="session-table-scroll" tabIndex={0} aria-label="Session 记录表格，可横向滚动">
-      <table className="session-table" aria-busy={loading || loadState === "refreshing"}>
-        <colgroup>
-          <col className="session-col-time" /><col className="session-col-title" /><col className="session-col-project" /><col className="session-col-model" />
-          <col className="session-col-number" /><col className="session-col-number" /><col className="session-col-rate" /><col className="session-col-cost" />
-        </colgroup>
-        <thead>
-          <tr>
-            <th scope="col">{sortableHeader("last_activity", "最后活动", sortBy, sortOrder, onSort)}</th>
-            <th scope="col">标题</th>
-            <th scope="col">{sortableHeader("project", "项目", sortBy, sortOrder, onSort)}</th>
-            <th scope="col">{sortableHeader("model", "模型", sortBy, sortOrder, onSort)}</th>
-            <th scope="col">{sortableHeader("total_tokens", "总 Token", sortBy, sortOrder, onSort)}</th>
-            <th scope="col">{sortableHeader("combined_total_tokens", "合计 Token", sortBy, sortOrder, onSort)}</th>
-            <th scope="col">{sortableHeader("cache_hit_rate", "缓存命中率", sortBy, sortOrder, onSort)}</th>
-            <th scope="col">合计费用</th>
-          </tr>
-        </thead>
-        <tbody aria-live="polite">
-          {loading ? <SessionTableSkeleton /> : rows.length === 0 ? <tr><td className="session-state-cell" colSpan={8}>当前时间范围暂无 Session 记录</td></tr> : rows.map((item) => <SessionTableRow key={item.root_session_id} item={item} timezone={timezone} selected={item.root_session_id === selectedRootSessionId} onOpen={onOpenSession} />)}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-export { sortableColumns };

@@ -1294,6 +1294,14 @@ impl UsageCommitMetrics {
     }
 }
 
+fn now_ms() -> i64 {
+    let millis = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    i64::try_from(millis).unwrap_or(i64::MAX)
+}
+
 #[cfg(test)]
 mod resilience_tests {
     use super::*;
@@ -1324,12 +1332,4 @@ mod resilience_tests {
             assert_eq!(shadow_session_data_error(action, true), None, "{action:?}");
         }
     }
-}
-
-fn now_ms() -> i64 {
-    let millis = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis();
-    i64::try_from(millis).unwrap_or(i64::MAX)
 }

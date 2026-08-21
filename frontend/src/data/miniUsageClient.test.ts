@@ -18,6 +18,7 @@ const usage = {
   estimated_cost: null,
   estimated_cost_status: "unknown",
   session_count: 1,
+  cost_incomplete_session_count: 1,
   session_health: {
     total_sessions: 1,
     complete_sessions: 0,
@@ -64,7 +65,10 @@ describe("miniUsageClient DTO seam", () => {
       new Response(
         JSON.stringify({
           data_revision: 7,
-          models: ["gpt-5.6-sol", "gpt-5.6"],
+          models: [
+            { model: "gpt-5.6-sol", provider: "openai" },
+            { model: "gpt-5.6", provider: "route-models" },
+          ],
           projects: [
             { kind: "project", project_name: "MiniUsage", project_path: "/work/MiniUsage" },
             { kind: "projectless" },
@@ -76,7 +80,10 @@ describe("miniUsageClient DTO seam", () => {
     );
     await expect(miniUsageClient.filterOptions()).resolves.toEqual({
       data_revision: 7,
-      models: ["gpt-5.6-sol", "gpt-5.6"],
+      models: [
+        { model: "gpt-5.6-sol", provider: "openai" },
+        { model: "gpt-5.6", provider: "route-models" },
+      ],
       projects: [
         { kind: "project", project_name: "MiniUsage", project_path: "/work/MiniUsage" },
         { kind: "projectless" },
@@ -88,6 +95,9 @@ describe("miniUsageClient DTO seam", () => {
       { data_revision: 1, models: [], projects: [{ kind: "projectless", project_path: "/fake" }] },
       { data_revision: 1, models: [], projects: [{ kind: "project", project_name: "MiniUsage" }] },
       { data_revision: 1, models: [""], projects: [] },
+      { data_revision: 1, models: [{ model: "gpt-a", provider: "unknown" }], projects: [] },
+      { data_revision: 1, models: [{ model: "gpt-a" }], projects: [] },
+      { data_revision: 1, models: [{ model: "gpt-a", provider: "openai", extra: true }], projects: [] },
     ]) {
       fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(invalid), { status: 200 }));
       await expect(miniUsageClient.filterOptions()).rejects.toBeInstanceOf(MiniUsageClientError);
@@ -150,6 +160,37 @@ describe("miniUsageClient DTO seam", () => {
     const status = await miniUsageClient.getStatus();
     expect(status.source_binding_status).toBe("ready");
     await expect(miniUsageClient.getRevision()).resolves.toEqual({ data_revision: 3, status_revision: 4 });
+  });
+
+  it("T-S03-004 parser accepts cost-incomplete roots beyond healthy sessions only within health total", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+    const acceptedUsage = {
+      ...usage,
+      session_count: 1,
+      cost_incomplete_session_count: 2,
+      session_health: {
+        total_sessions: 2,
+        complete_sessions: 0,
+        incomplete_sessions: 1,
+        error_sessions: 1,
+      },
+    };
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ range, data_revision: 0, usage: acceptedUsage }), { status: 200 }),
+    );
+    await expect(miniUsageClient.summary("today", emptyFilters)).resolves.toMatchObject({ usage: acceptedUsage });
+
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          range,
+          data_revision: 0,
+          usage: { ...acceptedUsage, cost_incomplete_session_count: 3 },
+        }),
+        { status: 200 },
+      ),
+    );
+    await expect(miniUsageClient.summary("today", emptyFilters)).rejects.toBeInstanceOf(MiniUsageClientError);
   });
 
   it("rejects unsafe integers, invalid ratios, and legacy-field-only responses", async () => {
@@ -235,6 +276,7 @@ describe("miniUsageClient DTO seam", () => {
       model_sort_key: "gpt-5",
       total_tokens: 30,
       combined_total_tokens: 30,
+      combined_estimated_cost: null,
       cache_hit_rate: 0.4,
       data_status: "incomplete",
       error_code: null,
@@ -361,6 +403,7 @@ describe("miniUsageClient DTO seam", () => {
       model_sort_key: "gpt-5",
       total_tokens: 30,
       combined_total_tokens: 30,
+      combined_estimated_cost: null,
       cache_hit_rate: 0.4,
       data_status: "incomplete",
       error_code: null,

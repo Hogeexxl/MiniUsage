@@ -1,9 +1,10 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
-import { StrictMode } from "react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { StrictMode, type ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import type { MiniUsageClient } from "../data/miniUsageClient";
-import { MiniUsageClientError, type ApiErrorCode } from "../data/types";
+import { MiniUsageClientError, type ApiErrorCode, type StatusResponse } from "../data/types";
+import { ThemeProvider } from "../theme/ThemeProvider";
 import { DashboardPage } from "./DashboardPage";
 
 const summary = (range: "today" | "yesterday") => ({
@@ -22,6 +23,7 @@ const summary = (range: "today" | "yesterday") => ({
     estimated_cost: null,
     estimated_cost_status: "unknown" as const,
     session_count: 1,
+    cost_incomplete_session_count: 1,
     session_health: {
       total_sessions: 1,
       complete_sessions: 1,
@@ -55,6 +57,8 @@ const sessionSnapshot = {
   items: [],
 };
 
+const offsetHeightDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "offsetHeight");
+
 function fakeClient(overrides: Partial<MiniUsageClient> = {}): MiniUsageClient {
   return {
     filterOptions: vi.fn(async () => ({ data_revision: 1, models: [], projects: [] })),
@@ -82,7 +86,11 @@ function fakeClient(overrides: Partial<MiniUsageClient> = {}): MiniUsageClient {
       })),
     })),
     getSessionSnapshot: vi.fn(async () => sessionSnapshot),
-    getSessionRows: vi.fn(async ({ range }) => ({ ...sessionSnapshot, range, items: [] })),
+    getSessionRows: vi.fn(async ({ range }) => ({
+      range: { ...sessionSnapshot.range, key: range },
+      data_revision: 1,
+      items: [],
+    })),
     getSessionDetail: vi.fn(),
     getStatus: vi.fn(async () => status),
     getRevision: vi.fn(async () => ({ data_revision: 1, status_revision: 1 })),
@@ -93,8 +101,8 @@ function fakeClient(overrides: Partial<MiniUsageClient> = {}): MiniUsageClient {
 
 function fakeEvents() {
   return {
-    onerror: null,
-    onmessage: null,
+    onerror: null as ((event: Event) => void) | null,
+    onmessage: null as ((event: MessageEvent<string>) => void) | null,
     close: vi.fn(),
     addEventListener: vi.fn(),
     removeEventListener: vi.fn(),
@@ -111,24 +119,63 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-describe("DashboardPage", () => {
+function renderWithTheme(node: ReactNode) {
+  return render(<ThemeProvider>{node}</ThemeProvider>);
+}
+
+function totalTokenCard() {
+  return within(screen.getByLabelText("KPI 指标")).getByText("总 Token").parentElement;
+}
+
+describe("DashboardPage v0.2.0", () => {
   it("shows the last completed sync time with seconds", async () => {
     const completedAt = Date.UTC(2026, 0, 2, 3, 4, 5);
     const client = fakeClient({
       getStatus: vi.fn(async () => ({ ...status, last_scan_completed_at_ms: completedAt })),
     });
-    render(<DashboardPage options={{ client, eventSourceFactory: () => fakeEvents() }} />);
+    renderWithTheme(<DashboardPage options={{ client, eventSourceFactory: () => fakeEvents() }} />);
     const date = new Date(completedAt);
     const expected = [date.getHours(), date.getMinutes(), date.getSeconds()]
       .map((part) => String(part).padStart(2, "0"))
       .join(":");
-    await waitFor(() => expect(screen.getByText(`上次更新：${expected}`)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/上次同步：/)).toHaveTextContent(expected));
   });
 
-  it("uses the existing empty-state dash before a sync has completed", async () => {
-    const client = fakeClient();
-    render(<DashboardPage options={{ client, eventSourceFactory: () => fakeEvents() }} />);
-    await waitFor(() => expect(screen.getByText("上次更新：—")).toBeInTheDocument());
+  it("does not stack ActionSwap layers when the initial sync timestamp arrives", async () => {
+    vi.spyOn(window, "matchMedia").mockImplementation((query) => ({
+      matches: !query.includes("prefers-reduced-motion"),
+      media: query,
+      onchange: null,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      dispatchEvent: () => false,
+    }));
+    const completedAt = Date.UTC(2026, 0, 2, 3, 4, 5);
+    const statusRequest = deferred<StatusResponse>();
+    const client = fakeClient({
+      getStatus: vi.fn(() => statusRequest.promise),
+    });
+    renderWithTheme(<DashboardPage options={{ client, eventSourceFactory: () => fakeEvents() }} />);
+    await waitFor(() => expect(screen.getByText(/上次同步：/)).toHaveTextContent("—"));
+    const expected = new Date(completedAt);
+    const syncTime = [expected.getHours(), expected.getMinutes(), expected.getSeconds()]
+      .map((part) => String(part).padStart(2, "0"))
+      .join(":");
+
+    await act(async () => {
+      statusRequest.resolve({ ...status, last_scan_completed_at_ms: completedAt });
+      await Promise.resolve();
+    });
+    const syncLabel = screen.getByText(/上次同步：/);
+    expect(syncLabel).toHaveTextContent(syncTime);
+    expect(syncLabel.querySelectorAll("span.absolute")).toHaveLength(1);
+  });
+
+  it("uses an em dash before a sync has completed", async () => {
+    renderWithTheme(<DashboardPage options={{ client: fakeClient(), eventSourceFactory: () => fakeEvents() }} />);
+    await waitFor(() => expect(screen.getByText(/上次同步：/)).toHaveTextContent("—"));
   });
 
   it("keeps one shared revision transport active across StrictMode remounts", async () => {
@@ -146,38 +193,120 @@ describe("DashboardPage", () => {
       return source;
     });
     const client = fakeClient();
-    const view = render(
+    const view = renderWithTheme(
       <StrictMode>
         <DashboardPage options={{ client, eventSourceFactory: factory }} />
       </StrictMode>,
     );
-    await waitFor(() => expect(screen.getByLabelText("输入 Token：10")).toBeInTheDocument());
+    await waitFor(() => expect(totalTokenCard()).toHaveTextContent("12"));
     expect(maxActiveSources).toBe(1);
     expect(activeSources).toBe(1);
     view.unmount();
     expect(activeSources).toBe(0);
   });
 
-  it("keeps a range's own snapshot and renders the Session section without navigation/charts", async () => {
-    const client = fakeClient();
-    render(<DashboardPage options={{ client, eventSourceFactory: () => fakeEvents() }} />);
-    await waitFor(() => expect(screen.getByLabelText("输入 Token：10")).toBeInTheDocument());
+  it("keeps a range snapshot and renders the redesigned sections without navigation", async () => {
+    renderWithTheme(<DashboardPage options={{ client: fakeClient(), eventSourceFactory: () => fakeEvents() }} />);
+    await waitFor(() => expect(totalTokenCard()).toHaveTextContent("12"));
+    expect(screen.getByLabelText("KPI 指标").children).toHaveLength(4);
     expect(screen.queryByRole("navigation")).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Session记录" })).toBeInTheDocument();
-    expect(screen.queryByText(/设置|图表/)).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Session 记录" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Switch to light mode/ })).toBeInTheDocument();
   });
 
-  it("maps a failed load to fixed text and retains a stable snapshot", async () => {
+  it("loads the Session detail Drawer only after a row is selected", async () => {
+    const sessionRow = {
+      root_session_id: "root-1",
+      title: "Session 1",
+      project_name: null,
+      project_path: null,
+      last_activity_at_ms: 1,
+      models_used: ["gpt-5"],
+      subagent_count: 0,
+      inclusive_usage: null,
+      self_usage: null,
+      subagent_usage: null,
+      data_status: "complete" as const,
+      error_code: null,
+    };
     const client = fakeClient({
-      summary: vi
-        .fn()
+      getSessionSnapshot: vi.fn(async () => ({
+        ...sessionSnapshot,
+        total_items: 1,
+        sort_index: [{
+          root_session_id: sessionRow.root_session_id,
+          last_activity_at_ms: sessionRow.last_activity_at_ms,
+          project_sort_key: null,
+          model_sort_key: "gpt-5",
+          total_tokens: null,
+          combined_total_tokens: null,
+          combined_estimated_cost: null,
+          cache_hit_rate: null,
+          data_status: "complete" as const,
+          error_code: null,
+        }],
+        items: [sessionRow],
+      })),
+      getSessionDetail: vi.fn(async () => {
+        throw new Error("detail unavailable");
+      }),
+    });
+    Object.defineProperty(HTMLElement.prototype, "offsetHeight", {
+      configurable: offsetHeightDescriptor?.configurable ?? true,
+      enumerable: offsetHeightDescriptor?.enumerable ?? true,
+      get() {
+        const inline = Number.parseFloat(this.style.height);
+        if (Number.isFinite(inline)) return inline;
+        return offsetHeightDescriptor?.get?.call(this) ?? 0;
+      },
+    });
+    try {
+      renderWithTheme(<DashboardPage options={{ client, eventSourceFactory: () => fakeEvents() }} />);
+
+      await waitFor(() => expect(document.querySelector('tbody tr[data-session-root-id="root-1"]')).toBeInTheDocument());
+      expect(screen.queryByRole("dialog", { name: "Session 详情" })).not.toBeInTheDocument();
+
+      const row = document.querySelector<HTMLElement>('tbody tr[data-session-root-id="root-1"]');
+      if (!row) throw new Error("Session row not found");
+      fireEvent.click(row);
+      await waitFor(() => expect(screen.getByRole("dialog", { name: "Session 详情" })).toBeInTheDocument());
+      expect(screen.getByRole("dialog", { name: "Session 详情" })).toHaveTextContent("Session 1");
+    } finally {
+      if (offsetHeightDescriptor) Object.defineProperty(HTMLElement.prototype, "offsetHeight", offsetHeightDescriptor);
+    }
+  });
+
+  it("uses Spec01 BeUI header parameters and one gap-8 top-level stack", async () => {
+    renderWithTheme(<DashboardPage options={{ client: fakeClient(), eventSourceFactory: () => fakeEvents() }} />);
+    await waitFor(() => expect(totalTokenCard()).toHaveTextContent("12"));
+
+    const main = document.querySelector("main.dashboard-content");
+    expect(main).toBeInTheDocument();
+    expect(main?.firstElementChild).toHaveClass("flex", "flex-col", "gap-8");
+    expect(screen.getByRole("heading", { name: "MiniUsage" })).toHaveClass("text-foreground");
+
+    const sync = screen.getByRole("button", { name: "同步数据" });
+    const stop = screen.getByRole("button", { name: "停止服务" });
+    for (const button of [sync, stop]) {
+      expect(button).toHaveClass("h-8", "px-3", "text-xs", "gap-1.5", "rounded-full");
+      expect(button).not.toHaveClass("h-10");
+    }
+
+    const theme = screen.getByRole("button", { name: "Switch to light mode" });
+    expect(theme).toHaveClass("rounded-xl", "border", "border-border", "bg-background", "p-2.5");
+    expect(theme.querySelector("svg")).toHaveClass("h-5", "w-5");
+    expect(screen.getByText(/上次同步：/)).toHaveClass("text-muted-foreground");
+  });
+
+  it("maps a failed range load to fixed text without leaking the private error", async () => {
+    const client = fakeClient({
+      summary: vi.fn()
         .mockResolvedValueOnce(summary("today"))
         .mockRejectedValueOnce(new Error("private response body")),
     });
-    render(<DashboardPage options={{ client, eventSourceFactory: () => fakeEvents() }} />);
-    await waitFor(() => expect(screen.getByLabelText("输入 Token：10")).toBeInTheDocument());
-    const yesterday = screen.getByRole("button", { name: "昨天" });
-    yesterday.click();
+    renderWithTheme(<DashboardPage options={{ client, eventSourceFactory: () => fakeEvents() }} />);
+    await waitFor(() => expect(totalTokenCard()).toHaveTextContent("12"));
+    screen.getByRole("tab", { name: "昨天" }).click();
     await waitFor(() => expect(screen.getAllByRole("alert")[0]).toHaveTextContent("数据加载失败"));
     expect(screen.queryByText("private response body")).not.toBeInTheDocument();
     expect(screen.getByLabelText("KPI 加载中")).toBeInTheDocument();
@@ -193,13 +322,13 @@ describe("DashboardPage", () => {
         throw new MiniUsageClientError(code as ApiErrorCode, statusCode);
       }),
     });
-    render(<DashboardPage options={{ client, eventSourceFactory: () => fakeEvents() }} />);
+    renderWithTheme(<DashboardPage options={{ client, eventSourceFactory: () => fakeEvents() }} />);
     await waitFor(() => expect(screen.getByRole("button", { name: "同步数据" })).toBeEnabled());
     screen.getByRole("button", { name: "同步数据" }).click();
     await waitFor(() => expect(screen.getAllByText(message).length).toBeGreaterThan(0));
   });
 
-  it("renders tracking failure separately and offers only status retry", async () => {
+  it("renders tracking failure separately and retries only status", async () => {
     let targetCalls = 0;
     const client = fakeClient({
       getStatus: vi.fn(async (target) => {
@@ -218,18 +347,17 @@ describe("DashboardPage", () => {
         };
       }),
     });
-    render(<DashboardPage options={{ client, eventSourceFactory: () => fakeEvents() }} />);
+    renderWithTheme(<DashboardPage options={{ client, eventSourceFactory: () => fakeEvents() }} />);
     await waitFor(() => expect(screen.getByRole("button", { name: "同步数据" })).toBeEnabled());
     screen.getByRole("button", { name: "同步数据" }).click();
     await waitFor(() => expect(screen.getAllByText("同步状态获取失败").length).toBeGreaterThan(0));
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-    expect(screen.getAllByText("同步状态获取失败")[0].parentElement).toContainElement(screen.getByRole("button", { name: "重试" }));
     screen.getByRole("button", { name: "重试" }).click();
     await waitFor(() => expect(screen.getAllByText("同步中…").length).toBeGreaterThan(0));
     expect(client.refresh).toHaveBeenCalledTimes(1);
   });
 
-  it("disables sync when status failed while summary remains available, then recovers via retry_load", async () => {
+  it("disables sync when status failed while Summary remains available, then recovers via retry", async () => {
     let statusAttempts = 0;
     const client = fakeClient({
       getStatus: vi.fn(async () => {
@@ -239,11 +367,11 @@ describe("DashboardPage", () => {
       }),
       getRevision: vi.fn(async () => ({ data_revision: 0, status_revision: 0 })),
     });
-    render(<DashboardPage options={{ client, eventSourceFactory: () => fakeEvents() }} />);
+    renderWithTheme(<DashboardPage options={{ client, eventSourceFactory: () => fakeEvents() }} />);
     const syncButton = screen.getByRole("button", { name: "同步数据" });
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("数据加载失败"));
     expect(syncButton).toBeDisabled();
-    expect(screen.getByLabelText("输入 Token：10")).toBeInTheDocument();
+    expect(totalTokenCard()).toHaveTextContent("12");
     screen.getByRole("button", { name: "重试" }).click();
     await waitFor(() => expect(syncButton).toBeEnabled());
     expect(statusAttempts).toBe(2);
@@ -254,7 +382,7 @@ describe("DashboardPage", () => {
     ["summary then status", ["summary", "status"] as const, false, true],
     ["status then revision", ["status", "revision"] as const, true, false],
     ["revision then status", ["revision", "status"] as const, true, false],
-  ])("keeps status-not-ready as the stable button priority when dependencies fail (%s)", async (_name, failOrder, summarySucceeds, revisionSucceeds) => {
+  ])("keeps status-not-ready as the stable sync priority when dependencies fail (%s)", async (_name, failOrder, summarySucceeds, revisionSucceeds) => {
     const summaryRequest = deferred<ReturnType<typeof summary>>();
     const statusRequest = deferred<typeof status>();
     const revisionRequest = deferred<{ data_revision: number; status_revision: number }>();
@@ -263,13 +391,13 @@ describe("DashboardPage", () => {
       getStatus: vi.fn(() => statusRequest.promise),
       getRevision: vi.fn(() => revisionRequest.promise),
     });
-    render(<DashboardPage options={{ client, eventSourceFactory: () => fakeEvents() }} />);
-    const settleSuccesses = async () => {
+    renderWithTheme(<DashboardPage options={{ client, eventSourceFactory: () => fakeEvents() }} />);
+
+    await act(async () => {
       if (summarySucceeds) summaryRequest.resolve(summary("today"));
       if (revisionSucceeds) revisionRequest.resolve({ data_revision: 0, status_revision: 0 });
       await Promise.resolve();
-    };
-    await act(settleSuccesses);
+    });
     for (const dependency of failOrder) {
       await act(async () => {
         if (dependency === "status") statusRequest.reject(new Error("status unavailable"));
@@ -278,6 +406,7 @@ describe("DashboardPage", () => {
         await Promise.resolve();
       });
     }
+
     const syncButton = screen.getByRole("button", { name: "同步数据" });
     await waitFor(() => expect(screen.getAllByRole("alert")[0]).toHaveTextContent("数据加载失败"));
     expect(syncButton).toBeDisabled();
@@ -285,7 +414,7 @@ describe("DashboardPage", () => {
     expect(client.refresh).not.toHaveBeenCalled();
   });
 
-  it("enables sync after status retry while a summary failure remains visible", async () => {
+  it("enables sync after status retry while a Summary failure remains visible", async () => {
     let statusAttempts = 0;
     const client = fakeClient({
       summary: vi.fn(async () => {
@@ -298,7 +427,7 @@ describe("DashboardPage", () => {
       }),
       getRevision: vi.fn(async () => ({ data_revision: 0, status_revision: 0 })),
     });
-    render(<DashboardPage options={{ client, eventSourceFactory: () => fakeEvents() }} />);
+    renderWithTheme(<DashboardPage options={{ client, eventSourceFactory: () => fakeEvents() }} />);
     const syncButton = screen.getByRole("button", { name: "同步数据" });
     await waitFor(() => expect(syncButton).toBeDisabled());
     expect(screen.getByRole("alert")).toHaveTextContent("数据加载失败");

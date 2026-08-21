@@ -19,6 +19,8 @@ import {
   type TargetScanDto,
   type DashboardFilters,
   type FilterOptionsResponse,
+  type ModelFilterOption,
+  type ModelFilterProvider,
   type ProjectFilterOption,
   type ProjectSelection,
   type EstimatedCostStatus,
@@ -187,6 +189,7 @@ function parseTokenUsage(value: unknown, requireNullCost = false): UsageDto {
 function parseUsage(value: unknown): SummaryUsageDto {
   const record = requiredRecord(value);
   const sessionCount = requiredSafeInteger(record, "session_count");
+  const costIncompleteSessionCount = requiredSafeInteger(record, "cost_incomplete_session_count");
   const healthRecord = requiredRecord(record.session_health);
   const sessionHealth = {
     total_sessions: requiredSafeInteger(healthRecord, "total_sessions"),
@@ -194,6 +197,9 @@ function parseUsage(value: unknown): SummaryUsageDto {
     incomplete_sessions: requiredSafeInteger(healthRecord, "incomplete_sessions"),
     error_sessions: requiredSafeInteger(healthRecord, "error_sessions"),
   };
+  if (costIncompleteSessionCount > sessionHealth.total_sessions) {
+    throw new MiniUsageClientError("HTTP_ERROR", 200);
+  }
   const healthySessions = sessionHealth.complete_sessions + sessionHealth.incomplete_sessions;
   const allSessions = healthySessions + sessionHealth.error_sessions;
   if (
@@ -207,6 +213,7 @@ function parseUsage(value: unknown): SummaryUsageDto {
   return {
     ...parseTokenUsage(record),
     session_count: sessionCount,
+    cost_incomplete_session_count: costIncompleteSessionCount,
     session_health: sessionHealth,
   };
 }
@@ -245,6 +252,22 @@ function parseProjectFilterOption(value: unknown): ProjectFilterOption {
   throw new MiniUsageClientError("HTTP_ERROR", 200);
 }
 
+function parseModelFilterOption(value: unknown): ModelFilterOption {
+  const record = requiredRecord(value);
+  if (!hasOnlyKeys(record, ["model", "provider"])) {
+    throw new MiniUsageClientError("HTTP_ERROR", 200);
+  }
+  const model = requiredString(record, "model");
+  if ([...model].some((character) => character.charCodeAt(0) < 32)) {
+    throw new MiniUsageClientError("HTTP_ERROR", 200);
+  }
+  const provider = record.provider;
+  if (provider !== "openai" && provider !== "route-models") {
+    throw new MiniUsageClientError("HTTP_ERROR", 200);
+  }
+  return { model, provider: provider as ModelFilterProvider };
+}
+
 function parseFilterOptions(value: unknown): FilterOptionsResponse {
   const record = requiredRecord(value);
   if (!hasOnlyKeys(record, ["data_revision", "models", "projects"])) {
@@ -252,21 +275,12 @@ function parseFilterOptions(value: unknown): FilterOptionsResponse {
   }
   const modelsValue = record.models;
   const projectsValue = record.projects;
-  if (
-    !Array.isArray(modelsValue) ||
-    modelsValue.some(
-      (model) =>
-        typeof model !== "string" ||
-        model.length === 0 ||
-        [...model].some((character) => character.charCodeAt(0) < 32),
-    ) ||
-    !Array.isArray(projectsValue)
-  ) {
+  if (!Array.isArray(modelsValue) || !Array.isArray(projectsValue)) {
     throw new MiniUsageClientError("HTTP_ERROR", 200);
   }
   return {
     data_revision: requiredSafeInteger(record, "data_revision"),
-    models: [...modelsValue],
+    models: modelsValue.map(parseModelFilterOption),
     projects: projectsValue.map(parseProjectFilterOption),
   };
 }
@@ -311,8 +325,9 @@ function parseSessionSortIndex(value: unknown): SessionSnapshotResponse["sort_in
   const errorCode = nullableString(record, "error_code");
   const totalTokens = nullableSafeInteger(record, "total_tokens");
   const combinedTotalTokens = nullableSafeInteger(record, "combined_total_tokens");
+  const combinedEstimatedCost = nullableCost(record, "combined_estimated_cost");
   if (dataStatus === "error") {
-    if (totalTokens !== null || combinedTotalTokens !== null || !errorCode) {
+    if (totalTokens !== null || combinedTotalTokens !== null || combinedEstimatedCost !== null || !errorCode) {
       throw new MiniUsageClientError("HTTP_ERROR", 200);
     }
   } else if (totalTokens === null || combinedTotalTokens === null || errorCode !== null) {
@@ -325,6 +340,7 @@ function parseSessionSortIndex(value: unknown): SessionSnapshotResponse["sort_in
     model_sort_key: nullableString(record, "model_sort_key"),
     total_tokens: totalTokens,
     combined_total_tokens: combinedTotalTokens,
+    combined_estimated_cost: combinedEstimatedCost,
     cache_hit_rate: nullableRatio(record, "cache_hit_rate"),
     data_status: dataStatus,
     error_code: errorCode,

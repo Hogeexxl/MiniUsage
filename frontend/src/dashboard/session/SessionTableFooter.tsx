@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { Button } from "../../ui/beui/button";
+import { Input } from "../../ui/beui/input";
 
 type SessionTableFooterProps = {
   page: number;
@@ -15,31 +17,45 @@ export function SessionTableFooter({ page, totalItems, totalPages, pageState, on
   const [value, setValue] = useState(String(page));
   useEffect(() => setValue(String(page)), [page]);
   if (totalItems === 0 && pageState !== "error") return null;
-  const submit = () => {
+  const commitPage = () => {
     const target = Number(value);
-    if (Number.isSafeInteger(target) && target >= 1 && target <= totalPages) onGoToPage(target);
-    else setValue(String(page));
+    if (!Number.isSafeInteger(target) || target < 1 || target > totalPages) {
+      setValue(String(page));
+      return;
+    }
+    if (target === page) {
+      setValue(String(page));
+      return;
+    }
+    onGoToPage(target);
   };
   return (
-    <div className="session-table-footer" aria-live="polite">
-      <span className="session-page-summary">共 {totalItems} 条</span>
-      <span className="session-page-status">当前 {totalPages === 0 ? 0 : page} / {totalPages} 页</span>
-      <button type="button" className="retry-button" disabled={page <= 1 || pageState === "loading"} onClick={onPrevious}>上一页</button>
-      <button type="button" className="retry-button" disabled={page >= totalPages || pageState === "loading"} onClick={onNext}>下一页</button>
-      <label className="session-page-jump">
-        跳转页码
-        <input
-          aria-label="跳转页码"
-          inputMode="numeric"
-          type="text"
-          value={value}
-          onChange={(event) => setValue(event.target.value)}
-          onKeyDown={(event) => { if (event.key === "Enter") submit(); }}
-          onBlur={submit}
-          disabled={totalPages === 0 || pageState === "loading"}
-        />
-      </label>
-      {pageState === "error" ? <><span>加载页面失败</span><button type="button" className="retry-button" onClick={onRetry}>重试</button></> : null}
+    <div className="flex flex-wrap items-center justify-end gap-2 text-xs leading-4 text-muted-foreground" aria-live="polite">
+      <span>共 {totalItems} 条</span>
+      <span className="tabular-nums">{totalPages === 0 ? 0 : page} / {totalPages}</span>
+      <Button variant="secondary" size="sm" disabled={page <= 1 || pageState === "loading"} onClick={onPrevious}>上一页</Button>
+      <Button variant="secondary" size="sm" disabled={page >= totalPages || pageState === "loading"} onClick={onNext}>下一页</Button>
+      <Input
+        aria-label="跳转页码"
+        inputMode="numeric"
+        type="text"
+        value={value}
+        onChange={setValue}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            commitPage();
+          }
+        }}
+        onBlur={commitPage}
+        disabled={totalPages === 0 || pageState === "loading"}
+        className="w-14"
+        classNames={{
+          field: "h-8",
+          input: "px-2 text-center text-xs leading-4 tabular-nums",
+        }}
+      />
+      {pageState === "error" ? <><span className="text-destructive">加载页面失败</span><Button variant="ghost" size="sm" onClick={onRetry}>重试</Button></> : null}
     </div>
   );
 }

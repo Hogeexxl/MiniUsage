@@ -232,6 +232,84 @@ describe("useSessionDetailController", () => {
     feed.dispose();
   });
 
+  it("keeps retry_detail as the public retry path without exposing manual refresh_detail", async () => {
+    const getSessionDetail = vi.fn()
+      .mockRejectedValueOnce(new MiniUsageClientError("HTTP_ERROR", 500))
+      .mockResolvedValueOnce(detail(1, 222));
+    const client = clientWith({ getSessionDetail });
+    const { feed } = sourceAndFeed(client);
+    const { result } = renderHook(() => useSessionDetailController("today", filters, { client, revisionFeed: feed, dataRevision: 1 }));
+
+    await act(async () => result.current.open_detail(row));
+    await waitFor(() => expect(result.current.load_state).toBe("error"));
+    expect(result.current.error_code).toBe("HTTP_ERROR");
+    expect(result.current).not.toHaveProperty("refresh_detail");
+
+    await act(async () => result.current.retry_detail());
+    await waitFor(() => expect(result.current.load_state).toBe("ready"));
+    expect(getSessionDetail).toHaveBeenCalledTimes(2);
+    expect(result.current.detail?.main.self_usage.total_tokens).toBe(222);
+    feed.dispose();
+  });
+
+  it("keeps the previous detail while a revision refresh is pending and reports refresh errors", async () => {
+    let rejectRefresh!: (error: unknown) => void;
+    const getSessionDetail = vi.fn(({ expected_data_revision }: Parameters<MiniUsageClient["getSessionDetail"]>[0]) => {
+      if (expected_data_revision === 1) return Promise.resolve(detail(1, 111));
+      return new Promise<SessionDetailResponse>((_, reject) => {
+        rejectRefresh = reject;
+      });
+    });
+    const client = clientWith({ getSessionDetail });
+    const { feed, source } = sourceAndFeed(client);
+    const { result } = renderHook(() => useSessionDetailController("today", filters, { client, revisionFeed: feed, dataRevision: 1 }));
+
+    await act(async () => result.current.open_detail(row));
+    await waitFor(() => expect(result.current.load_state).toBe("ready"));
+    expect(result.current.detail?.data_revision).toBe(1);
+    expect(result.current.detail?.main.self_usage.total_tokens).toBe(111);
+
+    await act(async () => {
+      source()?.onmessage?.({ data: JSON.stringify({ data_revision: 2, status_revision: 2 }) } as MessageEvent<string>);
+    });
+    await waitFor(() => expect(result.current.load_state).toBe("refreshing"));
+    expect(getSessionDetail).toHaveBeenCalledTimes(2);
+    expect(result.current.detail?.data_revision).toBe(1);
+    expect(result.current.detail?.main.self_usage.total_tokens).toBe(111);
+
+    await act(async () => rejectRefresh(new MiniUsageClientError("HTTP_ERROR", 500)));
+    await waitFor(() => expect(result.current.refresh_error_code).toBe("HTTP_ERROR"));
+    expect(result.current.load_state).toBe("ready");
+    expect(result.current.error_code).toBeUndefined();
+    expect(result.current.detail?.data_revision).toBe(1);
+    expect(result.current.detail?.main.self_usage.total_tokens).toBe(111);
+    feed.dispose();
+  });
+
+  it("restores the previously focused Session row once when the controller closes", async () => {
+    const sessionRow = document.createElement("button");
+    sessionRow.type = "button";
+    document.body.append(sessionRow);
+    sessionRow.focus();
+    const focus = vi.spyOn(sessionRow, "focus");
+    focus.mockClear();
+
+    const client = clientWith();
+    const { feed } = sourceAndFeed(client);
+    const { result } = renderHook(() => useSessionDetailController("today", filters, { client, revisionFeed: feed, dataRevision: 1 }));
+    await act(async () => result.current.open_detail(row));
+    await waitFor(() => expect(result.current.load_state).toBe("ready"));
+
+    await act(async () => result.current.close_detail());
+    expect(document.activeElement).toBe(sessionRow);
+    expect(focus).toHaveBeenCalledTimes(1);
+
+    await act(async () => result.current.close_detail());
+    expect(focus).toHaveBeenCalledTimes(1);
+    feed.dispose();
+    sessionRow.remove();
+  });
+
   it("notifies the Session snapshot after a stale detail error", async () => {
     const onStaleRevision = vi.fn();
     const client = clientWith({ getSessionDetail: vi.fn(async () => { throw new MiniUsageClientError("STALE_DATA_REVISION", 409); }) });

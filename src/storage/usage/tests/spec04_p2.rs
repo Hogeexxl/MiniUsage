@@ -227,7 +227,7 @@ fn present_carry_source_with_size(
 ) -> crate::domain::SourceOutcome {
     let observations = vec![
         crate::domain::SourceObservation::new(
-            &fixture_path("usage-1.jsonl"),
+            fixture_path("usage-1.jsonl"),
             crate::domain::SourceArea::Sessions,
             11,
             11,
@@ -237,7 +237,7 @@ fn present_carry_source_with_size(
         )
         .unwrap(),
         crate::domain::SourceObservation::new(
-            &fixture_path("usage-2.jsonl"),
+            fixture_path("usage-2.jsonl"),
             crate::domain::SourceArea::Sessions,
             22,
             22,
@@ -565,7 +565,7 @@ fn present_growth_then_missing_blocks_carry_finalize_with_unverified_tail() {
     );
 
     let source_two = crate::domain::SourceObservation::new(
-        &fixture_path("usage-2.jsonl"),
+        fixture_path("usage-2.jsonl"),
         crate::domain::SourceArea::Sessions,
         22,
         22,
@@ -713,7 +713,7 @@ fn t_s04_050_carry_four_phase_mismatch_replaces_only_affected_member() {
 
         let observations = vec![
             crate::domain::SourceObservation::new(
-                &fixture_path("usage-1.jsonl"),
+                fixture_path("usage-1.jsonl"),
                 crate::domain::SourceArea::Sessions,
                 device,
                 inode,
@@ -723,7 +723,7 @@ fn t_s04_050_carry_four_phase_mismatch_replaces_only_affected_member() {
             )
             .unwrap(),
             crate::domain::SourceObservation::new(
-                &fixture_path("usage-2.jsonl"),
+                fixture_path("usage-2.jsonl"),
                 crate::domain::SourceArea::Sessions,
                 22,
                 22,

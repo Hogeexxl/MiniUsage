@@ -1022,7 +1022,7 @@ fn t_mu03_s02_version_upgrades_remain_independent() {
         )
         .unwrap();
     assert_eq!(initial.1, mini_usage::usage::USAGE_PARSER_VERSION);
-    assert_eq!((initial.2, initial.3), (1, 2));
+    assert_eq!((initial.2, initial.3), (1, 3));
     let initial_tokens: i64 = db
         .query_row(
             "SELECT COALESCE(SUM(total_tokens),0) FROM usage_events WHERE ledger_epoch=?1",
@@ -1107,7 +1107,7 @@ fn t_mu03_s02_version_upgrades_remain_independent() {
         )
         .unwrap();
     assert_eq!(cost_only.0, initial.0);
-    assert_eq!((cost_only.1, cost_only.2), (1, 2));
+    assert_eq!((cost_only.1, cost_only.2), (1, 3));
     assert!(cost_only.3.is_some());
     drop(db);
 
@@ -1166,7 +1166,7 @@ fn t_mu03_s02_version_upgrades_remain_independent() {
         .unwrap();
     assert_ne!(usage_only.0, initial.0);
     assert_eq!(usage_only.1, mini_usage::usage::USAGE_PARSER_VERSION);
-    assert_eq!((usage_only.2, usage_only.3), (1, 2));
+    assert_eq!((usage_only.2, usage_only.3), (1, 3));
     assert_eq!(usage_only.4, mini_usage::codex::METADATA_PARSER_VERSION);
     scanner.shutdown().unwrap();
 }

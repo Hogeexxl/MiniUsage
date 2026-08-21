@@ -1,13 +1,19 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { ChevronRight, Cpu, Folder } from "lucide-react";
+import { motion, useReducedMotion } from "motion/react";
+import { forwardRef, useMemo, useState } from "react";
 
 import type {
   DashboardFilters,
   FilterOptionsResponse,
+  ModelFilterProvider,
   ProjectFilterOption,
   ProjectSelection,
 } from "../data/types";
-
-type FilterMenu = "models" | "projects";
+import { Button, type ButtonProps } from "../ui/beui/button";
+import { Checkbox } from "../ui/beui/checkbox";
+import { MorphPopover, MorphPopoverContent, MorphPopoverTrigger } from "../ui/beui/morph-popover";
+import { SPRING_LAYOUT } from "../ui/lib/ease";
+import { projectDisplay, projectKey, projectTitle, type ProjectLike } from "./shared/projectDisplay";
 
 type FilterControlsProps = {
   filters: DashboardFilters;
@@ -21,271 +27,117 @@ type FilterControlsProps = {
   onRetryOptions: () => void;
 };
 
-function ModelGlyph() {
-  return (
-    <svg className="filter-trigger-icon" viewBox="0 0 12 12" aria-hidden="true">
-      <path d="M2.25 2.25h7.5v7.5h-7.5zM4 4h4M4 6h4M4 8h2" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
-    </svg>
-  );
-}
+type ModelGroup = {
+  provider: ModelFilterProvider;
+  label: "OpenAI" | "Route-models";
+  models: string[];
+};
 
-function ProjectGlyph() {
-  return (
-    <svg className="filter-trigger-icon" viewBox="0 0 12 12" aria-hidden="true">
-      <path d="M1.5 3.25h3l1 1.25h5v5.75h-9z" fill="none" stroke="currentColor" strokeWidth="1" strokeLinejoin="round" />
-    </svg>
-  );
-}
+const MODEL_GROUPS: readonly { provider: ModelFilterProvider; label: ModelGroup["label"] }[] = [
+  { provider: "openai", label: "OpenAI" },
+  { provider: "route-models", label: "Route-models" },
+];
 
-function Chevron({ expanded }: { expanded: boolean }) {
-  return (
-    <svg className={`filter-trigger-chevron${expanded ? " is-expanded" : ""}`} viewBox="0 0 10 10" aria-hidden="true">
-      <path d="m2 3.5 3 3 3-3" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function GroupChevron({ expanded }: { expanded: boolean }) {
-  return (
-    <svg className={`filter-group-chevron${expanded ? " is-expanded" : ""}`} viewBox="0 0 10 10" aria-hidden="true">
-      <path d="m3.25 2 3 3-3 3" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function isGptModel(model: string): boolean {
-  return /(?:^|[\/_:.\-])gpt(?:[-_.:/]|$)/i.test(model);
-}
-
-function modelList(options: FilterOptionsResponse | null, selected: readonly string[]): string[] {
-  const values = [...(options?.models ?? []), ...selected];
-  return [...new Set(values)];
-}
-
-function projectKey(project: ProjectFilterOption | ProjectSelection): string {
-  if (project.kind === "project") return `project:${project.project_path}`;
-  return project.kind;
-}
-
-function projectLabel(project: ProjectFilterOption | ProjectSelection): string {
-  if (project.kind === "project") {
-    return "project_name" in project ? project.project_name : project.project_path;
+function modelGroups(options: FilterOptionsResponse | null, selected: readonly string[]): ModelGroup[] {
+  const optionModels = options?.models ?? [];
+  const knownModels = new Set(optionModels.map(({ model }) => model));
+  const modelsByProvider = new Map<ModelFilterProvider, Set<string>>();
+  for (const { model, provider } of optionModels) {
+    const models = modelsByProvider.get(provider) ?? new Set<string>();
+    models.add(model);
+    modelsByProvider.set(provider, models);
   }
-  return project.kind === "projectless" ? "无项目会话" : "未识别项目";
+  const selectedOrphans = selected.filter((model) => !knownModels.has(model));
+  if (selectedOrphans.length > 0) {
+    const routeModels = modelsByProvider.get("route-models") ?? new Set<string>();
+    for (const model of selectedOrphans) routeModels.add(model);
+    modelsByProvider.set("route-models", routeModels);
+  }
+  return MODEL_GROUPS.flatMap(({ provider, label }) => {
+    const models = modelsByProvider.get(provider);
+    if (!models || models.size === 0) return [];
+    return [{ provider, label, models: [...models].sort((left, right) => left.localeCompare(right)) }];
+  });
 }
 
-function projectTitle(project: ProjectFilterOption | ProjectSelection): string | undefined {
-  return project.kind === "project" ? project.project_path : undefined;
-}
-
-function projectSelections(options: FilterOptionsResponse | null, selected: readonly ProjectSelection[]): Array<ProjectFilterOption | ProjectSelection> {
-  const values: Array<ProjectFilterOption | ProjectSelection> = [...(options?.projects ?? [])];
+function projectSelections(options: FilterOptionsResponse | null, selected: readonly ProjectSelection[]): ProjectLike[] {
+  const values: ProjectLike[] = [...(options?.projects ?? [])];
   const present = new Set(values.map(projectKey));
-  for (const selection of selected) {
-    if (!present.has(projectKey(selection))) values.push(selection);
-  }
+  for (const selection of selected) if (!present.has(projectKey(selection))) values.push(selection);
   return values;
 }
 
-function OptionStatus({
-  optionsLoading,
-  optionsStale,
-  optionsErrorCode,
-  hasOptions,
-  onRetry,
-}: Pick<FilterControlsProps, "optionsLoading" | "optionsStale" | "optionsErrorCode"> & {
-  hasOptions: boolean;
-  onRetry: () => void;
-}) {
-  if (optionsLoading) {
-    return <div className="filter-options-status" role="status">选项加载中…</div>;
-  }
-  if (optionsErrorCode) {
-    return (
-      <div className="filter-options-status is-error" role="status">
-        <span>选项加载失败</span>
-        <button type="button" className="filter-options-retry" onClick={onRetry}>重试</button>
-      </div>
-    );
-  }
-  if (optionsStale) {
-    return (
-      <div className="filter-options-status is-stale" role="status">
-        <span>{hasOptions ? "选项可能已更新" : "选项需要刷新"}</span>
-        <button type="button" className="filter-options-retry" onClick={onRetry}>重试</button>
-      </div>
-    );
-  }
+function OptionStatus({ loading, stale, error, hasOptions, onRetry }: { loading: boolean; stale: boolean; error?: string; hasOptions: boolean; onRetry: () => void }) {
+  if (loading) return <div className="px-2 py-2 text-xs text-muted-foreground" role="status">选项加载中…</div>;
+  if (error) return <div className="flex items-center justify-between gap-3 px-2 py-2 text-xs text-destructive" role="status"><span>选项加载失败</span><Button variant="ghost" size="sm" onClick={onRetry}>重试</Button></div>;
+  if (stale) return <div className="flex items-center justify-between gap-3 px-2 py-2 text-xs text-warning" role="status"><span>{hasOptions ? "选项可能已更新" : "选项需要刷新"}</span><Button variant="ghost" size="sm" onClick={onRetry}>重试</Button></div>;
   return null;
 }
 
-export function FilterControls({
-  filters,
-  options,
-  optionsLoading,
-  optionsStale,
-  optionsErrorCode,
-  anyFilterActive,
-  onChange,
-  onClear,
-  onRetryOptions,
-}: FilterControlsProps) {
-  const rootRef = useRef<HTMLDivElement | null>(null);
-  const [openMenu, setOpenMenu] = useState<FilterMenu | null>(null);
-  const [gptExpanded, setGptExpanded] = useState(true);
+type FilterTriggerProps = Omit<ButtonProps, "children"> & { label: string; count: number; icon: React.ReactNode };
 
-  useEffect(() => {
-    const handlePointerDown = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpenMenu(null);
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpenMenu(null);
-    };
-    document.addEventListener("pointerdown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, []);
+const FilterTrigger = forwardRef<HTMLButtonElement, FilterTriggerProps>(function FilterTrigger({ label, count, icon, ...buttonProps }, ref) {
+  const active = count > 0;
+  return <Button ref={ref} {...buttonProps} variant={active ? "primary" : "secondary"} size="sm" aria-label={`${label}筛选${active ? `，已选${count}项` : "，全部"}`}><span className="inline-flex h-4 w-4 items-center justify-center">{icon}</span><span>{label} · {active ? `${count} 项` : "全部"}</span></Button>;
+});
 
-  const models = useMemo(() => modelList(options, filters.models), [options, filters.models]);
-  const gptModels = models.filter(isGptModel);
-  const otherModels = models.filter((model) => !isGptModel(model));
+export function FilterControls({ filters, options, optionsLoading, optionsStale, optionsErrorCode, anyFilterActive, onChange, onClear, onRetryOptions }: FilterControlsProps) {
+  const [expandedGroups, setExpandedGroups] = useState<Record<ModelFilterProvider, boolean>>({
+    openai: true,
+    "route-models": true,
+  });
+  const reduce = useReducedMotion();
+  const groups = useMemo(() => modelGroups(options, filters.models), [options, filters.models]);
+  const projects = useMemo(() => projectSelections(options, filters.projects), [options, filters.projects]);
   const selectedModels = new Set(filters.models);
   const selectedProjects = new Set(filters.projects.map(projectKey));
-  const allGptSelected = gptModels.length > 0 && gptModels.every((model) => selectedModels.has(model));
-  const someGptSelected = gptModels.some((model) => selectedModels.has(model));
-  const projects = useMemo(() => projectSelections(options, filters.projects), [options, filters.projects]);
 
   const updateModels = (nextModels: string[]) => onChange({ ...filters, models: nextModels });
-  const toggleModel = (model: string) => {
-    const next = selectedModels.has(model)
-      ? filters.models.filter((value) => value !== model)
-      : [...filters.models, model];
-    updateModels(next);
-  };
-  const toggleGpt = () => {
-    if (allGptSelected) {
-      updateModels(filters.models.filter((model) => !gptModels.includes(model)));
-    } else {
-      updateModels([...new Set([...filters.models, ...gptModels])]);
-    }
+  const toggleModel = (model: string) => updateModels(selectedModels.has(model) ? filters.models.filter((value) => value !== model) : [...filters.models, model]);
+  const toggleGroup = (groupModels: readonly string[]) => {
+    const allSelected = groupModels.every((model) => selectedModels.has(model));
+    updateModels(allSelected ? filters.models.filter((model) => !groupModels.includes(model)) : [...new Set([...filters.models, ...groupModels])]);
   };
   const toggleProject = (project: ProjectFilterOption | ProjectSelection) => {
     const key = projectKey(project);
-    let addition: ProjectSelection;
-    if (project.kind === "project") addition = { kind: "project", project_path: project.project_path };
-    else if (project.kind === "projectless") addition = { kind: "projectless" };
-    else addition = { kind: "unknown" };
-    const next: ProjectSelection[] = selectedProjects.has(key)
-      ? filters.projects.filter((selection) => projectKey(selection) !== key)
-      : [...filters.projects, addition];
-    onChange({ ...filters, projects: next });
+    const addition: ProjectSelection = project.kind === "project" ? { kind: "project", project_path: project.project_path } : { kind: project.kind };
+    onChange({ ...filters, projects: selectedProjects.has(key) ? filters.projects.filter((selection) => projectKey(selection) !== key) : [...filters.projects, addition] });
   };
 
-  const menu = (kind: FilterMenu) => {
-    if (openMenu !== kind) return null;
-    const isModels = kind === "models";
-    return (
-      <div
-        className="filter-popover"
-        id={`${kind}-filter-options`}
-        role="listbox"
-        aria-label={isModels ? "模型选项" : "项目选项"}
-        aria-multiselectable="true"
-      >
-        <OptionStatus
-          optionsLoading={optionsLoading}
-          optionsStale={optionsStale}
-          optionsErrorCode={optionsErrorCode}
-          hasOptions={isModels ? models.length > 0 : projects.length > 0}
-          onRetry={onRetryOptions}
-        />
-        {!optionsLoading && isModels && models.length === 0 ? <div className="filter-options-empty">暂无模型</div> : null}
-        {!optionsLoading && !isModels && projects.length === 0 ? <div className="filter-options-empty">暂无项目</div> : null}
-        {isModels && gptModels.length > 0 ? (
-          <div className="filter-group">
-            <div className="filter-option filter-option-parent">
-              <input
-                ref={(element) => {
-                  if (element) element.indeterminate = someGptSelected && !allGptSelected;
-                }}
-                type="checkbox"
-                checked={allGptSelected}
-                aria-checked={someGptSelected && !allGptSelected ? "mixed" : allGptSelected}
-                aria-label="GPT"
-                onChange={toggleGpt}
-              />
-              <button
-                type="button"
-                className="filter-group-toggle"
-                aria-expanded={gptExpanded}
-                onClick={() => setGptExpanded((expanded) => !expanded)}
-              >
-                <span>GPT</span>
-                <GroupChevron expanded={gptExpanded} />
-              </button>
-            </div>
-            {gptExpanded
-              ? gptModels.map((model) => (
-                  <label key={model} className={`filter-option filter-option-child${selectedModels.has(model) ? " is-selected" : ""}`}>
-                    <input type="checkbox" checked={selectedModels.has(model)} aria-label={model} onChange={() => toggleModel(model)} />
-                    <span className="filter-option-text" title={model}>{model}</span>
-                  </label>
-                ))
-              : null}
-          </div>
-        ) : null}
-        {isModels
-          ? otherModels.map((model) => (
-              <label key={model} className={`filter-option${selectedModels.has(model) ? " is-selected" : ""}`}>
-                <input type="checkbox" checked={selectedModels.has(model)} aria-label={model} onChange={() => toggleModel(model)} />
-                <span className="filter-option-text" title={model}>{model}</span>
-              </label>
-            ))
-          : projects.map((project) => {
-              const selected = selectedProjects.has(projectKey(project));
-              return (
-                <label key={projectKey(project)} className={`filter-option${selected ? " is-selected" : ""}`}>
-                  <input type="checkbox" checked={selected} aria-label={projectLabel(project)} onChange={() => toggleProject(project)} />
-                  <span className="filter-option-text" title={projectTitle(project)}>{projectLabel(project)}</span>
-                </label>
-              );
-            })}
-      </div>
-    );
-  };
-
-  const trigger = (kind: FilterMenu, label: string, activeCount: number, icon: ReactNode) => {
-    const active = activeCount > 0;
-    const expanded = openMenu === kind;
-    return (
-      <div className="filter-selector">
-        <button
-          type="button"
-          className={`filter-trigger${active ? " is-active" : ""}`}
-          aria-label={`${label}筛选${active ? `，已选${activeCount}项` : "，全部"}`}
-          aria-haspopup="listbox"
-          aria-expanded={expanded}
-          aria-controls={`${kind}-filter-options`}
-          onClick={() => setOpenMenu((current) => current === kind ? null : kind)}
-        >
-          {icon}
-          <span className="filter-trigger-label">{label}</span>
-          <span className="filter-trigger-state">{active ? `${activeCount} 项` : "全部"}</span>
-          <Chevron expanded={expanded} />
-        </button>
-        {menu(kind)}
-      </div>
-    );
-  };
+  const rowClass = "flex min-h-9 w-full min-w-0 items-center gap-2 px-2 py-1.5";
 
   return (
-    <div className="filter-controls" ref={rootRef}>
-      {trigger("models", "模型", filters.models.length, <ModelGlyph />)}
-      {trigger("projects", "项目", filters.projects.length, <ProjectGlyph />)}
-      {anyFilterActive ? <button type="button" className="clear-filters-button" onClick={onClear}>清除筛选</button> : null}
+    <div className="flex flex-wrap items-center gap-2">
+      <MorphPopover>
+        <MorphPopoverTrigger><FilterTrigger label="模型" count={filters.models.length} icon={<Cpu className="h-4 w-4" />} /></MorphPopoverTrigger>
+        <MorphPopoverContent side="bottom" align="start" className="w-72 p-2">
+          <OptionStatus loading={optionsLoading} stale={optionsStale} error={optionsErrorCode} hasOptions={groups.length > 0} onRetry={onRetryOptions} />
+          {!optionsLoading && groups.length === 0 ? <div className="px-2 py-3 text-xs text-muted-foreground">暂无模型</div> : null}
+          {groups.map((group) => {
+            const expanded = expandedGroups[group.provider];
+            const allSelected = group.models.every((model) => selectedModels.has(model));
+            const someSelected = group.models.some((model) => selectedModels.has(model));
+            return <div key={group.provider}>
+              <div className={rowClass}>
+                <Checkbox checked={allSelected} indeterminate={someSelected && !allSelected} aria-label={group.label} onCheckedChange={() => toggleGroup(group.models)} />
+                <button type="button" className="flex min-w-0 flex-1 items-center gap-1.5 text-left" aria-expanded={expanded} onClick={() => setExpandedGroups((current) => ({ ...current, [group.provider]: !current[group.provider] }))}><span className="flex-1">{group.label}</span><motion.span animate={{ rotate: expanded ? 90 : 0 }} transition={reduce ? { duration: 0 } : SPRING_LAYOUT}><ChevronRight className="h-4 w-4 text-muted-foreground" /></motion.span></button>
+              </div>
+              {expanded ? <div className="pl-5">{group.models.map((model) => <div key={model} className={rowClass}><Checkbox checked={selectedModels.has(model)} onCheckedChange={() => toggleModel(model)} label={model} /></div>)}</div> : null}
+            </div>;
+          })}
+        </MorphPopoverContent>
+      </MorphPopover>
+
+      <MorphPopover>
+        <MorphPopoverTrigger><FilterTrigger label="项目" count={filters.projects.length} icon={<Folder className="h-4 w-4" />} /></MorphPopoverTrigger>
+        <MorphPopoverContent side="bottom" align="start" className="w-80 p-2">
+          <OptionStatus loading={optionsLoading} stale={optionsStale} error={optionsErrorCode} hasOptions={projects.length > 0} onRetry={onRetryOptions} />
+          {!optionsLoading && projects.length === 0 ? <div className="px-2 py-3 text-xs text-muted-foreground">暂无项目</div> : null}
+          {projects.map((project) => <div key={projectKey(project)} className={rowClass} title={projectTitle(project)}><Checkbox checked={selectedProjects.has(projectKey(project))} onCheckedChange={() => toggleProject(project)} label={projectDisplay(project)} /></div>)}
+        </MorphPopoverContent>
+      </MorphPopover>
+
+      {anyFilterActive ? <Button variant="ghost" size="sm" onClick={onClear}>清除筛选</Button> : null}
     </div>
   );
 }

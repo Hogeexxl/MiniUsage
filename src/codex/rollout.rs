@@ -955,13 +955,12 @@ impl Parser {
                 self.machine = MachineState::OwningLive;
             }
             if let Some(fact) = self.fact.as_mut() {
-                if resumed_from_replay {
-                    fact.ownership_boundary.owning_records_start_offset = Some(line.start_offset);
-                } else if fact
-                    .ownership_boundary
-                    .owning_records_start_offset
-                    .is_none()
-                    && fact.ownership_boundary.replay_start_offset.is_none()
+                if resumed_from_replay
+                    || (fact
+                        .ownership_boundary
+                        .owning_records_start_offset
+                        .is_none()
+                        && fact.ownership_boundary.replay_start_offset.is_none())
                 {
                     fact.ownership_boundary.owning_records_start_offset = Some(line.start_offset);
                 }
@@ -1650,9 +1649,7 @@ pub(crate) fn normalize_agent_path(raw: &str) -> Option<String> {
         match component {
             "" | "." => {}
             ".." => {
-                if components.pop().is_none() {
-                    return None;
-                }
+                components.pop()?;
             }
             component => components.push(component),
         }

@@ -5,6 +5,8 @@ use std::{collections::BTreeMap, fmt, path::Path};
 use rusqlite::{Connection, Row, params};
 use rusqlite::{params_from_iter, types::Value};
 
+use crate::cost::ModelRegistry;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TimeRange {
     pub start_ms: i64,
@@ -277,6 +279,7 @@ pub struct UsageSummary {
     pub totals: TokenTotals,
     /// Healthy sessions contributing usage events. Kept for the existing KPI.
     pub session_count: i64,
+    pub cost_incomplete_session_count: i64,
     pub health: SessionHealthSummary,
 }
 
@@ -313,6 +316,7 @@ pub struct SessionSortIndexItem {
     pub model_sort_key: Option<String>,
     pub total_tokens: Option<i64>,
     pub combined_total_tokens: Option<i64>,
+    pub combined_estimated_cost_nanos_usd: Option<i64>,
     pub cache_hit_rate: Option<f64>,
     pub data_status: SessionDataStatus,
     pub error_code: Option<String>,
@@ -325,6 +329,7 @@ pub enum SessionSortField {
     Model,
     TotalTokens,
     CombinedTotalTokens,
+    CombinedEstimatedCost,
     CacheHitRate,
 }
 
@@ -363,6 +368,12 @@ impl SessionSortAggregate {
             model_sort_key: self.model_sort_key.clone(),
             total_tokens: Some(self.self_usage.total_tokens),
             combined_total_tokens: Some(self.inclusive_usage.total_tokens),
+            combined_estimated_cost_nanos_usd: match self.inclusive_usage.cost_completeness {
+                CostCompleteness::Complete | CostCompleteness::Partial => {
+                    self.inclusive_usage.estimated_cost_nanos_usd
+                }
+                CostCompleteness::Empty | CostCompleteness::Unknown => None,
+            },
             cache_hit_rate: self.inclusive_usage.cache_hit_rate,
             data_status: status_for_totals(&self.inclusive_usage),
             error_code: None,
@@ -437,9 +448,15 @@ pub enum ProjectFilterOption {
     Unknown,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ModelFilterOption {
+    pub model: String,
+    pub provider: String,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct FilterOptions {
-    pub models: Vec<String>,
+    pub models: Vec<ModelFilterOption>,
     pub projects: Vec<ProjectFilterOption>,
 }
 
@@ -526,9 +543,16 @@ impl<'connection> AggregateReader<'connection> {
         let total_sessions = session_count
             .checked_add(error_sessions)
             .ok_or(AggregateError::ArithmeticOverflow)?;
+        let cost_incomplete_session_count = incomplete_sessions
+            .checked_add(error_sessions)
+            .ok_or(AggregateError::ArithmeticOverflow)?;
+        if cost_incomplete_session_count < 0 || cost_incomplete_session_count > total_sessions {
+            return Err(AggregateError::InvariantViolation);
+        }
         Ok(UsageSummary {
             totals,
             session_count,
+            cost_incomplete_session_count,
             health: SessionHealthSummary {
                 total_sessions,
                 complete_sessions,
@@ -1087,7 +1111,16 @@ impl<'connection> AggregateReader<'connection> {
             .query_map(params![epoch], |row| row.get(0))
             .map_err(map_sql_error)?
             .collect::<rusqlite::Result<Vec<String>>>()
-            .map_err(map_sql_error)?;
+            .map_err(map_sql_error)?
+            .into_iter()
+            .map(|model| {
+                let provider = ModelRegistry::new().resolve(&model).provider;
+                ModelFilterOption {
+                    model,
+                    provider: provider.as_str().to_owned(),
+                }
+            })
+            .collect();
 
         let mut projects_statement = self
             .connection
@@ -1646,6 +1679,7 @@ impl QuarantinedRoot {
             model_sort_key: None,
             total_tokens: None,
             combined_total_tokens: None,
+            combined_estimated_cost_nanos_usd: None,
             cache_hit_rate: None,
             data_status: SessionDataStatus::Error,
             error_code: Some(self.error_code.clone()),
@@ -1728,70 +1762,13 @@ fn compare_sort_index_items(
         SessionSortField::CombinedTotalTokens => {
             number(left.combined_total_tokens, right.combined_total_tokens)
         }
+        SessionSortField::CombinedEstimatedCost => number(
+            left.combined_estimated_cost_nanos_usd,
+            right.combined_estimated_cost_nanos_usd,
+        ),
         SessionSortField::CacheHitRate => ratio(left.cache_hit_rate, right.cache_hit_rate),
     };
     result.then_with(|| left.root_session_id.cmp(&right.root_session_id))
-}
-
-fn compare_sort_aggregates(
-    left: &SessionSortAggregate,
-    right: &SessionSortAggregate,
-    field: SessionSortField,
-    order: SessionSortOrder,
-) -> std::cmp::Ordering {
-    use std::cmp::Ordering;
-    let compare_optional = |left: Option<&str>, right: Option<&str>| match (left, right) {
-        (None, None) => Ordering::Equal,
-        (None, Some(_)) => Ordering::Greater,
-        (Some(_), None) => Ordering::Less,
-        (Some(left), Some(right)) => match order {
-            SessionSortOrder::Asc => left.cmp(right),
-            SessionSortOrder::Desc => right.cmp(left),
-        },
-    };
-    let compare_number = |left: i64, right: i64| match order {
-        SessionSortOrder::Asc => left.cmp(&right),
-        SessionSortOrder::Desc => right.cmp(&left),
-    };
-    let compare_ratio = |left: Option<f64>, right: Option<f64>| match (left, right) {
-        (None, None) => Ordering::Equal,
-        (None, Some(_)) => Ordering::Greater,
-        (Some(_), None) => Ordering::Less,
-        (Some(left), Some(right)) => match order {
-            SessionSortOrder::Asc => left.total_cmp(&right),
-            SessionSortOrder::Desc => right.total_cmp(&left),
-        },
-    };
-    let ordering = match field {
-        SessionSortField::LastActivity => {
-            compare_number(left.last_activity_at_ms, right.last_activity_at_ms)
-        }
-        SessionSortField::Project => compare_optional(
-            left.project_name
-                .as_deref()
-                .or(left.project_path.as_deref()),
-            right
-                .project_name
-                .as_deref()
-                .or(right.project_path.as_deref()),
-        ),
-        SessionSortField::Model => compare_optional(
-            left.model_sort_key.as_deref(),
-            right.model_sort_key.as_deref(),
-        ),
-        SessionSortField::TotalTokens => {
-            compare_number(left.self_usage.total_tokens, right.self_usage.total_tokens)
-        }
-        SessionSortField::CombinedTotalTokens => compare_number(
-            left.inclusive_usage.total_tokens,
-            right.inclusive_usage.total_tokens,
-        ),
-        SessionSortField::CacheHitRate => compare_ratio(
-            left.inclusive_usage.cache_hit_rate,
-            right.inclusive_usage.cache_hit_rate,
-        ),
-    };
-    ordering.then_with(|| left.root_session_id.cmp(&right.root_session_id))
 }
 
 struct AggregateRow {
@@ -2127,6 +2104,119 @@ mod tests {
             .unwrap();
     }
 
+    fn summary_cost_fixture(incomplete: bool, error: bool) -> Connection {
+        let connection = fixture();
+        connection
+            .execute(
+                "UPDATE usage_events
+                 SET estimated_cost_nanos_usd=CASE event_id
+                     WHEN 'a-self' THEN 10
+                     WHEN 'a-child' THEN 20
+                     WHEN 'a-unknown' THEN 30
+                     WHEN 'b-self' THEN 40
+                 END
+                 WHERE event_id IN ('a-self','a-child','a-unknown','b-self')",
+                [],
+            )
+            .unwrap();
+        if incomplete {
+            connection
+                .execute(
+                    "UPDATE usage_events
+                     SET estimated_cost_nanos_usd=NULL
+                     WHERE event_id='a-unknown'",
+                    [],
+                )
+                .unwrap();
+        }
+        connection
+            .execute(
+                "INSERT INTO threads(
+                    thread_id,parent_thread_id,root_session_id,agent_role,title,
+                    project_name,project_path,project_kind
+                 ) VALUES ('root-c',NULL,'root-c','main','Root C','project-c',?1,'project')",
+                params![fixture_path("project/c")],
+            )
+            .unwrap();
+        insert_event(
+            &connection,
+            "c-self",
+            300,
+            "root-c",
+            "root-c",
+            "gpt-c",
+            100,
+            10,
+            Some(1),
+            10,
+            1,
+        );
+        connection
+            .execute(
+                "UPDATE usage_events
+                 SET estimated_cost_nanos_usd=30
+                 WHERE event_id='c-self'",
+                [],
+            )
+            .unwrap();
+        if error {
+            connection
+                .execute(
+                    "INSERT INTO threads(
+                        thread_id,parent_thread_id,root_session_id,agent_role,title,
+                        project_name,project_path,project_kind
+                     ) VALUES ('root-error',NULL,'root-error','main','Root Error',
+                               'project-error',?1,'project')",
+                    params![fixture_path("project/error")],
+                )
+                .unwrap();
+            connection
+                .execute(
+                    "INSERT INTO usage_session_quarantine(
+                        ledger_epoch,root_session_id,primary_error_code,last_activity_at_ms,
+                        first_seen_at_ms,updated_at_ms
+                     ) VALUES (7,'root-error','TEST_ERROR',350,350,350)",
+                    [],
+                )
+                .unwrap();
+        }
+        connection
+    }
+
+    fn assert_summary_cost_counts(
+        summary: &UsageSummary,
+        healthy: i64,
+        incomplete: i64,
+        error: i64,
+        complete_for_footer: i64,
+    ) {
+        assert_eq!(summary.session_count, healthy);
+        assert_eq!(summary.health.incomplete_sessions, incomplete);
+        assert_eq!(summary.health.error_sessions, error);
+        assert_eq!(
+            summary.health.complete_sessions,
+            healthy.checked_sub(incomplete).unwrap()
+        );
+        assert_eq!(
+            summary.health.total_sessions,
+            healthy.checked_add(error).unwrap()
+        );
+        assert_eq!(
+            summary.cost_incomplete_session_count,
+            incomplete.checked_add(error).unwrap()
+        );
+        assert!(summary.cost_incomplete_session_count >= 0);
+        assert!(summary.cost_incomplete_session_count <= summary.health.total_sessions);
+        assert_eq!(
+            summary
+                .health
+                .total_sessions
+                .checked_sub(summary.cost_incomplete_session_count)
+                .unwrap(),
+            complete_for_footer
+        );
+    }
+
     fn filter_fixture() -> Connection {
         let connection = Connection::open_in_memory().unwrap();
         let project_a = fixture_path("project/a");
@@ -2430,6 +2520,46 @@ mod tests {
         assert_eq!(exact.other_output_tokens, 800);
         assert_eq!(exact.cache_hit_rate, Some(0.18));
         assert_ne!(exact.cache_hit_rate, Some((0.9 + 0.1) / 2.0));
+    }
+
+    #[test]
+    fn t_s03_004_summary_cost_count_uses_all_root_sessions() {
+        for (
+            incomplete,
+            error,
+            expected_incomplete,
+            expected_error,
+            footer_complete,
+            footer_total,
+        ) in [
+            (false, false, 0_i64, 0_i64, 3_i64, 3_i64),
+            (true, false, 1_i64, 0_i64, 2_i64, 3_i64),
+            (true, true, 1_i64, 1_i64, 2_i64, 4_i64),
+        ] {
+            let connection = summary_cost_fixture(incomplete, error);
+            let summary = AggregateReader::new(&connection)
+                .summary(SummaryQuery::new(
+                    TimeRange::new(0, 400).unwrap(),
+                    UsageFilter::default(),
+                ))
+                .unwrap();
+            assert_summary_cost_counts(
+                &summary,
+                3,
+                expected_incomplete,
+                expected_error,
+                footer_complete,
+            );
+            assert_eq!(summary.health.total_sessions, footer_total);
+            assert_eq!(
+                summary
+                    .health
+                    .total_sessions
+                    .checked_sub(summary.cost_incomplete_session_count)
+                    .unwrap(),
+                footer_complete
+            );
+        }
     }
 
     #[test]
@@ -3131,10 +3261,22 @@ mod tests {
         assert_eq!(
             options.models,
             vec![
-                "gpt-a".to_owned(),
-                "gpt-alt".to_owned(),
-                "gpt-b".to_owned(),
-                "gpt-c".to_owned(),
+                ModelFilterOption {
+                    model: "gpt-a".to_owned(),
+                    provider: "route-models".to_owned(),
+                },
+                ModelFilterOption {
+                    model: "gpt-alt".to_owned(),
+                    provider: "route-models".to_owned(),
+                },
+                ModelFilterOption {
+                    model: "gpt-b".to_owned(),
+                    provider: "route-models".to_owned(),
+                },
+                ModelFilterOption {
+                    model: "gpt-c".to_owned(),
+                    provider: "route-models".to_owned(),
+                },
             ]
         );
         assert_eq!(
@@ -3161,6 +3303,36 @@ mod tests {
             ProjectFilterOption::Project { project_path, .. }
                 if project_path == &fixture_path("Users/me/generated-cwd")
         )));
+        transaction.commit().unwrap();
+    }
+
+    #[test]
+    fn t_s05_002_filter_options_classify_openai_provider() {
+        let mut connection = filter_fixture();
+        insert_event(
+            &connection,
+            "openai-model",
+            250,
+            "root-a",
+            "root-a",
+            "gpt-5.6-luna",
+            1,
+            0,
+            Some(0),
+            1,
+            0,
+        );
+
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Deferred)
+            .unwrap();
+        let options = AggregateReader::new(&transaction).filter_options().unwrap();
+        assert!(
+            options
+                .models
+                .iter()
+                .any(|option| { option.model == "gpt-5.6-luna" && option.provider == "openai" })
+        );
         transaction.commit().unwrap();
     }
 }

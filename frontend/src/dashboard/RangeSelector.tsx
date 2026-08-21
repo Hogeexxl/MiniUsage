@@ -1,10 +1,11 @@
 import { RANGE_KEYS, type RangeKey } from "../data/types";
+import { Tabs, TabsList, TabsTrigger } from "../ui/beui/tabs";
 
 const RANGE_LABELS: Record<RangeKey, string> = {
   today: "今天",
   yesterday: "昨天",
-  "7d": "7天",
-  "30d": "30天",
+  "7d": "7d",
+  "30d": "30d",
   year: "今年",
 };
 
@@ -15,18 +16,18 @@ type RangeSelectorProps = {
 
 export function RangeSelector({ value, onChange }: RangeSelectorProps) {
   return (
-    <div className="range-selector" role="group" aria-label="时间范围">
-      {RANGE_KEYS.map((range) => (
-        <button
-          key={range}
-          type="button"
-          className={`range-option${value === range ? " is-selected" : ""}`}
-          aria-pressed={value === range}
-          onClick={() => onChange(range)}
-        >
-          {RANGE_LABELS[range]}
-        </button>
-      ))}
-    </div>
+    <Tabs
+      value={value}
+      onValueChange={(range) => onChange(range as RangeKey)}
+      variant="pill"
+    >
+      <TabsList>
+        {RANGE_KEYS.map((range) => (
+          <TabsTrigger key={range} value={range}>
+            {RANGE_LABELS[range]}
+          </TabsTrigger>
+        ))}
+      </TabsList>
+    </Tabs>
   );
 }

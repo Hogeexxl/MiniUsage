@@ -3,14 +3,14 @@
 use crate::domain::DomainError;
 
 /// The parser and canonical algorithm versions compiled into this binary.
-pub const USAGE_PARSER_VERSION: i64 = 8;
+pub const USAGE_PARSER_VERSION: i64 = 11;
 pub const USAGE_CANONICAL_ALGORITHM_VERSION: i64 = 5;
 
 /// Return the canonical algorithm that belongs to a parser version.
 pub const fn canonical_algorithm_for(parser_version: i64) -> Option<i64> {
     match parser_version {
         4 | 5 => Some(4),
-        6 | 7 | USAGE_PARSER_VERSION => Some(USAGE_CANONICAL_ALGORITHM_VERSION),
+        6 | 7 | 8 | 9 | 10 | USAGE_PARSER_VERSION => Some(USAGE_CANONICAL_ALGORITHM_VERSION),
         _ => None,
     }
 }
@@ -318,7 +318,7 @@ mod tests {
 
     #[test]
     fn t_dc_010_fingerprint_is_v5_and_distinguishes_states() {
-        assert_eq!(USAGE_PARSER_VERSION, 8);
+        assert_eq!(USAGE_PARSER_VERSION, 11);
         assert_eq!(USAGE_CANONICAL_ALGORITHM_VERSION, 5);
         assert_eq!(canonical_algorithm_for(1), None);
         assert_eq!(canonical_algorithm_for(2), None);
@@ -326,6 +326,10 @@ mod tests {
         assert_eq!(canonical_algorithm_for(4), Some(4));
         assert_eq!(canonical_algorithm_for(5), Some(4));
         assert_eq!(canonical_algorithm_for(6), Some(5));
+        assert_eq!(canonical_algorithm_for(8), Some(5));
+        assert_eq!(canonical_algorithm_for(9), Some(5));
+        assert_eq!(canonical_algorithm_for(10), Some(5));
+        assert_eq!(canonical_algorithm_for(11), Some(5));
         assert_eq!(
             standard(Some(2_000)).fingerprint(),
             standard(Some(2_000)).fingerprint()

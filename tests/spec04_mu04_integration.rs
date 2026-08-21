@@ -612,7 +612,7 @@ fn t_mu04_f02_parser4_pricing1_reprice_and_shadow_rebuild_stay_independent() {
         .expect("clear legacy alias cost");
     drop(connection);
 
-    // Opening the old database performs pricing v2 reprice only. It keeps the
+    // Opening the old database performs the catalog reprice only. It keeps the
     // parser-v4 active epoch readable until the scanner starts its own build.
     let reopened = fixture.ledger();
     let connection = Connection::open(&fixture.db).expect("reopen F02 database");
@@ -633,7 +633,7 @@ fn t_mu04_f02_parser4_pricing1_reprice_and_shadow_rebuild_stay_independent() {
             },
         )
         .expect("read reopened versions");
-    assert_eq!(versions, (4, 1, 2, old_epoch, None));
+    assert_eq!(versions, (4, 1, 3, old_epoch, None));
     let alias_cost: Option<i64> = connection
         .query_row(
             "SELECT estimated_cost_nanos_usd FROM usage_events
@@ -686,7 +686,7 @@ fn t_mu04_f02_parser4_pricing1_reprice_and_shadow_rebuild_stay_independent() {
         .expect("read final versions");
     assert_eq!(
         final_versions,
-        (mini_usage::usage::USAGE_PARSER_VERSION, None, 1, 2)
+        (mini_usage::usage::USAGE_PARSER_VERSION, None, 1, 3)
     );
     let events = active_event_rows(&connection, new_epoch);
     assert_eq!(events.len(), old_event_count as usize);

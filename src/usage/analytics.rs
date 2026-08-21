@@ -10,6 +10,8 @@ use super::{
     ledger::UsageLedgerError,
 };
 
+pub const SKILL_USAGE_PARSER_VERSION: i64 = 11;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DistributionCostStatus {
     Complete,
@@ -323,7 +325,7 @@ pub fn skills_usage_snapshot(
         .transaction_with_behavior(TransactionBehavior::Deferred)
         .map_err(StorageError::sqlite)?;
     let (data_revision, active_epoch, active_parser) = snapshot_meta(&transaction)?;
-    let ready = active_epoch > 0 && active_parser >= 8;
+    let ready = active_epoch > 0 && active_parser >= SKILL_USAGE_PARSER_VERSION;
     let mut output = Vec::with_capacity(days.len());
     for day in days {
         let range = TimeRange::new(day.start_ms, day.end_ms)?;
@@ -383,4 +385,52 @@ pub fn skills_usage_snapshot(
             days: output,
         },
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        fs,
+        path::PathBuf,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    use crate::storage::LedgerOptions;
+
+    use super::*;
+
+    fn ledger_with_active_parser(parser_version: i64) -> (Ledger, PathBuf) {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("mini-usage-s07-analytics-{unique}"));
+        fs::create_dir_all(&root).unwrap();
+        let ledger = Ledger::open(LedgerOptions::new(
+            root.join("mu.sqlite3"),
+            root.join("codex"),
+        ))
+        .unwrap();
+        ledger
+            .connection()
+            .unwrap()
+            .execute(
+                "UPDATE app_meta SET usage_active_epoch=1,usage_parser_version=?1 WHERE id=1",
+                [parser_version],
+            )
+            .unwrap();
+        (ledger, root)
+    }
+
+    #[test]
+    fn t_s07_002_skills_ready_requires_parser_v11() {
+        assert_eq!(SKILL_USAGE_PARSER_VERSION, 11);
+        for (parser_version, expected_ready) in [(10, false), (11, true)] {
+            let (ledger, root) = ledger_with_active_parser(parser_version);
+            let snapshot = skills_usage_snapshot(&ledger, &[], &UsageFilter::default()).unwrap();
+            assert_eq!(snapshot.value.ready, expected_ready);
+            drop(ledger);
+            fs::remove_dir_all(root).unwrap();
+        }
+    }
 }

@@ -34,6 +34,7 @@ export type SessionHealthDto = {
 
 export type SummaryUsageDto = UsageDto & {
   session_count: number;
+  cost_incomplete_session_count: number;
   session_health: SessionHealthDto;
 };
 
@@ -58,9 +59,16 @@ export type DashboardFilters = {
   projects: ProjectSelection[];
 };
 
+export type ModelFilterProvider = "openai" | "route-models";
+
+export type ModelFilterOption = {
+  model: string;
+  provider: ModelFilterProvider;
+};
+
 export type FilterOptionsResponse = {
   data_revision: number;
-  models: string[];
+  models: ModelFilterOption[];
   projects: ProjectFilterOption[];
 };
 
@@ -130,6 +138,7 @@ export type SessionSortField =
   | "model"
   | "total_tokens"
   | "combined_total_tokens"
+  | "combined_estimated_cost"
   | "cache_hit_rate";
 
 export type SessionSortOrder = "asc" | "desc";
@@ -141,6 +150,7 @@ export type SessionSortIndexItem = {
   model_sort_key: string | null;
   total_tokens: number | null;
   combined_total_tokens: number | null;
+  combined_estimated_cost: number | null;
   cache_hit_rate: number | null;
   data_status: "complete" | "incomplete" | "error";
   error_code: string | null;
@@ -289,3 +299,19 @@ export class MiniUsageClientError extends Error {
 }
 
 export type RevisionTuple = Pick<RevisionResponse, "data_revision" | "status_revision">;
+
+export type SyncResponse = {
+  status: "accepted" | "already_running" | "queued";
+  scan_id: string | null;
+};
+
+export type UpdateCheckResponse = {
+  status: "up_to_date" | "update_available";
+  current_version: string;
+  latest_version: string;
+  release_url: string | null;
+};
+
+export type UpdateOpenResponse = {
+  status: "opened";
+};

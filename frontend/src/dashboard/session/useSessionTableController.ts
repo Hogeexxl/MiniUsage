@@ -15,8 +15,8 @@ import {
 } from "../../data/types";
 import type { SessionControllerOptions, SessionLoadState, SessionPageState, SessionTableViewModel } from "./sessionTypes";
 
-export const FRONTEND_PAGE_SIZE = 15;
-export const ROW_BATCH_LIMIT = 60;
+export const FRONTEND_PAGE_SIZE = 10;
+export const ROW_BATCH_LIMIT = 40;
 
 type Snapshot = {
   query_key: string;
@@ -61,6 +61,7 @@ const SORT_DEFAULTS: Record<SessionSortField, SessionSortOrder> = {
   model: "asc",
   total_tokens: "desc",
   combined_total_tokens: "desc",
+  combined_estimated_cost: "desc",
   cache_hit_rate: "desc",
 };
 
@@ -104,6 +105,7 @@ function compareIndex(left: SessionSortIndexItem, right: SessionSortIndexItem, s
   if (sortBy === "last_activity") comparison = compareNullableNumber(left.last_activity_at_ms, right.last_activity_at_ms, order);
   if (sortBy === "total_tokens") comparison = compareNullableNumber(left.total_tokens, right.total_tokens, order);
   if (sortBy === "combined_total_tokens") comparison = compareNullableNumber(left.combined_total_tokens, right.combined_total_tokens, order);
+  if (sortBy === "combined_estimated_cost") comparison = compareNullableNumber(left.combined_estimated_cost, right.combined_estimated_cost, order);
   return comparison || compareRootIds(left.root_session_id, right.root_session_id);
 }
 

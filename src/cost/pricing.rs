@@ -1,5 +1,7 @@
 //! Bundled model pricing for the cost domain.
 
+use super::registry::{ModelProvider, ModelRegistry};
+
 /// Per-token rates expressed in USD nanodollars.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TokenRates {
@@ -54,7 +56,6 @@ impl LongContextPolicy {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ModelPricing {
     pub canonical_model_id: &'static str,
-    pub aliases: &'static [&'static str],
     pub effective_from_ms: i64,
     pub effective_to_ms: Option<i64>,
     pub short_context: TokenRates,
@@ -73,62 +74,14 @@ impl ModelPricing {
     }
 }
 
-/// Exact model/alias lookup against the bundled catalog.
-pub trait PricingRepository {
-    fn resolve(&self, model: &str, occurred_at_ms: i64) -> Option<&ModelPricing>;
-}
-
-const CATALOG_EFFECTIVE_FROM_MS: i64 = i64::MIN;
-
-const GPT_5_6_SOL_ALIASES: &[&str] = &["gpt-5.6"];
-const GPT_5_6_TERRA_ALIASES: &[&str] = &[];
-const GPT_5_6_LUNA_ALIASES: &[&str] = &["codex-auto-review"];
+include!("litellm_catalog.rs");
 
 /// GPT-5.6 Sol Standard pricing.
-pub const GPT_5_6_SOL_PRICING: ModelPricing = ModelPricing {
-    canonical_model_id: "gpt-5.6-sol",
-    aliases: GPT_5_6_SOL_ALIASES,
-    effective_from_ms: CATALOG_EFFECTIVE_FROM_MS,
-    effective_to_ms: None,
-    short_context: TokenRates::new(5_000, 500, Some(6_250), 30_000),
-    long_context: Some(LongContextPolicy::new(
-        272_000,
-        TokenRates::new(10_000, 1_000, Some(12_500), 45_000),
-    )),
-};
-
-/// GPT-5.6 Terra Standard pricing.
-pub const GPT_5_6_TERRA_PRICING: ModelPricing = ModelPricing {
-    canonical_model_id: "gpt-5.6-terra",
-    aliases: GPT_5_6_TERRA_ALIASES,
-    effective_from_ms: CATALOG_EFFECTIVE_FROM_MS,
-    effective_to_ms: None,
-    short_context: TokenRates::new(2_000, 200, Some(2_500), 12_000),
-    long_context: Some(LongContextPolicy::new(
-        272_000,
-        TokenRates::new(4_000, 400, Some(5_000), 18_000),
-    )),
-};
-
-/// GPT-5.6 Luna Standard pricing.
-pub const GPT_5_6_LUNA_PRICING: ModelPricing = ModelPricing {
-    canonical_model_id: "gpt-5.6-luna",
-    aliases: GPT_5_6_LUNA_ALIASES,
-    effective_from_ms: CATALOG_EFFECTIVE_FROM_MS,
-    effective_to_ms: None,
-    short_context: TokenRates::new(200, 20, Some(250), 1_200),
-    long_context: Some(LongContextPolicy::new(
-        272_000,
-        TokenRates::new(400, 40, Some(500), 1_800),
-    )),
-};
+#[cfg(test)]
+pub const GPT_5_6_SOL_PRICING: ModelPricing = SNAPSHOT_GPT_5_6_SOL_PRICING;
 
 /// The immutable bundled Standard catalog.
-pub const BUNDLED_PRICING_CATALOG: &[ModelPricing] = &[
-    GPT_5_6_SOL_PRICING,
-    GPT_5_6_TERRA_PRICING,
-    GPT_5_6_LUNA_PRICING,
-];
+pub const BUNDLED_PRICING_CATALOG: &[ModelPricing] = LITELLM_OPENAI_PRICING_CATALOG;
 
 /// Repository backed by the fixed bundled catalog.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -139,18 +92,14 @@ impl BundledPricingRepository {
         Self
     }
 
-    pub const fn catalog(&self) -> &'static [ModelPricing] {
-        BUNDLED_PRICING_CATALOG
-    }
-
     pub fn resolve(&self, model: &str, occurred_at_ms: i64) -> Option<&'static ModelPricing> {
-        resolve_from_catalog(BUNDLED_PRICING_CATALOG, model, occurred_at_ms)
-    }
-}
-
-impl PricingRepository for BundledPricingRepository {
-    fn resolve(&self, model: &str, occurred_at_ms: i64) -> Option<&ModelPricing> {
-        Self::resolve(self, model, occurred_at_ms)
+        let resolution = ModelRegistry::new().resolve(model);
+        match (resolution.pricing_provider, resolution.pricing_target) {
+            (Some(ModelProvider::OpenAI), Some(target)) => {
+                resolve_from_catalog(BUNDLED_PRICING_CATALOG, target, occurred_at_ms)
+            }
+            _ => None,
+        }
     }
 }
 
@@ -159,16 +108,9 @@ fn resolve_from_catalog(
     model: &str,
     occurred_at_ms: i64,
 ) -> Option<&'static ModelPricing> {
-    catalog
-        .iter()
-        .find(|pricing| {
-            pricing.canonical_model_id == model && pricing.is_effective_at(occurred_at_ms)
-        })
-        .or_else(|| {
-            catalog.iter().find(|pricing| {
-                pricing.aliases.contains(&model) && pricing.is_effective_at(occurred_at_ms)
-            })
-        })
+    catalog.iter().find(|pricing| {
+        pricing.canonical_model_id == model && pricing.is_effective_at(occurred_at_ms)
+    })
 }
 
 #[cfg(test)]
@@ -260,5 +202,84 @@ mod tests {
         assert_eq!(luna_alias.long_context, luna.long_context);
 
         assert!(repository.resolve("unknown-model", 0).is_none());
+    }
+
+    #[test]
+    fn t_mu04_a03_snapshot_counts_and_local_openai_rates() {
+        assert_eq!(LITELLM_SNAPSHOT_MODEL_IDS.len(), 95);
+        assert_eq!(LITELLM_OPENAI_PRICING_CATALOG.len(), 67);
+        assert!(!LITELLM_SNAPSHOT_MODEL_IDS.contains(&"openai/container"));
+
+        let repository = BundledPricingRepository::new();
+        let expected = [
+            (
+                "gpt-5.1-codex-mini",
+                TokenRates::new(250, 25, None, 2_000),
+                None,
+            ),
+            (
+                "gpt-5.2-codex",
+                TokenRates::new(1_750, 175, None, 14_000),
+                None,
+            ),
+            (
+                "gpt-5.3-codex",
+                TokenRates::new(1_750, 175, None, 14_000),
+                None,
+            ),
+            (
+                "gpt-5.4",
+                TokenRates::new(2_500, 250, None, 15_000),
+                Some(TokenRates::new(5_000, 500, None, 22_500)),
+            ),
+            ("gpt-5.4-mini", TokenRates::new(750, 75, None, 4_500), None),
+            (
+                "gpt-5.5",
+                TokenRates::new(5_000, 500, None, 30_000),
+                Some(TokenRates::new(10_000, 1_000, None, 45_000)),
+            ),
+            (
+                "gpt-5.6-sol",
+                TokenRates::new(5_000, 500, Some(6_250), 30_000),
+                Some(TokenRates::new(10_000, 1_000, Some(12_500), 45_000)),
+            ),
+            (
+                "gpt-5.6-terra",
+                TokenRates::new(2_000, 200, Some(2_500), 12_000),
+                Some(TokenRates::new(4_000, 400, Some(5_000), 18_000)),
+            ),
+            (
+                "gpt-5.6-luna",
+                TokenRates::new(200, 20, Some(250), 1_200),
+                Some(TokenRates::new(400, 40, Some(500), 1_800)),
+            ),
+        ];
+
+        for (model, short_context, long_context) in expected {
+            let pricing = repository.resolve(model, 0).expect(model);
+            assert_eq!(pricing.canonical_model_id, model);
+            assert_eq!(pricing.short_context, short_context);
+            assert_eq!(
+                pricing.long_context.map(|policy| policy.rates),
+                long_context
+            );
+            assert_eq!(
+                pricing
+                    .long_context
+                    .map(|policy| policy.threshold_input_tokens),
+                long_context.map(|_| 272_000)
+            );
+        }
+    }
+
+    #[test]
+    fn t_mu04_a04_missing_cache_read_stays_unpriced() {
+        let registry = ModelRegistry::new();
+        let repository = BundledPricingRepository::new();
+
+        for model in ["gpt-3.5-turbo", "gpt-5-pro", "ft:gpt-4o-2024-11-20"] {
+            assert_eq!(registry.resolve(model).provider, ModelProvider::OpenAI);
+            assert!(repository.resolve(model, 0).is_none(), "{model}");
+        }
     }
 }

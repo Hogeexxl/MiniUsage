@@ -34,7 +34,6 @@ export type SessionDetailControllerViewModel = {
   open_detail: (row: SessionItemDto) => void;
   select_session: (row: SessionItemDto) => void;
   close_detail: () => void;
-  refresh_detail: () => void;
   retry_detail: () => void;
 };
 
@@ -296,7 +295,6 @@ export function useSessionDetailController(
     open_detail: openDetail,
     select_session: openDetail,
     close_detail: closeDetail,
-    refresh_detail: refreshDetail,
     retry_detail: refreshDetail,
   };
 }

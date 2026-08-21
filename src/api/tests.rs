@@ -501,6 +501,13 @@ async fn t_s06_002_http_compatibility_and_filter_boundary_matrix() {
     assert!(options["data_revision"].is_i64());
     assert!(options["models"].is_array());
     assert!(options["projects"].is_array());
+    for model in options["models"].as_array().unwrap() {
+        assert!(model["model"].is_string());
+        assert!(matches!(
+            model["provider"].as_str(),
+            Some("openai" | "route-models")
+        ));
+    }
 
     let models = fixture
         .call(Method::GET, "/api/usage/models?range=year", &[])

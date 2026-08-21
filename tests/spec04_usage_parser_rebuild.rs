@@ -8,9 +8,10 @@ use std::{
 
 use mini_usage::{
     domain::{ScanResult, ScanTrigger},
+    range::ResolvedDay,
     scanner::{CodexMetadata, RequestDisposition, ScanConfig, ScanCoordinator},
     storage::{Ledger, LedgerOptions},
-    usage::USAGE_PARSER_VERSION,
+    usage::{USAGE_PARSER_VERSION, UsageFilter, UsageLedger, analytics::skills_usage_snapshot},
 };
 use rusqlite::{Connection, params};
 use serde_json::{Value, json};
@@ -54,6 +55,48 @@ struct Fixture {
     db: PathBuf,
     main_rollout: PathBuf,
     rollout: PathBuf,
+}
+
+struct SkillFixture {
+    _root: TempRoot,
+    home: PathBuf,
+    db: PathBuf,
+    rollout: PathBuf,
+}
+
+impl SkillFixture {
+    fn new(skill_name: &str) -> Self {
+        let root = TempRoot::new("s07-skills");
+        let home = root.path().join("codex");
+        fs::create_dir_all(home.join("sessions")).expect("create sessions directory");
+        fs::create_dir_all(home.join("archived_sessions"))
+            .expect("create archived sessions directory");
+        let rollout = home.join(format!("sessions/rollout-{ROOT}.jsonl"));
+        fs::write(&rollout, records_to_bytes(&skill_records(skill_name)))
+            .expect("write skill rollout fixture");
+        write_skill_state(&home, &rollout);
+        Self {
+            db: root.path().join("mu.sqlite3"),
+            _root: root,
+            home,
+            rollout,
+        }
+    }
+
+    fn ledger(&self) -> Arc<Ledger> {
+        Arc::new(
+            Ledger::open(LedgerOptions::new(&self.db, &self.home)).expect("open skill fixture"),
+        )
+    }
+
+    fn scanner(&self, ledger: Arc<Ledger>) -> mini_usage::scanner::ScanHandle {
+        ScanCoordinator::start(
+            ScanConfig::new(self.home.clone()),
+            ledger,
+            CodexMetadata::from_home(self.home.clone()),
+        )
+        .expect("start skill scanner")
+    }
 }
 
 impl Fixture {
@@ -137,6 +180,33 @@ fn records() -> Vec<Value> {
             "payload": {"turn_id": CHILD_TURN, "model": "gpt-5.6-sol", "effort": "medium"}
         }),
         token(12, 7, "2026-08-08T01:00:06Z", "B03_POST_CONTEXT"),
+    ]
+}
+
+fn skill_records(skill_name: &str) -> Vec<Value> {
+    vec![
+        json!({
+            "type": "session_meta",
+            "timestamp": "2026-08-08T01:00:00Z",
+            "payload": {"id": ROOT, "cwd": "/work/skill", "agent_role": "main"}
+        }),
+        json!({
+            "type": "turn_context",
+            "timestamp": "2026-08-08T01:00:01Z",
+            "payload": {"turn_id": "s07-skill-turn", "model": "skill-model"}
+        }),
+        token(10, 10, "2026-08-08T01:00:02Z", "S07_SKILL_TOKEN"),
+        json!({
+            "type": "response_item",
+            "timestamp": "2026-08-08T01:00:03Z",
+            "payload": {
+                "type": "function_call",
+                "name": "exec_command",
+                "arguments": json!({
+                    "cmd": format!("cat /tmp/.codex/skills/{skill_name}/SKILL.md")
+                }).to_string()
+            }
+        }),
     ]
 }
 
@@ -248,6 +318,34 @@ fn write_state(home: &Path, main_rollout: &Path, child_rollout: &Path) {
     fs::write(home.join("session_index.jsonl"), index).expect("write session index");
 }
 
+fn write_skill_state(home: &Path, rollout: &Path) {
+    let connection = Connection::open(home.join("state_5.sqlite")).expect("open state fixture");
+    connection
+        .execute_batch(
+            "CREATE TABLE threads (
+                id TEXT NOT NULL, rollout_path TEXT, created_at_ms INTEGER, updated_at_ms INTEGER,
+                archived INTEGER, cwd TEXT, title TEXT, name TEXT, model TEXT, agent_role TEXT
+             );
+             CREATE TABLE thread_spawn_edges (
+                parent_thread_id TEXT NOT NULL, child_thread_id TEXT NOT NULL,
+                status TEXT, observed_at_ms INTEGER
+             );",
+        )
+        .expect("create skill state tables");
+    connection
+        .execute(
+            "INSERT INTO threads(
+                id,rollout_path,created_at_ms,updated_at_ms,archived,cwd,title,name,model,agent_role
+             ) VALUES (?1,?2,1,2,0,'/work/skill','Skill',NULL,'skill-model','main')",
+            params![ROOT, rollout.to_str().expect("skill rollout path")],
+        )
+        .expect("insert skill state thread");
+    let mut index = serde_json::to_vec(&json!({"id": ROOT, "thread_name": format!("name-{ROOT}")}))
+        .expect("serialize skill session index");
+    index.push(b'\n');
+    fs::write(home.join("session_index.jsonl"), index).expect("write skill session index");
+}
+
 fn wait_scan(ledger: &Ledger, wanted: Option<&str>) {
     let deadline = Instant::now() + Duration::from_secs(10);
     loop {
@@ -309,6 +407,89 @@ fn active_events(
         })
         .expect("query active events")
         .map(|row| row.expect("read active event"))
+        .collect()
+}
+
+fn seed_parser9_skill_fixture(fixture: &SkillFixture) -> (Arc<Ledger>, i64, i64) {
+    let ledger = fixture.ledger();
+    let scanner = fixture.scanner(Arc::clone(&ledger));
+    wait_scan(&ledger, None);
+    assert_eq!(
+        ledger
+            .app_state()
+            .expect("read initial skill scan state")
+            .scan
+            .last_finished_scan_result,
+        Some(ScanResult::Completed)
+    );
+    scanner.shutdown().expect("stop initial skill scanner");
+
+    let connection = Connection::open(&fixture.db).expect("open seeded skill database");
+    let (active_epoch, parser_version): (i64, i64) = connection
+        .query_row(
+            "SELECT usage_active_epoch,usage_parser_version FROM app_meta WHERE id=1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("read initial skill epoch");
+    assert!(active_epoch > 0);
+    assert_eq!(parser_version, USAGE_PARSER_VERSION);
+    let source_file_id = source_id(&connection, ROOT);
+    assert_eq!(
+        connection
+            .query_row(
+                "SELECT count(*) FROM skill_usage_events
+                 WHERE ledger_epoch=?1 AND source_file_id=?2",
+                params![active_epoch, source_file_id],
+                |row| row.get::<_, i64>(0),
+            )
+            .expect("count initial skill event"),
+        1
+    );
+
+    // Fixture seed: this is the parser-9 active state that predates the
+    // parser-11 rebuild exercised by the tests below.
+    connection
+        .execute("UPDATE app_meta SET usage_parser_version=9 WHERE id=1", [])
+        .expect("seed parser-9 active metadata");
+    connection
+        .execute(
+            "UPDATE source_checkpoints SET parser_version=9
+             WHERE source_file_id=?1 AND consumer_kind='usage'",
+            [source_file_id],
+        )
+        .expect("seed parser-9 usage checkpoint");
+    connection
+        .execute(
+            "UPDATE usage_source_states SET usage_parser_version=9
+             WHERE ledger_epoch=?1 AND source_file_id=?2",
+            params![active_epoch, source_file_id],
+        )
+        .expect("seed parser-9 usage source state");
+    drop(connection);
+    (ledger, active_epoch, source_file_id)
+}
+
+fn all_time_skill_day() -> ResolvedDay {
+    ResolvedDay {
+        date: "fixture".to_owned(),
+        start_ms: 0,
+        end_ms: i64::MAX,
+    }
+}
+
+fn skill_names_for_epoch(connection: &Connection, epoch: i64, source_file_id: i64) -> Vec<String> {
+    let mut statement = connection
+        .prepare(
+            "SELECT skill_name FROM skill_usage_events
+             WHERE ledger_epoch=?1 AND source_file_id=?2
+             ORDER BY skill_name",
+        )
+        .expect("prepare skill event names");
+    statement
+        .query_map(params![epoch, source_file_id], |row| row.get(0))
+        .expect("query skill event names")
+        .map(|row| row.expect("read skill event name"))
         .collect()
 }
 
@@ -543,4 +724,227 @@ fn t_mu04_b03_parser_v5_shadow_rebuild_repairs_historical_owning_context() {
     );
     drop(connection);
     second_scanner.shutdown().expect("stop rebuild scanner");
+}
+
+#[test]
+fn t_s07_003_rebuild_activation_keeps_parser9_active_until_parser11_completes() {
+    assert_eq!(USAGE_PARSER_VERSION, 11);
+    let fixture = SkillFixture::new("legacy-skill");
+    let (ledger, active_before, source_file_id) = seed_parser9_skill_fixture(&fixture);
+    let usage = UsageLedger::new(&ledger);
+    let build = usage
+        .begin_rebuild(USAGE_PARSER_VERSION, [source_file_id], 10)
+        .expect("begin parser-11 rebuild");
+    assert_eq!(build.active_epoch, active_before);
+    assert_eq!(build.target_parser_version, 11);
+    assert_eq!(build.build_epoch, active_before + 1);
+
+    let connection = Connection::open(&fixture.db).expect("open parser-9 rebuild database");
+    let before: (i64, Option<i64>, i64, Option<i64>) = connection
+        .query_row(
+            "SELECT usage_active_epoch,usage_build_epoch,
+                    usage_parser_version,usage_build_parser_version
+             FROM app_meta WHERE id=1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )
+        .expect("read parser-9 rebuild state");
+    assert_eq!(
+        before,
+        (active_before, Some(build.build_epoch), 9, Some(11))
+    );
+    drop(connection);
+
+    let before_snapshot = skills_usage_snapshot(
+        ledger.as_ref(),
+        &[all_time_skill_day()],
+        &UsageFilter::default(),
+    )
+    .expect("read parser-9 Skills readiness");
+    assert!(!before_snapshot.value.ready);
+    assert_eq!(before_snapshot.value.days[0].total, 0);
+
+    let scanner = fixture.scanner(Arc::clone(&ledger));
+    request_and_wait(&scanner, &ledger);
+    assert_eq!(
+        ledger
+            .app_state()
+            .expect("read parser-11 rebuild state")
+            .scan
+            .last_finished_scan_result,
+        Some(ScanResult::Completed)
+    );
+
+    let connection = Connection::open(&fixture.db).expect("open activated parser-11 database");
+    let after: (i64, Option<i64>, i64, Option<i64>) = connection
+        .query_row(
+            "SELECT usage_active_epoch,usage_build_epoch,
+                    usage_parser_version,usage_build_parser_version
+             FROM app_meta WHERE id=1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )
+        .expect("read activated parser-11 state");
+    assert_eq!(after, (build.build_epoch, None, 11, None));
+    drop(connection);
+
+    let after_snapshot = skills_usage_snapshot(
+        ledger.as_ref(),
+        &[all_time_skill_day()],
+        &UsageFilter::default(),
+    )
+    .expect("read parser-11 Skills aggregate");
+    assert!(after_snapshot.value.ready);
+    assert_eq!(after_snapshot.value.days[0].total, 1);
+    assert_eq!(
+        after_snapshot.value.days[0].skills[0].skill_name,
+        "legacy-skill"
+    );
+    scanner.shutdown().expect("stop parser-11 scanner");
+}
+
+#[test]
+fn t_s07_004_skill_event_source_replace_clears_old_rows_before_activation() {
+    assert_eq!(USAGE_PARSER_VERSION, 11);
+    let fixture = SkillFixture::new("legacy-skill");
+    let (ledger, active_before, source_file_id) = seed_parser9_skill_fixture(&fixture);
+    let replacement_rollout = fixture.rollout.with_extension("replacement.jsonl");
+    fs::write(
+        &replacement_rollout,
+        records_to_bytes(&skill_records("replacement-skill")),
+    )
+    .expect("write parser-11 replacement rollout");
+    fs::rename(&replacement_rollout, &fixture.rollout)
+        .expect("atomically replace parser-11 rollout");
+
+    let usage = UsageLedger::new(&ledger);
+    let build = usage
+        .begin_rebuild(USAGE_PARSER_VERSION, [source_file_id], 10)
+        .expect("begin parser-11 skill replacement");
+    assert_eq!(build.active_epoch, active_before);
+    assert_eq!(build.target_parser_version, 11);
+
+    let connection = Connection::open(&fixture.db).expect("open skill replacement database");
+    let old_row: (
+        i64,
+        i64,
+        i64,
+        i64,
+        String,
+        String,
+        Option<String>,
+        String,
+        i64,
+    ) = connection
+        .query_row(
+            "SELECT file_generation,source_start_offset,source_end_offset,occurred_at_ms,
+                    thread_id,root_session_id,model,skill_name,created_at_ms
+             FROM skill_usage_events
+             WHERE ledger_epoch=?1 AND source_file_id=?2",
+            params![active_before, source_file_id],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                    row.get(6)?,
+                    row.get(7)?,
+                    row.get(8)?,
+                ))
+            },
+        )
+        .expect("read parser-9 skill row");
+    assert_eq!(old_row.7, "legacy-skill");
+    connection
+        .execute(
+            "INSERT INTO skill_usage_events(
+                ledger_epoch,source_file_id,file_generation,source_start_offset,source_end_offset,
+                occurred_at_ms,thread_id,root_session_id,model,skill_name,created_at_ms)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
+            params![
+                build.build_epoch,
+                source_file_id,
+                old_row.0,
+                old_row.1,
+                old_row.2,
+                old_row.3,
+                old_row.4,
+                old_row.5,
+                old_row.6,
+                old_row.7,
+                old_row.8,
+            ],
+        )
+        .expect("seed stale build skill row");
+    assert_eq!(
+        skill_names_for_epoch(&connection, build.build_epoch, source_file_id),
+        vec!["legacy-skill"]
+    );
+    drop(connection);
+
+    usage
+        .replace_build_sources(USAGE_PARSER_VERSION, [source_file_id], [source_file_id], 11)
+        .expect("replace parser-11 source build");
+    let connection = Connection::open(&fixture.db).expect("reopen replaced skill database");
+    assert!(skill_names_for_epoch(&connection, build.build_epoch, source_file_id).is_empty());
+    assert_eq!(
+        skill_names_for_epoch(&connection, active_before, source_file_id),
+        vec!["legacy-skill"]
+    );
+    drop(connection);
+
+    let before_snapshot = skills_usage_snapshot(
+        ledger.as_ref(),
+        &[all_time_skill_day()],
+        &UsageFilter::default(),
+    )
+    .expect("read pre-activation Skills readiness");
+    assert!(!before_snapshot.value.ready);
+    assert_eq!(before_snapshot.value.days[0].total, 0);
+
+    let scanner = fixture.scanner(Arc::clone(&ledger));
+    request_and_wait(&scanner, &ledger);
+    assert_eq!(
+        ledger
+            .app_state()
+            .expect("read replacement scan state")
+            .scan
+            .last_finished_scan_result,
+        Some(ScanResult::Completed)
+    );
+
+    let connection = Connection::open(&fixture.db).expect("open activated replacement database");
+    let (active_epoch, build_epoch, parser_version): (i64, Option<i64>, i64) = connection
+        .query_row(
+            "SELECT usage_active_epoch,usage_build_epoch,usage_parser_version
+             FROM app_meta WHERE id=1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .expect("read activated replacement state");
+    assert_eq!(active_epoch, build.build_epoch);
+    assert_eq!(build_epoch, None);
+    assert_eq!(parser_version, 11);
+    assert_eq!(
+        skill_names_for_epoch(&connection, active_epoch, source_file_id),
+        vec!["replacement-skill"]
+    );
+    drop(connection);
+
+    let after_snapshot = skills_usage_snapshot(
+        ledger.as_ref(),
+        &[all_time_skill_day()],
+        &UsageFilter::default(),
+    )
+    .expect("read activated replacement Skills aggregate");
+    assert!(after_snapshot.value.ready);
+    assert_eq!(after_snapshot.value.days[0].total, 1);
+    assert_eq!(
+        after_snapshot.value.days[0].skills[0].skill_name,
+        "replacement-skill"
+    );
+    scanner.shutdown().expect("stop replacement scanner");
 }
