@@ -39,7 +39,7 @@ const detail: SessionDetailResponse = {
   },
   subagents: [
     {
-      thread_id: "subagent-recent-full-id",
+      thread_id: "123e4567-e89b-12d3-a456-426614174000",
       parent_thread_id: "root-session-full-id",
       root_session_id: "root-session-full-id",
       title: "Recent subagent",
@@ -91,7 +91,6 @@ function view(overrides: Partial<SessionDetailControllerViewModel> = {}): Sessio
     open_detail: vi.fn(),
     select_session: vi.fn(),
     close_detail: vi.fn(),
-    refresh_detail: vi.fn(),
     retry_detail: vi.fn(),
     ...overrides,
   };
@@ -104,7 +103,11 @@ describe("SessionDetailDrawer v0.2.0", () => {
     const dialog = screen.getByRole("dialog", { name: "Session 详情" });
     expect(dialog).toHaveClass("w-[480px]", "max-[480px]:w-screen");
     expect(screen.getByRole("heading", { name: "A long Session title" })).toBeInTheDocument();
-    expect(screen.getByText("root-session-full-id")).toBeInTheDocument();
+    const rootSessionId = screen.getByText("root-session-full-id");
+    expect(rootSessionId).toBeInTheDocument();
+    expect(rootSessionId).not.toHaveAttribute("aria-describedby");
+    expect(rootSessionId).not.toHaveAttribute("title");
+    expect(screen.queryByRole("button", { name: /刷新当前详情/ })).not.toBeInTheDocument();
 
     const summary = screen.getByRole("region", { name: "Session 合计" });
     const rows = summary.querySelectorAll("dl > div");
@@ -142,9 +145,84 @@ describe("SessionDetailDrawer v0.2.0", () => {
     fireEvent.click(subFirst);
     expect(subFirst).toHaveAttribute("aria-expanded", "true");
     expect(subSecond).toHaveAttribute("aria-expanded", "false");
+    expect(mainSecond).toHaveAttribute("aria-expanded", "true");
     fireEvent.click(subSecond);
     expect(subFirst).toHaveAttribute("aria-expanded", "false");
     expect(subSecond).toHaveAttribute("aria-expanded", "true");
+    expect(mainSecond).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("resets both accordion groups when the selected root Session changes", () => {
+    const rendered = render(<SessionDetailDrawer view={view()} timezone="Asia/Shanghai" />);
+    fireEvent.click(screen.getByRole("button", { name: "gpt-5 (high)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Recent subagent" }));
+    expect(screen.getByRole("button", { name: "gpt-5 (high)" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: "Recent subagent" })).toHaveAttribute("aria-expanded", "true");
+
+    const nextRootSessionId = "next-root-session-id";
+    const nextDetail: SessionDetailResponse = {
+      ...detail,
+      root_session_id: nextRootSessionId,
+      main: {
+        ...detail.main,
+        title: "Next Session title",
+        thread_id: nextRootSessionId,
+        root_session_id: nextRootSessionId,
+      },
+      subagents: detail.subagents.map((item) => ({
+        ...item,
+        parent_thread_id: nextRootSessionId,
+        root_session_id: nextRootSessionId,
+      })),
+    };
+    const nextRow: SessionItemDto = {
+      ...row,
+      root_session_id: nextRootSessionId,
+      title: "Next Session title",
+    };
+
+    rendered.rerender(
+      <SessionDetailDrawer
+        view={view({
+          selected_root_session_id: nextRootSessionId,
+          selected_row: nextRow,
+          detail: nextDetail,
+        })}
+        timezone="Asia/Shanghai"
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: "Next Session title" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "gpt-5 (high)" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("button", { name: "Recent subagent" })).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("renders Main model detail through the shared ordered usage receipt", () => {
+    render(<SessionDetailDrawer view={view()} timezone="Asia/Shanghai" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "gpt-5 (high)" }));
+    const region = screen.getByRole("region", { name: "gpt-5 (high)" });
+    const usageReceipt = region.querySelector("dl") as HTMLElement;
+    const labels = Array.from(usageReceipt.querySelectorAll("dt"), (node) => node.textContent);
+    expect(labels).toEqual([
+      "Total Tokens",
+      "Input",
+      "Output",
+      "Reasoning",
+      "Cache Read",
+      "Cache Write",
+      "Cache Hit Rate",
+      "Estimated Cost",
+    ]);
+    expect(usageReceipt).toHaveTextContent("1,801");
+    expect(usageReceipt).toHaveTextContent("1,234");
+    expect(usageReceipt).toHaveTextContent("567");
+    expect(usageReceipt).toHaveTextContent("8");
+    expect(usageReceipt).toHaveTextContent("12");
+    expect(usageReceipt).toHaveTextContent("—");
+    expect(usageReceipt).toHaveTextContent("1.0%");
+    expect(usageReceipt).toHaveTextContent("$0.50");
+    expect(usageReceipt).not.toHaveTextContent("1234");
   });
 
   it("keeps Subagent trigger title-only and exposes identity metadata plus fixed receipt order after expansion", () => {
@@ -157,12 +235,24 @@ describe("SessionDetailDrawer v0.2.0", () => {
     fireEvent.click(trigger);
     const region = screen.getByRole("region", { name: "Recent subagent" });
     expect(region).toHaveTextContent("Thread ID");
-    expect(region).toHaveTextContent("subagent-recent-full-id");
+    const metadata = region.querySelector("dl") as HTMLElement;
+    const threadId = metadata.querySelector("dt")?.nextElementSibling as HTMLElement;
+    expect(threadId.textContent).toBe("123e4567-e89b-12d3-a456-426614174000");
+    expect(threadId).toHaveClass("whitespace-nowrap");
+    expect(threadId).not.toHaveClass("truncate");
+    expect(threadId).not.toHaveAttribute("aria-describedby");
+    expect(threadId).not.toHaveAttribute("title");
     expect(region).toHaveTextContent("Model");
     expect(region).toHaveTextContent("gpt-5 (high)");
     expect(region).toHaveTextContent("Last Active");
 
-    const labels = Array.from(region.querySelectorAll("dl:last-child dt"), (node) => node.textContent);
+    const lastActive = Array.from(metadata.querySelectorAll("dt"))
+      .find((node) => node.textContent === "Last Active")?.nextElementSibling as HTMLElement;
+    expect(lastActive).toHaveTextContent(/\d{2}:\d{2}:\d{2}/);
+    expect(lastActive).toHaveAttribute("title", expect.stringMatching(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/));
+
+    const usageReceipt = region.querySelector("dl:last-child") as HTMLElement;
+    const labels = Array.from(usageReceipt.querySelectorAll("dt"), (node) => node.textContent);
     expect(labels).toEqual([
       "Total Tokens",
       "Input",
@@ -173,29 +263,51 @@ describe("SessionDetailDrawer v0.2.0", () => {
       "Cache Hit Rate",
       "Estimated Cost",
     ]);
+    expect(usageReceipt).toHaveTextContent("1,801");
+    expect(usageReceipt).toHaveTextContent("1,234");
+    expect(usageReceipt).toHaveTextContent("$0.50");
   });
 
   it("preserves rendered detail during refresh and reports refresh failure through toast", async () => {
-    const refreshDetail = vi.fn();
     const rendered = render(
       <SessionDetailDrawer
-        view={view({ load_state: "refreshing", refresh_detail: refreshDetail })}
+        view={view({ load_state: "refreshing" })}
         timezone="Asia/Shanghai"
       />,
     );
 
     expect(screen.getByRole("heading", { name: "A long Session title" })).toBeInTheDocument();
     expect(screen.queryByText("Session 详情加载失败")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "刷新当前详情" })).toBeDisabled();
+    expect(screen.getByText("3,601")).toBeInTheDocument();
+    expect(document.querySelector('[aria-busy="true"]')).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /刷新当前详情/ })).not.toBeInTheDocument();
 
     rendered.rerender(
       <SessionDetailDrawer
-        view={view({ refresh_error_code: "HTTP_ERROR", refresh_detail: refreshDetail })}
+        view={view({ refresh_error_code: "HTTP_ERROR" })}
         timezone="Asia/Shanghai"
       />,
     );
     expect(screen.getByRole("heading", { name: "A long Session title" })).toBeInTheDocument();
+    expect(screen.getByText("3,601")).toBeInTheDocument();
     expect(await screen.findByText("详情更新失败")).toBeInTheDocument();
+  });
+
+  it("renders the first-load skeleton with Summary, Main, and Subagent sections", () => {
+    render(
+      <SessionDetailDrawer
+        view={view({ detail: null, load_state: "loading" })}
+        timezone="Asia/Shanghai"
+      />,
+    );
+
+    const status = screen.getByRole("status", { name: "Session 详情加载中" });
+    const summary = within(status).getByRole("region", { name: "Session 合计加载中" });
+    const main = within(status).getByRole("region", { name: "Main 加载中" });
+    const subagent = within(status).getByRole("region", { name: "Subagent 加载中" });
+    expect(summary.querySelectorAll(".animate-pulse")).toHaveLength(8);
+    expect(Array.from(main.querySelectorAll("div.animate-pulse")).filter((node) => node.className.includes("h-[54px]")).length).toBe(2);
+    expect(Array.from(subagent.querySelectorAll("div.animate-pulse")).filter((node) => node.className.includes("h-[54px]")).length).toBe(2);
   });
 
   it("keeps loading/error fallbacks inside the open Drawer and wires retry/close", () => {

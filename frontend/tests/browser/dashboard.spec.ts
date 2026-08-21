@@ -316,6 +316,47 @@ test("C1 desktop 1512px matches the approved v0.2.0 dashboard geometry", async (
   await page.goto("/");
   await waitForDashboard(page);
 
+  const themeTokens = await page.evaluate(() => {
+    const styles = getComputedStyle(document.documentElement);
+    return ["--color-primary", "--color-card", "--color-border"].map((token) => styles.getPropertyValue(token).trim());
+  });
+  for (const token of themeTokens) expect(token).not.toBe("");
+
+  const rangeTabList = page.locator('[role="tablist"]').first();
+  const selectedRangeTab = rangeTabList.locator('[role="tab"][aria-selected="true"]');
+  await expect(selectedRangeTab).toHaveCount(1);
+  const rangeIndicator = selectedRangeTab.locator("xpath=..").locator(":scope > span").first();
+  await expect(rangeIndicator).toHaveCount(1);
+  const indicatorStyle = await rangeIndicator.evaluate((node) => {
+    const style = getComputedStyle(node);
+    const rect = node.getBoundingClientRect();
+    return { backgroundColor: style.backgroundColor, width: rect.width, height: rect.height };
+  });
+  expect(indicatorStyle.backgroundColor).not.toBe("transparent");
+  expect(indicatorStyle.backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
+  expect(indicatorStyle.width).toBeGreaterThan(0);
+  expect(indicatorStyle.height).toBeGreaterThan(0);
+  expect(await selectedRangeTab.evaluate((node) => getComputedStyle(node).fontSize)).toBe("14px");
+
+  const syncButton = page.getByRole("button", { name: "同步数据", exact: true });
+  expect(await syncButton.evaluate((node) => getComputedStyle(node).fontSize)).toBe("12px");
+
+  const filterTrigger = page.getByRole("button", { name: "模型筛选，全部", exact: true });
+  const filterStyle = await filterTrigger.evaluate((node) => {
+    const style = getComputedStyle(node);
+    return {
+      backgroundColor: style.backgroundColor,
+      borderColor: style.borderTopColor,
+      borderStyle: style.borderTopStyle,
+      borderWidth: style.borderTopWidth,
+    };
+  });
+  expect(filterStyle.backgroundColor).not.toBe("transparent");
+  expect(filterStyle.backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
+  expect(filterStyle.borderStyle).not.toBe("none");
+  expect(filterStyle.borderWidth).not.toBe("0px");
+  expect(filterStyle.borderColor).not.toBe("rgba(0, 0, 0, 0)");
+
   const shell = page.locator(".dashboard-shell");
   const content = page.locator(".dashboard-content");
   const topLevelStack = content.locator(":scope > div.flex.flex-col.gap-8").first();
@@ -354,7 +395,7 @@ test("C1 desktop 1512px matches the approved v0.2.0 dashboard geometry", async (
   const chartSection = page.getByLabel("使用分布图表");
   const modelCard = chartSection.locator("article").filter({ has: page.getByRole("heading", { name: "模型分布" }) });
   const projectCard = chartSection.locator("article").filter({ has: page.getByRole("heading", { name: "项目分布" }) });
-  const skillsCard = chartSection.locator("article").filter({ has: page.getByRole("heading", { name: "Skills used" }) });
+  const skillsCard = chartSection.locator("article").filter({ has: page.getByRole("heading", { name: "Skills Used" }) });
   const modelBox = await modelCard.boundingBox();
   const projectBox = await projectCard.boundingBox();
   const skillsBox = await skillsCard.boundingBox();
@@ -424,10 +465,11 @@ test("C2 covers the approved v0.2.0 core interaction flow", async ({ page }) => 
   await legendButtons.nth(0).focus();
   await expect.poll(async () => Number(await legendButtons.nth(1).evaluate((node) => getComputedStyle(node).opacity))).toBeLessThan(1);
 
-  const skillsCard = chartSection.locator("article").filter({ has: page.getByRole("heading", { name: "Skills used" }) });
-  const skillsSvg = skillsCard.getByRole("img", { name: "最近 7 个自然日 Skills 使用次数" });
-  await skillsSvg.locator("rect").nth(3).hover();
-  await expect(skillsCard.getByText("2026-08-16", { exact: true })).toBeVisible();
+  const skillsCard = chartSection.locator("article").filter({ has: page.getByRole("heading", { name: "Skills Used" }) });
+  const dateTriggers = skillsCard.getByRole("button", { name: /^2026-08-\d{2}$/ });
+  await expect(dateTriggers).toHaveCount(7);
+  await dateTriggers.nth(3).hover();
+  await expect(page.getByRole("dialog").getByText("2026-08-16", { exact: true })).toBeVisible();
 
   const sessionRows = page.locator('tr[data-session-root-id]');
   await expect(sessionRows.first()).toHaveAttribute("data-session-root-id", "session-1");

@@ -135,7 +135,7 @@ fn extract_quoted_values<'a>(document: &'a str, marker: &str) -> Vec<&'a str> {
         .collect()
 }
 
-fn extract_css_urls<'a>(document: &'a str) -> Vec<&'a str> {
+fn extract_css_urls(document: &str) -> Vec<&str> {
     document
         .split("url(")
         .skip(1)
@@ -152,15 +152,14 @@ async fn wait_for_health(client: &Client, child: &mut ChildGuard) {
         if let Some(status) = child.child_mut().try_wait().expect("poll release child") {
             panic!("embedded release binary exited before health check: {status}");
         }
-        if let Ok(response) = client.get("http://127.0.0.1:3210/api/health").send().await {
-            if response.status() == StatusCode::NO_CONTENT
-                && response.headers().get("x-miniusage-app")
-                    == Some(&header::HeaderValue::from_static("MiniUsage"))
-                && response.headers().get("x-miniusage-version")
-                    == Some(&header::HeaderValue::from_static(env!("CARGO_PKG_VERSION")))
-            {
-                return;
-            }
+        if let Ok(response) = client.get("http://127.0.0.1:3210/api/health").send().await
+            && response.status() == StatusCode::NO_CONTENT
+            && response.headers().get("x-miniusage-app")
+                == Some(&header::HeaderValue::from_static("MiniUsage"))
+            && response.headers().get("x-miniusage-version")
+                == Some(&header::HeaderValue::from_static(env!("CARGO_PKG_VERSION")))
+        {
+            return;
         }
         assert!(
             tokio::time::Instant::now() < deadline,

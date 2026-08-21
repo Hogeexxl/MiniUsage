@@ -1,7 +1,9 @@
 import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const html = readFileSync(new URL("../../index.html", import.meta.url), "utf8");
+const html = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "../../index.html"), "utf8");
 const inlineScript = html.match(/<script>\s*([\s\S]*?)\s*<\/script>/)?.[1];
 const bootstrapCases: Array<[string | null, boolean]> = [
   [null, true],
@@ -10,13 +12,70 @@ const bootstrapCases: Array<[string | null, boolean]> = [
   ["system", true],
 ];
 
+class MemoryStorage implements Storage {
+  private readonly values = new Map<string, string>();
+
+  get length() {
+    return this.values.size;
+  }
+
+  clear() {
+    this.values.clear();
+  }
+
+  getItem(key: string) {
+    return this.values.get(key) ?? null;
+  }
+
+  key(index: number) {
+    return [...this.values.keys()][index] ?? null;
+  }
+
+  removeItem(key: string) {
+    this.values.delete(key);
+  }
+
+  setItem(key: string, value: string) {
+    this.values.set(key, value);
+  }
+}
+
+let fallbackStorage: Storage | undefined;
+
+function testStorage(): Storage {
+  try {
+    const storage = window.localStorage;
+    if (
+      storage &&
+      typeof storage.clear === "function" &&
+      typeof storage.getItem === "function" &&
+      typeof storage.key === "function" &&
+      typeof storage.removeItem === "function" &&
+      typeof storage.setItem === "function"
+    ) {
+      return storage;
+    }
+  } catch {
+    // jsdom's default opaque origin has no localStorage implementation.
+  }
+
+  if (!fallbackStorage) {
+    fallbackStorage = new MemoryStorage();
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      value: fallbackStorage,
+    });
+  }
+  return fallbackStorage;
+}
+
 function runBootstrap(stored: string | null, storageReadable = true) {
-  window.localStorage.clear();
+  testStorage().clear();
   document.documentElement.classList.remove("dark");
-  if (stored !== null) window.localStorage.setItem("miniusage.theme", stored);
+  if (stored !== null) testStorage().setItem("miniusage.theme", stored);
   const getItem = storageReadable
     ? null
-    : vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+    : vi.spyOn(testStorage(), "getItem").mockImplementation(() => {
         throw new DOMException("blocked", "SecurityError");
       });
 
@@ -28,7 +87,7 @@ function runBootstrap(stored: string | null, storageReadable = true) {
 
 afterEach(() => {
   vi.restoreAllMocks();
-  window.localStorage.clear();
+  testStorage().clear();
   document.documentElement.classList.remove("dark");
 });
 

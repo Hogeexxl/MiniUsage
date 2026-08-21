@@ -16,7 +16,10 @@ export function useRowSelection<T>({
     () => new Set(defaultSelectedRowIds),
   );
   const selected = useMemo(
-    () => (selectedRowIds !== undefined ? new Set(selectedRowIds) : internalSelected),
+    () =>
+      selectedRowIds !== undefined
+        ? new Set(selectedRowIds)
+        : internalSelected,
     [selectedRowIds, internalSelected],
   );
 
@@ -28,15 +31,16 @@ export function useRowSelection<T>({
     [selectedRowIds, onSelectionChange],
   );
 
-  const allSelected = sortedRows.length > 0 && sortedRows.every((row) => selected.has(row.id));
-  const someSelected = sortedRows.some((row) => selected.has(row.id));
+  const allSelected =
+    sortedRows.length > 0 && sortedRows.every((r) => selected.has(r.id));
+  const someSelected = sortedRows.some((r) => selected.has(r.id));
 
   const toggleAll = useCallback(() => {
     const next = new Set(selected);
     if (allSelected) {
-      for (const row of sortedRows) next.delete(row.id);
+      for (const r of sortedRows) next.delete(r.id);
     } else {
-      for (const row of sortedRows) next.add(row.id);
+      for (const r of sortedRows) next.add(r.id);
     }
     commit(next);
   }, [allSelected, sortedRows, selected, commit]);
@@ -53,3 +57,4 @@ export function useRowSelection<T>({
 
   return { selected, allSelected, someSelected, toggleAll, toggleRow };
 }
+

@@ -47,6 +47,7 @@ export function ServiceButton({ client = serviceClient }: { client?: ServiceClie
         toast.updateToast(toastId, {
           status: "success",
           title: "服务已停止",
+          duration: undefined,
           dismissible: true,
         });
       },
@@ -56,6 +57,7 @@ export function ServiceButton({ client = serviceClient }: { client?: ServiceClie
         toast.updateToast(toastId, {
           status: "error",
           title: "停止服务失败",
+          duration: undefined,
           dismissible: true,
         });
       },

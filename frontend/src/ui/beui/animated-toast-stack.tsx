@@ -496,6 +496,7 @@ const ToastItem = memo(function ToastItem({
             ) : null}
           </div>
         )}
+
       </div>
     </motion.li>
   );

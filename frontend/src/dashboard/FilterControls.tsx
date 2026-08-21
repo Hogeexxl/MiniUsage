@@ -6,6 +6,7 @@ import type { DashboardFilters, FilterOptionsResponse, ProjectFilterOption, Proj
 import { Button, type ButtonProps } from "../ui/beui/button";
 import { Checkbox } from "../ui/beui/checkbox";
 import { MorphPopover, MorphPopoverContent, MorphPopoverTrigger } from "../ui/beui/morph-popover";
+import { SPRING_LAYOUT } from "../ui/lib/ease";
 import { projectDisplay, projectKey, projectTitle, type ProjectLike } from "./shared/projectDisplay";
 
 type FilterControlsProps = {
@@ -70,7 +71,7 @@ export function FilterControls({ filters, options, optionsLoading, optionsStale,
     onChange({ ...filters, projects: selectedProjects.has(key) ? filters.projects.filter((selection) => projectKey(selection) !== key) : [...filters.projects, addition] });
   };
 
-  const rowClass = "flex min-h-9 w-full items-center gap-2 rounded-xl px-2 py-1.5 text-left text-sm text-foreground hover:bg-primary/5";
+  const rowClass = "flex min-h-9 w-full min-w-0 items-center gap-2 px-2 py-1.5";
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -82,11 +83,11 @@ export function FilterControls({ filters, options, optionsLoading, optionsStale,
           {gptModels.length > 0 ? <div>
             <div className={rowClass}>
               <Checkbox checked={allGptSelected} indeterminate={someGptSelected && !allGptSelected} aria-label="GPT" onCheckedChange={toggleGpt} />
-              <button type="button" className="flex min-w-0 flex-1 items-center gap-1.5 text-left" aria-expanded={gptExpanded} onClick={() => setGptExpanded((value) => !value)}><span className="flex-1">GPT</span><motion.span animate={{ rotate: gptExpanded ? 90 : 0 }} transition={reduce ? { duration: 0 } : { duration: 0.18 }}><ChevronRight className="h-4 w-4 text-muted-foreground" /></motion.span></button>
+              <button type="button" className="flex min-w-0 flex-1 items-center gap-1.5 text-left" aria-expanded={gptExpanded} onClick={() => setGptExpanded((value) => !value)}><span className="flex-1">GPT</span><motion.span animate={{ rotate: gptExpanded ? 90 : 0 }} transition={reduce ? { duration: 0 } : SPRING_LAYOUT}><ChevronRight className="h-4 w-4 text-muted-foreground" /></motion.span></button>
             </div>
-            {gptExpanded ? <div className="pl-5">{gptModels.map((model) => <div key={model} className={rowClass}><Checkbox checked={selectedModels.has(model)} aria-label={model} onCheckedChange={() => toggleModel(model)} /><span className="min-w-0 truncate" title={model}>{model}</span></div>)}</div> : null}
+            {gptExpanded ? <div className="pl-5">{gptModels.map((model) => <div key={model} className={rowClass}><Checkbox checked={selectedModels.has(model)} onCheckedChange={() => toggleModel(model)} label={model} /></div>)}</div> : null}
           </div> : null}
-          {otherModels.map((model) => <div key={model} className={rowClass}><Checkbox checked={selectedModels.has(model)} aria-label={model} onCheckedChange={() => toggleModel(model)} /><span className="min-w-0 truncate" title={model}>{model}</span></div>)}
+          {otherModels.map((model) => <div key={model} className={rowClass}><Checkbox checked={selectedModels.has(model)} onCheckedChange={() => toggleModel(model)} label={model} /></div>)}
         </MorphPopoverContent>
       </MorphPopover>
 
@@ -95,7 +96,7 @@ export function FilterControls({ filters, options, optionsLoading, optionsStale,
         <MorphPopoverContent side="bottom" align="start" className="w-80 p-2">
           <OptionStatus loading={optionsLoading} stale={optionsStale} error={optionsErrorCode} hasOptions={projects.length > 0} onRetry={onRetryOptions} />
           {!optionsLoading && projects.length === 0 ? <div className="px-2 py-3 text-xs text-muted-foreground">暂无项目</div> : null}
-          {projects.map((project) => <div key={projectKey(project)} className={rowClass}><Checkbox checked={selectedProjects.has(projectKey(project))} aria-label={projectDisplay(project)} onCheckedChange={() => toggleProject(project)} /><span className="min-w-0 truncate" title={projectTitle(project)}>{projectDisplay(project)}</span></div>)}
+          {projects.map((project) => <div key={projectKey(project)} className={rowClass} title={projectTitle(project)}><Checkbox checked={selectedProjects.has(projectKey(project))} onCheckedChange={() => toggleProject(project)} label={projectDisplay(project)} /></div>)}
         </MorphPopoverContent>
       </MorphPopover>
 

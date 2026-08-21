@@ -1,8 +1,9 @@
 "use client";
 
 import { AnimatePresence, motion, useReducedMotion, type HTMLMotionProps, type Variants } from "motion/react";
-import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { EASE_OUT, EASE_OUT_CSS, SPRING_PRESS, SPRING_SWAP } from "../lib/ease";
+import { useState } from "react";
+import type { ReactNode } from "react";
+import { EASE_OUT, SPRING_PRESS, SPRING_SWAP } from "../lib/ease";
 import { cn } from "../lib/cn";
 
 export type ActionSwapItem = {
@@ -16,6 +17,7 @@ export type ActionSwapButtonVariant = "primary" | "secondary" | "outline" | "gho
 export type ActionSwapButtonSize = "sm" | "md" | "lg" | "icon";
 export type ActionSwapAnimation = "blur" | "roll" | "cascade";
 
+/** Animations with a single-element variant set (cascade animates per letter). */
 type CoreAnimation = "blur" | "roll";
 
 export interface ActionSwapButtonProps extends Omit<
@@ -52,6 +54,11 @@ const ROLL_TRANSITION = SPRING_SWAP;
 const ROLL_EXIT_TRANSITION = { duration: 0.14, ease: EASE_OUT } as const;
 const SWAP_BLUR = "blur(8px)";
 const ROLL_BLUR = "blur(3px)";
+
+// Cascade rolls the label one letter at a time, left to right. The leaving
+// and landing strings overlap as independent layers (no shared cells), so
+// proportional glyph widths never jitter. Exits cascade at half the enter
+// stagger so the tail of the old label lingers briefly.
 const CASCADE_STAGGER = 0.025;
 
 const CASCADE_LETTER_VARIANTS: Variants = {
@@ -157,15 +164,9 @@ export function ActionSwapText({
   className,
 }: ActionSwapTextProps) {
   const reduce = useReducedMotion();
-  const measureRef = useRef<HTMLSpanElement>(null);
-  const [width, setWidth] = useState<number>();
 
-  useLayoutEffect(() => {
-    const nextWidth = measureRef.current?.offsetWidth;
-    if (!nextWidth) return;
-    setWidth((currentWidth) => (currentWidth === nextWidth ? currentWidth : nextWidth));
-  });
-
+  // Cascade needs a plain string to split into letters; non-string content
+  // and reduced motion fall back to the closest single-element animation.
   const label = typeof children === "string" ? children : null;
   const cascade = animation === "cascade" && label !== null && !reduce;
   const coreAnimation: CoreAnimation =
@@ -173,21 +174,34 @@ export function ActionSwapText({
 
   return (
     <span
-      className={cn("relative inline-block overflow-hidden whitespace-nowrap align-bottom", className)}
+      className={cn(
+        "relative -my-[0.08em] inline-block max-w-full whitespace-nowrap py-[0.08em] align-bottom",
+        className,
+      )}
       style={{
-        width,
-        transition: reduce ? undefined : `width 220ms ${EASE_OUT_CSS}`,
+        clipPath: "inset(0 -999px)",
+        WebkitClipPath: "inset(0 -999px)",
       }}
     >
       <span
-        ref={measureRef}
         aria-hidden
         className="invisible inline-block whitespace-nowrap"
       >
-        {children}
+        {cascade
+          ? label.split("").map((char, index) => (
+              <span
+                // biome-ignore lint/suspicious/noArrayIndexKey: position is the slot identity.
+                key={index}
+                className="inline-block whitespace-pre"
+              >
+                {char}
+              </span>
+            ))
+          : children}
       </span>
       {cascade ? (
         <>
+          {/* Letters are decorative fragments; readers get the whole label. */}
           <span className="sr-only">{label}</span>
           <AnimatePresence initial={false}>
             <motion.span
@@ -196,10 +210,11 @@ export function ActionSwapText({
               initial="initial"
               animate="animate"
               exit="exit"
-              className="absolute left-0 top-0 inline-block whitespace-pre"
+              className="absolute left-0 top-[0.08em] inline-block whitespace-pre"
             >
               {label.split("").map((char, i) => (
                 <motion.span
+                  // biome-ignore lint/suspicious/noArrayIndexKey: position is the slot identity — the letter at a position is exactly what rolls.
                   key={i}
                   custom={i * CASCADE_STAGGER}
                   variants={CASCADE_LETTER_VARIANTS}
@@ -219,7 +234,9 @@ export function ActionSwapText({
             initial={reduce ? false : "initial"}
             animate={reduce ? { opacity: 1, filter: "blur(0px)", scale: 1, y: 0 } : "animate"}
             exit={reduce ? undefined : "exit"}
-            className="absolute left-0 top-0 inline-block will-change-[opacity,filter,transform]"
+            // Truncation lives on the layer that holds the text — the layer
+            // moves as a whole, so clipping it never eats the roll.
+            className="absolute left-0 top-[0.08em] inline-block max-w-full truncate will-change-[opacity,filter,transform]"
           >
             {children}
           </motion.span>
@@ -236,6 +253,7 @@ export function ActionSwapIcon({
   className,
 }: ActionSwapIconProps) {
   const reduce = useReducedMotion();
+  // Icons are single elements — cascade maps to its closest motion, roll.
   const coreAnimation: CoreAnimation =
     animation === "cascade" ? "roll" : animation;
 
@@ -282,6 +300,7 @@ export function ActionSwapButton({
   const nextItem = cycle && items.length > 0 ? items[(activeIndex + 1) % items.length] : undefined;
 
   if (!activeItem) return null;
+
   const accessibleLabel = activeItem.ariaLabel ?? (iconOnly && typeof activeItem.label === "string" ? activeItem.label : undefined);
 
   return (

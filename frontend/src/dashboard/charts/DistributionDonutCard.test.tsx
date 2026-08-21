@@ -1,0 +1,204 @@
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
+
+import type { DistributionItem } from "./distribution";
+import { DistributionDonutCard } from "./DistributionDonutCard";
+
+function item(id: string, totalTokens: number, estimatedCost = totalTokens / 100): DistributionItem {
+  return {
+    id,
+    label: id,
+    totalTokens,
+    estimatedCost,
+    estimatedCostStatus: "complete",
+  };
+}
+
+const twoItems = [item("Alpha", 900, 9), item("Beta", 100, 1)];
+const sixItems = [
+  item("Alpha", 600, 6),
+  item("Beta", 500, 5),
+  item("Gamma", 400, 4),
+  item("Delta", 300, 3),
+  item("Epsilon", 200, 2),
+  item("Zeta", 100, 1),
+];
+
+function cardFrom(container: HTMLElement): HTMLElement {
+  const card = container.querySelector("article");
+  if (!card) throw new Error("Distribution surface not found");
+  return card as HTMLElement;
+}
+
+function donutFrom(card: HTMLElement): SVGSVGElement {
+  const svg = card.querySelector("svg");
+  if (!svg) throw new Error("Donut SVG not found");
+  return svg as SVGSVGElement;
+}
+
+function centerFrom(card: HTMLElement): HTMLElement {
+  const center = card.querySelector<HTMLElement>(".pointer-events-none.absolute.inset-0");
+  if (!center) throw new Error("Donut center not found");
+  return center;
+}
+
+function legendButtons(card: HTMLElement): HTMLButtonElement[] {
+  return Array.from(card.querySelectorAll<HTMLButtonElement>("button")).filter(
+    (button) => button.closest('[role="tablist"]') === null,
+  );
+}
+
+function motionOpacity(element: HTMLElement | SVGElement): string {
+  return element.style.opacity || element.getAttribute("opacity") || "";
+}
+
+function segmentGeometry(svg: SVGSVGElement) {
+  return Array.from(svg.querySelectorAll("circle")).slice(1).map((circle) => ({
+    cx: circle.getAttribute("cx"),
+    cy: circle.getAttribute("cy"),
+    r: circle.getAttribute("r"),
+    strokeDasharray: circle.getAttribute("stroke-dasharray"),
+    strokeDashoffset: circle.getAttribute("stroke-dashoffset"),
+  }));
+}
+
+describe("DistributionDonutCard", () => {
+  it("[T-S06-002] keeps a 140px Donut geometry and top anchor with one or six segments", () => {
+    const { container, rerender } = render(<DistributionDonutCard title="模型分布" items={[item("Only", 100)]} />);
+    const oneCard = cardFrom(container);
+    const oneSvg = donutFrom(oneCard);
+    const oneWrapper = oneSvg.parentElement as HTMLElement;
+
+    expect(oneCard).toHaveClass("h-[264px]");
+    expect(oneWrapper).toHaveClass("relative", "h-[140px]", "w-[140px]");
+    expect(oneSvg).toHaveAttribute("width", "140");
+    expect(oneSvg).toHaveAttribute("height", "140");
+    expect(oneSvg).toHaveAttribute("viewBox", "0 0 140 140");
+    expect(oneSvg).toHaveClass("h-[140px]", "w-[140px]");
+    expect(oneSvg.parentElement?.parentElement).toHaveClass(
+      "grid-cols-[140px_minmax(0,1fr)]",
+      "items-start",
+    );
+    expect(oneSvg.querySelectorAll("circle")).toHaveLength(2);
+    for (const circle of oneSvg.querySelectorAll("circle")) {
+      expect(circle).toHaveAttribute("cx", "70");
+      expect(circle).toHaveAttribute("cy", "70");
+      expect(circle).toHaveAttribute("r", "65.5");
+      expect(circle).toHaveAttribute("pathLength", "100");
+      expect(circle).toHaveAttribute("stroke-width", "8");
+    }
+    expect(oneSvg.querySelectorAll("circle")[1]).toHaveAttribute("stroke-linecap", "butt");
+    const oneTop = oneWrapper.getBoundingClientRect().top;
+
+    rerender(<DistributionDonutCard title="模型分布" items={sixItems} />);
+    const sixCard = cardFrom(container);
+    const sixSvg = donutFrom(sixCard);
+    const sixWrapper = sixSvg.parentElement as HTMLElement;
+    expect(sixSvg.querySelectorAll("circle")).toHaveLength(7);
+    expect(sixWrapper.getBoundingClientRect().top).toBeCloseTo(oneTop, 0);
+    expect(sixSvg.querySelectorAll("circle")).toHaveLength(7);
+    for (const circle of sixSvg.querySelectorAll("circle")) {
+      expect(circle).toHaveAttribute("cx", "70");
+      expect(circle).toHaveAttribute("cy", "70");
+      expect(circle).toHaveAttribute("r", "65.5");
+      expect(circle).toHaveAttribute("pathLength", "100");
+      expect(circle).toHaveAttribute("stroke-width", "8");
+    }
+  });
+
+  it("[T-S06-002] uses the official Pill tabs and compact muted legend without a hover surface", () => {
+    const { container } = render(<DistributionDonutCard title="模型分布" items={sixItems} />);
+    const card = cardFrom(container);
+    const tablist = within(card).getByRole("tablist");
+    expect(tablist).toHaveClass("inline-flex", "rounded-full", "bg-card", "p-1");
+    const tabs = within(tablist).getAllByRole("tab");
+    expect(tabs).toHaveLength(2);
+    for (const tab of tabs) {
+      expect(tab).toHaveClass("px-3.5", "py-1.5", "text-sm");
+      expect(tab).not.toHaveClass("!p-0.5", "!px-2.5", "!py-1", "text-xs");
+    }
+
+    const legends = legendButtons(card);
+    expect(legends).toHaveLength(6);
+    for (const legend of legends) {
+      expect(legend).toHaveClass("h-5", "text-xs", "leading-4", "text-muted-foreground");
+      expect(legend).not.toHaveClass(
+        "rounded-lg",
+        "px-1.5",
+        "py-1",
+        "hover:bg-primary/5",
+        "focus-visible:bg-primary/5",
+      );
+      expect(legend.firstElementChild).toHaveClass("h-[10px]", "w-[10px]", "rounded-full");
+      for (const cell of Array.from(legend.children).slice(1)) {
+        expect(cell).not.toHaveClass("text-foreground");
+      }
+    }
+    expect(legends.map((legend) => (legend.firstElementChild as HTMLElement).style.background)).toEqual([
+      "var(--chart-mint-a)",
+      "var(--chart-peach-a)",
+      "var(--chart-sky-a)",
+      "var(--chart-lavender-a)",
+      "var(--chart-butter-a)",
+      "var(--chart-other)",
+    ]);
+  });
+
+  it("[T-S06-008] keeps center semantics on NumberTicker and switches Token/Cost", () => {
+    const { container } = render(<DistributionDonutCard title="模型分布" items={twoItems} />);
+    const card = cardFrom(container);
+    const center = centerFrom(card);
+    const ticker = center.querySelector(".text-lg.font-semibold.leading-6.text-foreground");
+    if (!ticker) throw new Error("Donut NumberTicker not found");
+
+    expect(within(center).getByText("Token")).toBeInTheDocument();
+    expect(ticker.querySelector(".sr-only")).toHaveTextContent("1K");
+    const costTab = within(card).getByRole("tab", { name: "费用" });
+    fireEvent.click(costTab);
+    expect(costTab).toHaveAttribute("aria-selected", "true");
+    expect(within(center).getByText("Cost")).toBeInTheDocument();
+    expect(ticker.querySelector(".sr-only")).toHaveTextContent("$10.00");
+
+    fireEvent.click(within(card).getByRole("tab", { name: "Token" }));
+    const firstLegend = legendButtons(card)[0];
+    fireEvent.focus(firstLegend);
+    expect(within(center).getByText("Alpha 90.0%")).toBeInTheDocument();
+    expect(ticker.querySelector(".sr-only")).toHaveTextContent("900");
+  });
+
+  it("[T-S06-004] dims only focused segment and legend opacity while preserving geometry", async () => {
+    const { container } = render(<DistributionDonutCard title="模型分布" items={twoItems} />);
+    const card = cardFrom(container);
+    const svg = donutFrom(card);
+    const segments = Array.from(svg.querySelectorAll("circle")).slice(1) as SVGCircleElement[];
+    const legends = legendButtons(card);
+    const geometry = segmentGeometry(svg);
+
+    fireEvent.focus(legends[0]);
+    await waitFor(() => {
+      expect(motionOpacity(segments[0])).toBe("1");
+      expect(motionOpacity(segments[1])).toBe("0.22");
+      expect(motionOpacity(legends[0])).toBe("1");
+      expect(motionOpacity(legends[1])).toBe("0.22");
+    });
+    expect(segmentGeometry(svg)).toEqual(geometry);
+
+    fireEvent.pointerEnter(segments[1]);
+    await waitFor(() => {
+      expect(motionOpacity(segments[0])).toBe("0.22");
+      expect(motionOpacity(segments[1])).toBe("1");
+      expect(motionOpacity(legends[0])).toBe("0.22");
+      expect(motionOpacity(legends[1])).toBe("1");
+    });
+    expect(segmentGeometry(svg)).toEqual(geometry);
+  });
+
+  it("[T-S06-002] keeps an empty distribution as an explicit empty state", () => {
+    const { container } = render(<DistributionDonutCard title="项目分布" items={[]} />);
+    const card = cardFrom(container);
+    expect(within(card).getByText("暂无数据")).toBeInTheDocument();
+    expect(legendButtons(card)).toHaveLength(0);
+    expect(within(centerFrom(card)).getByText("Token")).toBeInTheDocument();
+    expect(donutFrom(card).querySelectorAll("circle")).toHaveLength(1);
+  });
+});

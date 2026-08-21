@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./theme/beui.css";
 
 @font-face {
   font-family: "JetBrains Mono";
@@ -49,7 +50,7 @@ body {
 
 button,
 input {
-  font: inherit;
+  font-family: inherit;
 }
 
 .dashboard-shell {

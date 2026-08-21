@@ -42,6 +42,12 @@ export function formatInteger(value: number | null): FormattedValue {
   return { text: formatCompact(integer), title: full, accessibleName: full };
 }
 
+export function formatIntegerFull(value: number): FormattedValue {
+  const integer = finiteInteger(value);
+  const full = integer.toLocaleString("en-US");
+  return { text: formatCompact(integer), title: full, accessibleName: full };
+}
+
 export function formatRatio(value: number | null): FormattedValue {
   if (value === null) return { text: "—", title: "未知", accessibleName: "未知" };
   if (!Number.isFinite(value) || value < 0 || value > 1) throw new RangeError("Expected a ratio between 0 and 1");
@@ -53,6 +59,13 @@ export function formatCost(value: number | null): FormattedValue {
   if (value === null) return { text: "—", title: "未知", accessibleName: "未知" };
   const text = formatCompactCost(value);
   const full = `$${finiteNonNegative(value).toFixed(2)}`;
+  return { text, title: full, accessibleName: full };
+}
+
+export function formatCostFull(value: number): FormattedValue {
+  const cost = finiteNonNegative(value);
+  const text = formatCompactCost(cost);
+  const full = `$${cost.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   return { text, title: full, accessibleName: full };
 }
 

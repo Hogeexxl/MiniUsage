@@ -486,7 +486,7 @@ where
     let mut ownership_established = false;
     let mut continuation_state = SourceContinuationState::OwningLive;
 
-    while let Some(item) = lines.next() {
+    for item in lines.by_ref() {
         if !matching_item(&item, last, plan.fixed_observed_size) {
             return Ok(PipelineDisposition::NeedsRebuild);
         }

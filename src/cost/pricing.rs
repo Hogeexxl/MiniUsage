@@ -73,11 +73,6 @@ impl ModelPricing {
     }
 }
 
-/// Exact model/alias lookup against the bundled catalog.
-pub trait PricingRepository {
-    fn resolve(&self, model: &str, occurred_at_ms: i64) -> Option<&ModelPricing>;
-}
-
 const CATALOG_EFFECTIVE_FROM_MS: i64 = i64::MIN;
 
 const GPT_5_6_SOL_ALIASES: &[&str] = &["gpt-5.6"];
@@ -139,18 +134,8 @@ impl BundledPricingRepository {
         Self
     }
 
-    pub const fn catalog(&self) -> &'static [ModelPricing] {
-        BUNDLED_PRICING_CATALOG
-    }
-
     pub fn resolve(&self, model: &str, occurred_at_ms: i64) -> Option<&'static ModelPricing> {
         resolve_from_catalog(BUNDLED_PRICING_CATALOG, model, occurred_at_ms)
-    }
-}
-
-impl PricingRepository for BundledPricingRepository {
-    fn resolve(&self, model: &str, occurred_at_ms: i64) -> Option<&ModelPricing> {
-        Self::resolve(self, model, occurred_at_ms)
     }
 }
 

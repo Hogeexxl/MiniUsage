@@ -68,6 +68,20 @@ export function formatSessionTime(value: number, timezone: string, now = Date.no
   };
 }
 
+export function formatSessionTimeWithSeconds(value: number, timezone: string, now = Date.now()): FormattedValue {
+  const current = dateParts(now, timezone);
+  const target = dateParts(value, timezone);
+  const time = `${target.hour}:${target.minute}:${target.second}`;
+  const text =
+    target.year === current.year && target.month === current.month && target.day === current.day
+      ? time
+      : target.year === current.year
+        ? `${target.month}-${target.day} ${time}`
+        : `${target.year}-${target.month}-${target.day} ${time}`;
+  const title = `${target.year}-${target.month}-${target.day} ${time}`;
+  return { text, title, accessibleName: text };
+}
+
 export function formatSessionTokenInteger(value: number): FormattedValue {
   if (!Number.isSafeInteger(value) || value < 0) throw new RangeError("Expected a non-negative safe integer");
   const full = String(value);

@@ -146,9 +146,9 @@ describe("useSessionTableController", () => {
     feed.dispose();
   });
 
-  it("T-S06-001 covers global seven-field ASC/DESC sorting, ties, null-last cost, page retention, and bounded prefetch", async () => {
+  it("T-S04-003 covers full-index sorting, fixed pagination windows, null-last ties, and bounded prefetch", async () => {
     const sortIndex: SessionSortIndexItem[] = Array.from({ length: 200 }, (_, index) => ({
-      root_session_id: `root-${String(index + 1).padStart(3, "0")}`,
+      root_session_id: index === 0 ? "root-199" : index === 198 ? "root-001" : `root-${String(index + 1).padStart(3, "0")}`,
       last_activity_at_ms: 200 - index,
       project_sort_key: index === 198 ? null : index === 199 ? "" : `project-${index % 4}`,
       model_sort_key: index === 198 ? null : index === 199 ? "" : `model-${index % 3}`,
@@ -226,7 +226,9 @@ describe("useSessionTableController", () => {
     await setSort("combined_estimated_cost", "desc");
     await act(async () => result.current.go_to_page(14));
     await waitFor(() => expect(result.current.rows.map((row) => row.root_session_id)).toEqual(expectedPage("combined_estimated_cost", "desc", 14)));
-    expect(result.current.rows.at(-1)?.root_session_id).toBe("root-199");
+    expect(result.current.rows.at(-1)?.root_session_id).toBe(
+      sortIndex.find((entry) => entry.combined_estimated_cost === null)?.root_session_id,
+    );
 
     unmount();
     feed.dispose();
@@ -248,12 +250,16 @@ describe("useSessionTableController", () => {
     await waitFor(() => expect(prefetchRows.mock.calls.length).toBeGreaterThan(requestCountBeforePrefetch));
     const page3Request = prefetchRows.mock.calls.at(-1)?.[0].root_session_ids ?? [];
     expect(page3Request).toHaveLength(60);
+    expect(page3Request[0]).toBe("root-061");
+    expect(page3Request.at(-1)).toBe("root-120");
     const countAfterPage3 = prefetchRows.mock.calls.length;
     await waitFor(() => expect(prefetchRows.mock.calls.length).toBe(countAfterPage3));
     await act(async () => prefetchResult.current.go_to_page(7));
     await waitFor(() => expect(prefetchRows.mock.calls.length).toBeGreaterThan(countAfterPage3));
     const page7Request = prefetchRows.mock.calls.at(-1)?.[0].root_session_ids ?? [];
     expect(page7Request).toHaveLength(60);
+    expect(page7Request[0]).toBe("root-121");
+    expect(page7Request.at(-1)).toBe("root-180");
     const countAfterPage7 = prefetchRows.mock.calls.length;
     await waitFor(() => expect(prefetchRows.mock.calls.length).toBe(countAfterPage7));
     await act(async () => prefetchResult.current.select_sort("last_activity"));

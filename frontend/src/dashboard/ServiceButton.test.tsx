@@ -1,7 +1,8 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, renderHook, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import type { ServiceClient } from "../data/serviceClient";
+import { useAnimatedToastStack } from "../ui/beui/animated-toast-stack";
 import { ServiceButton } from "./ServiceButton";
 
 function fakeClient(overrides: Partial<ServiceClient> = {}): ServiceClient {
@@ -31,7 +32,7 @@ describe("ServiceButton v0.2.0", () => {
     finishStop();
     await waitFor(() => expect(screen.getByRole("button", { name: "停止服务" })).toBeDisabled());
     expect(screen.getByText("服务已停止")).toBeInTheDocument();
-    expect(screen.queryByText("正在停止服务")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText("正在停止服务")).not.toBeInTheDocument());
     expect(screen.getAllByRole("listitem")).toHaveLength(1);
     const dismiss = screen.getByRole("button", { name: "Dismiss toast" });
     dismiss.click();
@@ -46,9 +47,57 @@ describe("ServiceButton v0.2.0", () => {
     button.click();
     await waitFor(() => expect(screen.getByRole("button", { name: "停止服务" })).toBeEnabled());
     expect(screen.getByText("停止服务失败")).toBeInTheDocument();
-    expect(screen.queryByText("正在停止服务")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText("正在停止服务")).not.toBeInTheDocument());
     expect(screen.getAllByRole("listitem")).toHaveLength(1);
     expect(screen.getByRole("button", { name: "Dismiss toast" })).toBeInTheDocument();
+  });
+
+  it("lets a terminal toast use the hook default duration", () => {
+    vi.useFakeTimers();
+    try {
+      const { result, unmount } = renderHook(() => useAnimatedToastStack({ defaultDuration: 25 }));
+      let toastId!: string;
+
+      act(() => {
+        toastId = result.current.showToast({
+          status: "loading",
+          title: "正在停止服务",
+          duration: 0,
+          dismissible: false,
+        });
+      });
+      expect(result.current.toasts).toHaveLength(1);
+      expect(result.current.toasts[0]).toMatchObject({ id: toastId, duration: 0, dismissible: false });
+
+      act(() => {
+        result.current.updateToast(toastId, {
+          status: "success",
+          title: "服务已停止",
+          duration: undefined,
+          dismissible: true,
+        });
+      });
+      expect(result.current.toasts).toHaveLength(1);
+      expect(result.current.toasts[0]).toMatchObject({
+        id: toastId,
+        status: "success",
+        duration: undefined,
+        dismissible: true,
+      });
+
+      act(() => {
+        vi.advanceTimersByTime(24);
+      });
+      expect(result.current.toasts).toHaveLength(1);
+
+      act(() => {
+        vi.advanceTimersByTime(1);
+      });
+      expect(result.current.toasts).toHaveLength(0);
+      unmount();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("surfaces initial service-state failure without enabling a destructive action", async () => {

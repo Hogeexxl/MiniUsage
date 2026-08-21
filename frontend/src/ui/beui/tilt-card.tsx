@@ -1,3 +1,5 @@
+"use client";
+
 import { motion, useMotionTemplate, useMotionValue, useReducedMotion, useSpring } from "motion/react";
 import { useRef, type ReactNode } from "react";
 import { SPRING_MOUSE } from "../lib/ease";
@@ -15,6 +17,7 @@ export function TiltCard({ children, max = 12, glare = true, className }: TiltCa
   const ref = useRef<HTMLDivElement>(null);
   const reduce = useReducedMotion();
   const canHover = useHoverCapable();
+  // Decorative cursor-follow: skip on touch (phantom hover) and reduced motion.
   const enabled = !reduce && canHover;
   const rx = useMotionValue(0);
   const ry = useMotionValue(0);

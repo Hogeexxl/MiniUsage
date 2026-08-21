@@ -1,9 +1,39 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { SessionItemDto, UsageDto } from "../../data/types";
 import type { SessionTableViewModel } from "./sessionTypes";
+import type { SessionDetailControllerViewModel } from "./useSessionDetailController";
 import { SessionSection } from "./SessionSection";
+
+const offsetHeightDescriptor = Object.getOwnPropertyDescriptor(
+  HTMLElement.prototype,
+  "offsetHeight",
+);
+const offsetWidthDescriptor = Object.getOwnPropertyDescriptor(
+  HTMLElement.prototype,
+  "offsetWidth",
+);
+
+function inlinePixels(element: HTMLElement, property: "height" | "width"): number | null {
+  const value = element.style.getPropertyValue(property).trim();
+  if (!value.endsWith("px")) return null;
+  const pixels = Number.parseFloat(value);
+  return Number.isFinite(pixels) ? pixels : null;
+}
+
+function descriptorPixels(element: HTMLElement, descriptor: PropertyDescriptor | undefined): number {
+  if (descriptor?.get) return Number(descriptor.get.call(element)) || 0;
+  return typeof descriptor?.value === "number" ? descriptor.value : 0;
+}
+
+function restoreDimension(name: "offsetHeight" | "offsetWidth", descriptor: PropertyDescriptor | undefined) {
+  if (descriptor) {
+    Object.defineProperty(HTMLElement.prototype, name, descriptor);
+  } else {
+    Reflect.deleteProperty(HTMLElement.prototype, name);
+  }
+}
 
 const usage: UsageDto = {
   input_tokens: 1_234,
@@ -57,13 +87,102 @@ function view(overrides: Partial<SessionTableViewModel> = {}): SessionTableViewM
   };
 }
 
+function row(index: number, overrides: Partial<SessionItemDto> = {}): SessionItemDto {
+  return {
+    ...item,
+    root_session_id: `root-${index}`,
+    title: `Session ${index}`,
+    last_activity_at_ms: item.last_activity_at_ms + index,
+    ...overrides,
+  };
+}
+
+function detailView(openDetail: (row: SessionItemDto) => void): SessionDetailControllerViewModel {
+  return {
+    open: false,
+    selected_root_session_id: null,
+    selected_row: null,
+    detail: null,
+    load_state: "closed",
+    open_detail: openDetail,
+    select_session: vi.fn(),
+    close_detail: vi.fn(),
+    retry_detail: vi.fn(),
+  };
+}
+
+function tableViewport(container: HTMLElement): HTMLElement {
+  const table = container.querySelector("table");
+  if (!(table?.parentElement instanceof HTMLElement)) throw new Error("Session table viewport not found");
+  return table.parentElement;
+}
+
+function tableRow(container: HTMLElement, rootSessionId: string): HTMLTableRowElement {
+  const tableRow = container.querySelector<HTMLTableRowElement>(
+    `tbody tr[data-session-root-id="${rootSessionId}"]`,
+  );
+  if (!tableRow) throw new Error(`Session row ${rootSessionId} not found`);
+  return tableRow;
+}
+
 describe("SessionSection v0.2.0", () => {
-  it("renders the BeUI eight-column header including sortable combined cost", () => {
+  beforeAll(() => {
+    Object.defineProperty(HTMLElement.prototype, "offsetHeight", {
+      configurable: offsetHeightDescriptor?.configurable ?? true,
+      enumerable: offsetHeightDescriptor?.enumerable ?? true,
+      get() {
+        return inlinePixels(this, "height") ?? descriptorPixels(this, offsetHeightDescriptor);
+      },
+    });
+    Object.defineProperty(HTMLElement.prototype, "offsetWidth", {
+      configurable: offsetWidthDescriptor?.configurable ?? true,
+      enumerable: offsetWidthDescriptor?.enumerable ?? true,
+      get() {
+        return inlinePixels(this, "width") ?? descriptorPixels(this, offsetWidthDescriptor);
+      },
+    });
+  });
+
+  afterAll(() => {
+    restoreDimension("offsetHeight", offsetHeightDescriptor);
+    restoreDimension("offsetWidth", offsetWidthDescriptor);
+  });
+
+  it("T-S04-001 preserves manual-sort row order while sort and row props stay active", () => {
+    const rows = [row(2), row(1)];
     const selectSort = vi.fn();
-    render(<SessionSection view={view({ select_sort: selectSort })} />);
+    const openSession = vi.fn();
+    const rendered = render(
+      <SessionSection
+        view={view({ rows, select_sort: selectSort })}
+        detail={detailView(openSession)}
+      />,
+    );
+
+    expect(
+      Array.from(
+        rendered.container.querySelectorAll("tbody tr[data-session-root-id]"),
+        (tableRow) => tableRow.getAttribute("data-session-root-id"),
+      ),
+    ).toEqual(["root-2", "root-1"]);
+
+    fireEvent.click(screen.getByRole("button", { name: "最后活动" }));
+    expect(selectSort).toHaveBeenCalledWith("last_activity");
+
+    const firstRow = tableRow(rendered.container, "root-2");
+    expect(firstRow).toHaveAttribute("data-session-root-id", "root-2");
+    expect(firstRow).toHaveAttribute("tabindex", "0");
+    expect(firstRow).toHaveAttribute("aria-selected", "false");
+    fireEvent.click(firstRow);
+    expect(openSession).toHaveBeenCalledWith(rows[0]);
+  });
+
+  it("T-S04-002 keeps the fixed column order, sortable rules, and numeric alignment", () => {
+    const rendered = render(<SessionSection view={view()} />);
+    const headers = screen.getAllByRole("columnheader");
 
     expect(screen.getByRole("heading", { name: "Session 记录" })).toBeInTheDocument();
-    expect(screen.getAllByRole("columnheader").map((header) => header.textContent?.trim())).toEqual([
+    expect(headers.map((header) => header.textContent?.trim())).toEqual([
       "最后活动",
       "标题",
       "项目",
@@ -74,39 +193,122 @@ describe("SessionSection v0.2.0", () => {
       "合计费用",
     ]);
 
-    for (const label of ["最后活动", "项目", "模型", "总 Token", "合计 Token", "缓存命中率", "合计费用"]) {
-      fireEvent.click(screen.getByRole("button", { name: label }));
+    expect(headers[1].querySelector("button")).toBeNull();
+    expect(headers.filter((header) => header.querySelector("button")).length).toBe(7);
+
+    for (const label of ["总 Token", "合计 Token", "缓存命中率", "合计费用"]) {
+      expect(screen.getByRole("button", { name: label })).toHaveClass("justify-end");
     }
-    expect(selectSort.mock.calls.map(([field]) => field)).toEqual([
-      "last_activity",
-      "project",
-      "model",
-      "total_tokens",
-      "combined_total_tokens",
-      "cache_hit_rate",
-      "combined_estimated_cost",
-    ]);
+
+    const cells = rendered.container.querySelectorAll(
+      'tbody tr[data-session-root-id="root-1"] td',
+    );
+    for (const index of [4, 5, 6, 7]) {
+      expect(cells[index]).toHaveClass("text-right");
+    }
   });
 
-  it("keeps pagination in the Session header and supports direct page input", () => {
+  it("T-S04-004 computes the table height from ready rows", () => {
+    for (const [count, height] of [
+      [15, 768],
+      [10, 528],
+      [3, 192],
+    ] as const) {
+      const rendered = render(
+        <SessionSection
+          view={view({
+            rows: Array.from({ length: count }, (_, index) => row(index)),
+            total_items: count,
+            total_pages: 1,
+          })}
+        />,
+      );
+      expect(tableViewport(rendered.container)).toHaveStyle({ height: `${height}px` });
+      rendered.unmount();
+    }
+
+    const readyEmpty = render(<SessionSection view={view({ rows: [], total_items: 0, total_pages: 0 })} />);
+    expect(tableViewport(readyEmpty.container)).toHaveStyle({ height: "192px" });
+    readyEmpty.unmount();
+  });
+
+  it("T-S04-005 activates usable rows and keeps error rows disabled", () => {
+    const openSession = vi.fn();
+    const rendered = render(
+      <SessionSection view={view()} detail={detailView(openSession)} />,
+    );
+    const usableRow = tableRow(rendered.container, "root-1");
+    fireEvent.click(usableRow);
+    fireEvent.keyDown(usableRow, { key: "Enter" });
+    fireEvent.keyDown(usableRow, { key: " " });
+    expect(openSession).toHaveBeenCalledTimes(3);
+    rendered.unmount();
+
+    const errorOpen = vi.fn();
+    const errorRendered = render(
+      <SessionSection
+        view={view({ rows: [row(1, { data_status: "error" })] })}
+        detail={detailView(errorOpen)}
+      />,
+    );
+    const errorRow = tableRow(errorRendered.container, "root-1");
+    expect(errorRow).toHaveAttribute("aria-disabled", "true");
+    expect(errorRow).toHaveAttribute("tabindex", "-1");
+    fireEvent.click(errorRow);
+    fireEvent.keyDown(errorRow, { key: "Enter" });
+    fireEvent.keyDown(errorRow, { key: " " });
+    expect(errorOpen).not.toHaveBeenCalled();
+  });
+
+  it("T-S04-005 exposes the incomplete and error tooltip copy", () => {
+    for (const [dataStatus, label] of [
+      ["incomplete", "数据不完整"],
+      ["error", "数据计算异常"],
+    ] as const) {
+      vi.useFakeTimers();
+      const rendered = render(
+        <SessionSection view={view({ rows: [row(1, { data_status: dataStatus })] })} />,
+      );
+      try {
+        const trigger = screen.getByLabelText(label);
+        expect(trigger).toHaveAttribute("aria-describedby");
+        if (!(trigger.parentElement instanceof HTMLElement)) {
+          throw new Error("Tooltip wrapper not found");
+        }
+        fireEvent.pointerEnter(trigger.parentElement, {
+          pointerId: 1,
+          pointerType: "mouse",
+          buttons: 0,
+        });
+        act(() => {
+          vi.advanceTimersByTime(120);
+        });
+        const tooltip = screen.getByRole("tooltip", { hidden: true });
+        expect(tooltip).toHaveTextContent(label);
+        expect(trigger).toHaveAttribute("aria-describedby", tooltip.id);
+      } finally {
+        rendered.unmount();
+        vi.useRealTimers();
+      }
+    }
+  });
+
+  it("T-S04-006 keeps pagination in the Session header and commits the real page-input flow", () => {
     const nextPage = vi.fn();
     const previousPage = vi.fn();
     const goToPage = vi.fn();
-    render(
-      <SessionSection
-        view={view({
-          page: 2,
-          total_items: 31,
-          total_pages: 3,
-          next_page: nextPage,
-          previous_page: previousPage,
-          go_to_page: goToPage,
-        })}
-      />,
-    );
+    const initialView = view({
+      page: 2,
+      total_items: 5,
+      total_pages: 5,
+      next_page: nextPage,
+      previous_page: previousPage,
+      go_to_page: goToPage,
+    });
+    const rendered = render(<SessionSection view={initialView} />);
 
-    expect(screen.getByText("共 31 条")).toBeInTheDocument();
-    expect(screen.getByText("2 / 3")).toBeInTheDocument();
+    expect(screen.getByText("共 5 条")).toBeInTheDocument();
+    expect(screen.getByText("2 / 5")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "下一页" }));
     fireEvent.click(screen.getByRole("button", { name: "上一页" }));
     expect(nextPage).toHaveBeenCalledTimes(1);
@@ -115,18 +317,33 @@ describe("SessionSection v0.2.0", () => {
     const pageInput = screen.getByRole("textbox", { name: "跳转页码" });
     fireEvent.change(pageInput, { target: { value: "3" } });
     fireEvent.keyDown(pageInput, { key: "Enter" });
+    expect(goToPage).toHaveBeenCalledTimes(1);
     expect(goToPage).toHaveBeenCalledWith(3);
 
-    fireEvent.change(pageInput, { target: { value: "99" } });
-    fireEvent.keyDown(pageInput, { key: "Enter" });
-    expect(goToPage).toHaveBeenCalledTimes(1);
+    rendered.rerender(<SessionSection view={{ ...initialView, page: 3 }} />);
+    expect(screen.getByRole("textbox", { name: "跳转页码" })).toHaveValue("3");
+    rendered.unmount();
+
+    const invalidGoToPage = vi.fn();
+    const invalid = render(
+      <SessionSection
+        view={view({ page: 2, total_items: 5, total_pages: 5, go_to_page: invalidGoToPage })}
+      />,
+    );
+    const invalidInput = screen.getByRole("textbox", { name: "跳转页码" });
+    fireEvent.change(invalidInput, { target: { value: "99" } });
+    fireEvent.blur(invalidInput);
+    expect(invalidInput).toHaveValue("2");
+    expect(invalidGoToPage).not.toHaveBeenCalled();
+    invalid.unmount();
   });
 
-  it("uses BeUI structural loading rows and the approved empty state", () => {
-    const loading = render(<SessionSection view={view({ rows: [], load_state: "loading" })} />);
+  it("T-S04-004 uses BeUI structural initial loading rows and the approved empty state", () => {
+    const loading = render(<SessionSection view={view({ rows: [], load_state: "initial" })} />);
     expect(screen.getByRole("table")).toBeInTheDocument();
     expect(screen.queryByText("当前时间范围暂无 Session 记录")).not.toBeInTheDocument();
-    expect(screen.getAllByRole("row").length).toBeGreaterThan(1);
+    expect(tableViewport(loading.container)).toHaveStyle({ height: "720px" });
+    expect(loading.container.querySelectorAll("tbody tr")).toHaveLength(15);
     loading.unmount();
 
     render(<SessionSection view={view({ rows: [], total_items: 0, total_pages: 0 })} />);

@@ -1,0 +1,216 @@
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+
+import type {
+  DashboardFilters,
+  FilterOptionsResponse,
+} from "../data/types";
+import { FilterControls } from "./FilterControls";
+
+const modelOptions: FilterOptionsResponse = {
+  data_revision: 1,
+  models: ["gpt-4o", "gpt-4o-mini", "claude-3"],
+  projects: [],
+};
+
+const projectOptions: FilterOptionsResponse = {
+  data_revision: 1,
+  models: [],
+  projects: [
+    { kind: "project", project_name: "Workspace", project_path: "/workspace" },
+    { kind: "projectless" },
+    { kind: "unknown" },
+  ],
+};
+
+const emptyFilters: DashboardFilters = { models: [], projects: [] };
+
+type RenderOverrides = {
+  filters?: DashboardFilters;
+  options?: FilterOptionsResponse | null;
+  optionsLoading?: boolean;
+  optionsStale?: boolean;
+  optionsErrorCode?: string;
+  anyFilterActive?: boolean;
+  onChange?: (filters: DashboardFilters) => void;
+  onClear?: () => void;
+  onRetryOptions?: () => void;
+};
+
+function renderControls(overrides: RenderOverrides = {}) {
+  const props = {
+    filters: emptyFilters,
+    options: modelOptions,
+    optionsLoading: false,
+    optionsStale: false,
+    optionsErrorCode: undefined,
+    anyFilterActive: false,
+    onChange: vi.fn(),
+    onClear: vi.fn(),
+    onRetryOptions: vi.fn(),
+    ...overrides,
+  };
+  return render(<FilterControls {...props} />);
+}
+
+async function openPopover(name: string) {
+  fireEvent.click(screen.getByRole("button", { name }));
+  return screen.findByRole("dialog");
+}
+
+describe("FilterControls", () => {
+  it("uses the secondary all-model trigger when no model is selected", () => {
+    renderControls();
+    const trigger = screen.getByRole("button", { name: "模型筛选，全部" });
+    expect(trigger).toHaveTextContent("模型 · 全部");
+    expect(trigger).toHaveClass("bg-card");
+  });
+
+  it("uses the primary one-item trigger when one model is selected", () => {
+    renderControls({ filters: { models: ["claude-3"], projects: [] } });
+    const trigger = screen.getByRole("button", { name: "模型筛选，已选1项" });
+    expect(trigger).toHaveTextContent("模型 · 1 项");
+    expect(trigger).toHaveClass("bg-primary");
+  });
+
+  it("toggles an ordinary model from its checkbox", async () => {
+    const onChange = vi.fn();
+    renderControls({ onChange });
+    const dialog = await openPopover("模型筛选，全部");
+    const checkbox = within(dialog).getByRole("checkbox", { name: "claude-3" });
+
+    fireEvent.click(checkbox);
+
+    expect(onChange).toHaveBeenCalledWith({ models: ["claude-3"], projects: [] });
+  });
+
+  it("toggles an ordinary model when its label text is clicked", async () => {
+    const onChange = vi.fn();
+    renderControls({ onChange });
+    const dialog = await openPopover("模型筛选，全部");
+
+    fireEvent.click(within(dialog).getByText("claude-3"));
+
+    expect(onChange).toHaveBeenCalledWith({ models: ["claude-3"], projects: [] });
+  });
+
+  it.each([
+    { name: "0/N", selected: [], ariaChecked: "false" },
+    { name: "partial", selected: ["gpt-4o"], ariaChecked: "mixed" },
+    { name: "N/N", selected: ["gpt-4o", "gpt-4o-mini"], ariaChecked: "true" },
+  ])("exposes GPT $name state", async ({ selected, ariaChecked }) => {
+    renderControls({ filters: { models: selected, projects: [] } });
+    const triggerName = selected.length
+      ? `模型筛选，已选${selected.length}项`
+      : "模型筛选，全部";
+    const dialog = await openPopover(triggerName);
+
+    expect(within(dialog).getByRole("checkbox", { name: "GPT" })).toHaveAttribute(
+      "aria-checked",
+      ariaChecked,
+    );
+  });
+
+  it("expands and collapses the GPT model group", async () => {
+    renderControls();
+    const dialog = await openPopover("模型筛选，全部");
+    const gptToggle = within(dialog).getByRole("button", { name: "GPT" });
+
+    expect(within(dialog).getByRole("checkbox", { name: "gpt-4o" })).toBeInTheDocument();
+    fireEvent.click(gptToggle);
+    expect(within(dialog).queryByRole("checkbox", { name: "gpt-4o" })).not.toBeInTheDocument();
+    fireEvent.click(gptToggle);
+    expect(within(dialog).getByRole("checkbox", { name: "gpt-4o" })).toBeInTheDocument();
+  });
+
+  it("selects normal, projectless, and unknown projects using their labels", async () => {
+    const onChange = vi.fn();
+    renderControls({ options: projectOptions, onChange });
+    const dialog = await openPopover("项目筛选，全部");
+
+    fireEvent.click(within(dialog).getByText("Workspace"));
+    expect(onChange).toHaveBeenLastCalledWith({
+      models: [],
+      projects: [{ kind: "project", project_path: "/workspace" }],
+    });
+
+    fireEvent.click(within(dialog).getByText("无项目会话"));
+    expect(onChange).toHaveBeenLastCalledWith({
+      models: [],
+      projects: [{ kind: "projectless" }],
+    });
+
+    fireEvent.click(within(dialog).getByText("未识别项目"));
+    expect(onChange).toHaveBeenLastCalledWith({
+      models: [],
+      projects: [{ kind: "unknown" }],
+    });
+  });
+
+  it("shows the selected project count and primary trigger semantics", () => {
+    renderControls({
+      filters: { models: [], projects: [{ kind: "project", project_path: "/workspace" }] },
+      options: projectOptions,
+      anyFilterActive: true,
+    });
+    const trigger = screen.getByRole("button", { name: "项目筛选，已选1项" });
+
+    expect(trigger).toHaveTextContent("项目 · 1 项");
+    expect(trigger).toHaveClass("bg-primary");
+  });
+
+  it("opens the model popover and closes it on Escape and outside pointer", async () => {
+    renderControls();
+    const trigger = screen.getByRole("button", { name: "模型筛选，全部" });
+
+    await openPopover("模型筛选，全部");
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+    await openPopover("模型筛选，全部");
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    fireEvent.pointerDown(document.body);
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it.each([
+    { label: "error", optionsErrorCode: "QUERY_FAILED", optionsStale: false, status: "选项加载失败" },
+    { label: "stale", optionsErrorCode: undefined, optionsStale: true, status: "选项可能已更新" },
+  ])("shows a retry action for $label options", async ({ optionsErrorCode, optionsStale, status }) => {
+    const onRetryOptions = vi.fn();
+    renderControls({ optionsErrorCode, optionsStale, onRetryOptions });
+    const dialog = await openPopover("模型筛选，全部");
+
+    expect(within(dialog).getByRole("status")).toHaveTextContent(status);
+    fireEvent.click(within(dialog).getByRole("button", { name: "重试" }));
+    expect(onRetryOptions).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    { anyFilterActive: true, visible: true },
+    { anyFilterActive: false, visible: false },
+  ])("$anyFilterActive anyFilterActive controls clear visibility", ({ anyFilterActive, visible }) => {
+    renderControls({ anyFilterActive });
+    const clear = screen.queryByRole("button", { name: "清除筛选" });
+    if (visible) expect(clear).toBeInTheDocument();
+    else expect(clear).not.toBeInTheDocument();
+  });
+
+  it("clears model and project filters without changing a range", () => {
+    const onClear = vi.fn();
+    const onChange = vi.fn();
+    renderControls({
+      filters: { models: ["claude-3"], projects: [{ kind: "projectless" }] },
+      anyFilterActive: true,
+      onClear,
+      onChange,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "清除筛选" }));
+
+    expect(onClear).toHaveBeenCalledTimes(1);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+});

@@ -153,6 +153,37 @@ describe("miniUsageClient DTO seam", () => {
     await expect(miniUsageClient.getRevision()).resolves.toEqual({ data_revision: 3, status_revision: 4 });
   });
 
+  it("T-S03-004 parser accepts cost-incomplete roots beyond healthy sessions only within health total", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+    const acceptedUsage = {
+      ...usage,
+      session_count: 1,
+      cost_incomplete_session_count: 2,
+      session_health: {
+        total_sessions: 2,
+        complete_sessions: 0,
+        incomplete_sessions: 1,
+        error_sessions: 1,
+      },
+    };
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ range, data_revision: 0, usage: acceptedUsage }), { status: 200 }),
+    );
+    await expect(miniUsageClient.summary("today", emptyFilters)).resolves.toMatchObject({ usage: acceptedUsage });
+
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          range,
+          data_revision: 0,
+          usage: { ...acceptedUsage, cost_incomplete_session_count: 3 },
+        }),
+        { status: 200 },
+      ),
+    );
+    await expect(miniUsageClient.summary("today", emptyFilters)).rejects.toBeInstanceOf(MiniUsageClientError);
+  });
+
   it("rejects unsafe integers, invalid ratios, and legacy-field-only responses", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch");
     fetchMock

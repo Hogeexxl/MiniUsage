@@ -10,7 +10,7 @@ use super::{
     ledger::UsageLedgerError,
 };
 
-pub const SKILL_USAGE_PARSER_VERSION: i64 = 9;
+pub const SKILL_USAGE_PARSER_VERSION: i64 = 10;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DistributionCostStatus {
@@ -385,4 +385,52 @@ pub fn skills_usage_snapshot(
             days: output,
         },
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        fs,
+        path::PathBuf,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    use crate::storage::LedgerOptions;
+
+    use super::*;
+
+    fn ledger_with_active_parser(parser_version: i64) -> (Ledger, PathBuf) {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("mini-usage-s07-analytics-{unique}"));
+        fs::create_dir_all(&root).unwrap();
+        let ledger = Ledger::open(LedgerOptions::new(
+            root.join("mu.sqlite3"),
+            root.join("codex"),
+        ))
+        .unwrap();
+        ledger
+            .connection()
+            .unwrap()
+            .execute(
+                "UPDATE app_meta SET usage_active_epoch=1,usage_parser_version=?1 WHERE id=1",
+                [parser_version],
+            )
+            .unwrap();
+        (ledger, root)
+    }
+
+    #[test]
+    fn t_s07_002_skills_ready_requires_parser_v10() {
+        assert_eq!(SKILL_USAGE_PARSER_VERSION, 10);
+        for (parser_version, expected_ready) in [(9, false), (10, true)] {
+            let (ledger, root) = ledger_with_active_parser(parser_version);
+            let snapshot = skills_usage_snapshot(&ledger, &[], &UsageFilter::default()).unwrap();
+            assert_eq!(snapshot.value.ready, expected_ready);
+            drop(ledger);
+            fs::remove_dir_all(root).unwrap();
+        }
+    }
 }

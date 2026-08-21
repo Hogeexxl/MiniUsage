@@ -17,7 +17,9 @@ export function useColumnSort<T>({
   onSortChange?: (sort: SortState | null) => void;
   manualSort?: boolean;
 }) {
-  const [internalSort, setInternalSort] = useState<SortState | null>(defaultSort);
+  const [internalSort, setInternalSort] = useState<SortState | null>(
+    defaultSort,
+  );
   const sort = sortProp !== undefined ? sortProp : internalSort;
 
   const commit = useCallback(
@@ -43,19 +45,19 @@ export function useColumnSort<T>({
 
   const sortedRows = useMemo(() => {
     if (manualSort || !sort) return rows;
-    const column = columns.find((candidate) => candidate.key === sort.key);
+    const column = columns.find((c) => c.key === sort.key);
     if (!column) return rows;
     const copy = [...rows];
-    copy.sort((left, right) => {
-      const leftValue = readSortValue(left.row, column);
-      const rightValue = readSortValue(right.row, column);
-      let comparison: number;
-      if (typeof leftValue === "number" && typeof rightValue === "number") {
-        comparison = leftValue - rightValue;
+    copy.sort((a, b) => {
+      const av = readSortValue(a.row, column);
+      const bv = readSortValue(b.row, column);
+      let cmp: number;
+      if (typeof av === "number" && typeof bv === "number") {
+        cmp = av - bv;
       } else {
-        comparison = String(leftValue).localeCompare(String(rightValue));
+        cmp = String(av).localeCompare(String(bv));
       }
-      return sort.direction === "asc" ? comparison : -comparison;
+      return sort.direction === "asc" ? cmp : -cmp;
     });
     return copy;
   }, [rows, sort, columns, manualSort]);

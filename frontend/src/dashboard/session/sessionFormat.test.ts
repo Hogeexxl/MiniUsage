@@ -5,6 +5,7 @@ import {
   formatSessionModel,
   formatSessionProject,
   formatSessionTime,
+  formatSessionTimeWithSeconds,
   formatSessionTitle,
   formatSessionTokenInteger,
 } from "./sessionFormat";
@@ -23,6 +24,25 @@ describe("Session presentation contract", () => {
     expect(formatSessionTime(Date.UTC(2026, 6, 1, 7, 8, 0), "Asia/Shanghai", now).text).toBe("07-01 15:08");
     expect(formatSessionTime(Date.UTC(2025, 11, 1, 7, 8, 0), "Asia/Shanghai", now).text).toBe("2025-12-01 15:08");
     expect(() => formatSessionTime(now, "Not/A-Timezone", now)).toThrow(RangeError);
+  });
+
+  it("formats seconds for same-day, same-year, and cross-year timestamps with complete titles", () => {
+    const now = Date.UTC(2026, 7, 10, 8, 9, 10);
+    expect(formatSessionTimeWithSeconds(Date.UTC(2026, 7, 10, 7, 8, 3), "Asia/Shanghai", now)).toEqual({
+      text: "15:08:03",
+      title: "2026-08-10 15:08:03",
+      accessibleName: "15:08:03",
+    });
+    expect(formatSessionTimeWithSeconds(Date.UTC(2026, 6, 1, 7, 8, 4), "Asia/Shanghai", now)).toEqual({
+      text: "07-01 15:08:04",
+      title: "2026-07-01 15:08:04",
+      accessibleName: "07-01 15:08:04",
+    });
+    expect(formatSessionTimeWithSeconds(Date.UTC(2025, 11, 1, 7, 8, 5), "Asia/Shanghai", now)).toEqual({
+      text: "2025-12-01 15:08:05",
+      title: "2025-12-01 15:08:05",
+      accessibleName: "2025-12-01 15:08:05",
+    });
   });
 
   it("uses a complete locale-aware integer formatter for Session tokens", () => {

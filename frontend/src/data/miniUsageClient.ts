@@ -188,9 +188,6 @@ function parseUsage(value: unknown): SummaryUsageDto {
   const record = requiredRecord(value);
   const sessionCount = requiredSafeInteger(record, "session_count");
   const costIncompleteSessionCount = requiredSafeInteger(record, "cost_incomplete_session_count");
-  if (costIncompleteSessionCount > sessionCount) {
-    throw new MiniUsageClientError("HTTP_ERROR", 200);
-  }
   const healthRecord = requiredRecord(record.session_health);
   const sessionHealth = {
     total_sessions: requiredSafeInteger(healthRecord, "total_sessions"),
@@ -198,6 +195,9 @@ function parseUsage(value: unknown): SummaryUsageDto {
     incomplete_sessions: requiredSafeInteger(healthRecord, "incomplete_sessions"),
     error_sessions: requiredSafeInteger(healthRecord, "error_sessions"),
   };
+  if (costIncompleteSessionCount > sessionHealth.total_sessions) {
+    throw new MiniUsageClientError("HTTP_ERROR", 200);
+  }
   const healthySessions = sessionHealth.complete_sessions + sessionHealth.incomplete_sessions;
   const allSessions = healthySessions + sessionHealth.error_sessions;
   if (

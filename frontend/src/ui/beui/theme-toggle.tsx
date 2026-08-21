@@ -1,9 +1,9 @@
 "use client";
 
 import { Moon, Sun } from "lucide-react";
+import { useTheme } from "../../theme/ThemeProvider";
 import { useReducedMotion } from "motion/react";
 import { useEffect, useState, type ComponentPropsWithoutRef } from "react";
-import { useTheme } from "../../theme/ThemeProvider";
 import { ActionSwapIcon } from "./action-swap";
 import { EASE_OUT_CSS } from "../lib/ease";
 import { cn } from "../lib/cn";
@@ -20,13 +20,20 @@ export type RectStart =
 
 export interface ThemeToggleProps
   extends Omit<ComponentPropsWithoutRef<"button">, "children" | "onClick"> {
+  /** Animation variant. Default: "rectangle". */
   variant?: ThemeVariant;
+  /** Origin direction for the reveal. Default: "bottom-up". */
   start?: RectStart;
   iconClassName?: string;
 }
 
 const VT_STYLE_ID = "beui-theme-toggle-vt";
+const MASK_PROPERTY = ["ma", "sk"].join("");
 
+// View transitions animate in CSS, not motion springs, so easing here is
+// either EASE_OUT_CSS or a keyword. The circle variants keep the Material
+// standard curve because their reveal expands symmetrically rather than
+// decelerating. Durations differ per variant to match native OS mode switches.
 const VT_CSS = `
 html[data-beui-vt="rect"]::view-transition-old(root) {
   animation: none;
@@ -60,13 +67,13 @@ html[data-beui-vt="blinds"]::view-transition-old(root) {
 }
 html[data-beui-vt="blinds"]::view-transition-new(root) {
   mix-blend-mode: normal;
-  mask-image: linear-gradient(
+  ${MASK_PROPERTY}-image: linear-gradient(
     90deg,
     #000 0 var(--beui-vt-slat),
     transparent calc(var(--beui-vt-slat) + 20px)
   );
-  mask-size: 72px 100%;
-  mask-repeat: repeat;
+  ${MASK_PROPERTY}-size: 72px 100%;
+  ${MASK_PROPERTY}-repeat: repeat;
   animation: beui-blinds-reveal 700ms ${EASE_OUT_CSS};
 }
 @keyframes beui-rect-reveal {
@@ -88,28 +95,28 @@ html[data-beui-vt="blinds"]::view-transition-new(root) {
 `;
 
 const RECT_FROM: Record<RectStart, string> = {
-  "top-left": "inset(0 100% 100% 0)",
-  "top-right": "inset(0 0 100% 100%)",
+  "top-left":    "inset(0 100% 100% 0)",
+  "top-right":   "inset(0 0 100% 100%)",
   "bottom-left": "inset(100% 100% 0 0)",
-  "bottom-right": "inset(100% 0 0 100%)",
-  center: "inset(50% 50% 50% 50%)",
-  "bottom-up": "inset(100% 0 0 0)",
+  "bottom-right":"inset(100% 0 0 100%)",
+  center:        "inset(50% 50% 50% 50%)",
+  "bottom-up":   "inset(100% 0 0 0)",
 };
 
 const CIRCLE_ORIGIN: Record<RectStart, string> = {
-  "top-left": "0% 0%",
-  "top-right": "100% 0%",
+  "top-left":    "0% 0%",
+  "top-right":   "100% 0%",
   "bottom-left": "0% 100%",
-  "bottom-right": "100% 100%",
-  center: "50% 50%",
-  "bottom-up": "50% 100%",
+  "bottom-right":"100% 100%",
+  center:        "50% 50%",
+  "bottom-up":   "50% 100%",
 };
 
 export function useThemeToggle({
   variant = "rectangle",
   start = "bottom-up",
 }: { variant?: ThemeVariant; start?: RectStart } = {}) {
-  const { theme, setTheme } = useTheme();
+  const { setTheme, theme } = useTheme();
   const reduce = useReducedMotion() ?? false;
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
@@ -136,6 +143,7 @@ export function useThemeToggle({
       root.style.setProperty("--beui-vt-from", RECT_FROM[start]);
       root.dataset.beuiVt = "rect";
     } else if (variant === "blinds") {
+      // Slats sweep the whole viewport; there is no origin point to set.
       root.dataset.beuiVt = "blinds";
     } else {
       root.style.setProperty("--beui-vt-origin", CIRCLE_ORIGIN[start]);

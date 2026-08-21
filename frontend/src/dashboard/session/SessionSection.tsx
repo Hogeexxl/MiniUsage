@@ -8,10 +8,10 @@ export function SessionSection({ view, detail }: { view: SessionTableViewModel; 
   const refreshing = view.load_state === "refreshing";
   return (
     <section aria-labelledby="session-heading">
-      <div className="mb-3 flex min-w-0 flex-wrap items-center justify-between gap-3">
+      <div className="mb-3 flex min-w-0 flex-nowrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <h2 id="session-heading" className="m-0 text-sm font-medium leading-4 text-foreground">Session 记录</h2>
-          {refreshing ? <span className="text-[11px] leading-4 text-muted-foreground" aria-live="polite">更新中…</span> : null}
+          {refreshing ? <span className="text-xs leading-4 text-muted-foreground" aria-live="polite">更新中…</span> : null}
         </div>
         <SessionTableFooter
           page={view.page}

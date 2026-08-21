@@ -28,15 +28,18 @@ export function TableMenu({
 }) {
   const reduce = useReducedMotion();
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
+  const [coords, setCoords] = useState<{ top: number; left: number } | null>(
+    null,
+  );
   const open = coords !== null;
 
   useEffect(() => {
     if (!open) return;
     const close = () => setCoords(null);
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") close();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") close();
     };
+    // Close on any scroll (the trigger moves) or resize; fixed coords go stale.
     window.addEventListener("scroll", close, true);
     window.addEventListener("resize", close);
     window.addEventListener("keydown", onKey);
@@ -52,12 +55,12 @@ export function TableMenu({
       setCoords(null);
       return;
     }
-    const element = triggerRef.current;
-    if (!element) return;
-    const rect = element.getBoundingClientRect();
+    const el = triggerRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
     setCoords({
-      top: rect.bottom + 4,
-      left: Math.max(8, rect.right - MENU_WIDTH),
+      top: r.bottom + 4,
+      left: Math.max(8, r.right - MENU_WIDTH),
     });
   };
 
@@ -69,8 +72,8 @@ export function TableMenu({
         aria-label={ariaLabel}
         aria-haspopup="menu"
         aria-expanded={open}
-        onClick={(event) => {
-          event.stopPropagation();
+        onClick={(e) => {
+          e.stopPropagation();
           toggle();
         }}
         className={triggerClassName}
@@ -80,13 +83,20 @@ export function TableMenu({
       {open && typeof document !== "undefined"
         ? createPortal(
             <>
-              <div className="fixed inset-0 z-40" onPointerDown={() => setCoords(null)} />
+              <div
+                className="fixed inset-0 z-40"
+                onPointerDown={() => setCoords(null)}
+              />
               <motion.div
                 role="menu"
                 className="fixed z-50 overflow-hidden rounded-xl border border-border bg-background p-1 shadow-xl"
                 style={{ top: coords.top, left: coords.left, width: MENU_WIDTH }}
-                initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.96, y: -4 }}
-                animate={reduce ? { opacity: 1 } : { opacity: 1, scale: 1, y: 0 }}
+                initial={
+                  reduce ? { opacity: 0 } : { opacity: 0, scale: 0.96, y: -4 }
+                }
+                animate={
+                  reduce ? { opacity: 1 } : { opacity: 1, scale: 1, y: 0 }
+                }
                 transition={reduce ? { duration: 0 } : SPRING_PANEL}
               >
                 {items.map((item) => (
@@ -117,3 +127,4 @@ export function TableMenu({
     </>
   );
 }
+

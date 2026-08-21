@@ -1073,6 +1073,10 @@ pub(crate) fn cleanup_build_source(
         params![build_epoch, source_file_id],
     )?;
     transaction.execute(
+        "DELETE FROM skill_usage_events WHERE ledger_epoch=?1 AND source_file_id=?2",
+        params![build_epoch, source_file_id],
+    )?;
+    transaction.execute(
         "DELETE FROM turns WHERE ledger_epoch=?1 AND source_file_id=?2",
         params![build_epoch, source_file_id],
     )?;
@@ -2032,6 +2036,11 @@ mod tests {
         connection
             .execute_batch(include_str!(
                 "../storage/schema/0007_usage_context_and_estimated_cost.sql"
+            ))
+            .unwrap();
+        connection
+            .execute_batch(include_str!(
+                "../storage/schema/0009_skill_usage_events.sql"
             ))
             .unwrap();
         connection

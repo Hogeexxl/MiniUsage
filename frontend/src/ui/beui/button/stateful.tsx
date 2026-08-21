@@ -121,6 +121,7 @@ function TextSlot({
         {cascade
           ? label.split("").map((char, index) => (
               <span
+                // biome-ignore lint/suspicious/noArrayIndexKey: position is the slot identity.
                 key={index}
                 className="inline-block whitespace-pre"
               >
@@ -144,6 +145,7 @@ function TextSlot({
             >
               {label.split("").map((char, index) => (
                 <motion.span
+                  // biome-ignore lint/suspicious/noArrayIndexKey: position is the slot identity.
                   key={index}
                   custom={index * CASCADE_STAGGER}
                   variants={CASCADE_LETTER_VARIANTS}

@@ -1,4 +1,5 @@
 "use client";
+// beui.dev/components/motion/bouncy-accordion
 
 import {
   motion,
@@ -46,30 +47,39 @@ export interface BouncyAccordionProps {
   classNames?: BouncyAccordionClassNames;
 }
 
+// Local springs keep the accordion's connected groups moving together while
+// avoiding scale projection on text-heavy row contents.
+// Gap spring: must not overshoot y — positive y overshoot drifts items below
+// their mt-3 resting point and briefly overlaps the next item.
 const ROW_TRANSITION: Transition = {
   type: "spring",
   duration: 0.55,
   bounce: 0.38,
 };
+
 const CONTENT_OPEN_TRANSITION: Transition = {
   type: "spring",
   duration: 0.58,
   bounce: 0.32,
 };
+
 const CONTENT_CLOSE_TRANSITION: Transition = {
   type: "spring",
   duration: 0.46,
   bounce: 0.26,
 };
+
 const DESCRIPTION_TRANSITION: Transition = {
   duration: 0.18,
   ease: EASE_OUT,
 };
+
 const CHEVRON_TRANSITION: Transition = {
   type: "spring",
   duration: 0.42,
   bounce: 0.28,
 };
+
 
 function useControllableAccordionValue({
   value,
@@ -81,15 +91,20 @@ function useControllableAccordionValue({
   onValueChange?: (value: string | null) => void;
 }) {
   const [internalValue, setInternalValue] = useState(defaultValue ?? null);
-  const controlled = value !== undefined;
+  const isControlled = value !== undefined;
   const currentValue = value ?? internalValue;
+
   const setValue = useCallback(
     (next: string | null) => {
-      if (!controlled) setInternalValue(next);
+      if (!isControlled) {
+        setInternalValue(next);
+      }
+
       onValueChange?.(next);
     },
-    [controlled, onValueChange],
+    [isControlled, onValueChange],
   );
+
   return [currentValue, setValue] as const;
 }
 
@@ -122,11 +137,19 @@ function BouncyAccordionRow({
   useLayoutEffect(() => {
     const node = contentRef.current;
     if (!node) return;
-    const updateHeight = () => setContentHeight(node.offsetHeight);
+
+    const updateHeight = () => {
+      setContentHeight(node.offsetHeight);
+    };
+
     updateHeight();
+
     const observer = new ResizeObserver(updateHeight);
     observer.observe(node);
-    return () => observer.disconnect();
+
+    return () => {
+      observer.disconnect();
+    };
   }, []);
 
   return (
@@ -167,18 +190,31 @@ function BouncyAccordionRow({
           )}
         >
           {item.icon ? (
-            <span className={cn("grid h-7 w-7 shrink-0 place-items-center text-muted-foreground", classNames?.icon)}>
+            <span
+              className={cn(
+                "grid h-7 w-7 shrink-0 place-items-center text-muted-foreground",
+                classNames?.icon,
+              )}
+            >
               {item.icon}
             </span>
           ) : null}
-          <span className={cn("min-w-0 flex-1 truncate text-[15px] font-medium text-foreground", classNames?.title)}>
+          <span
+            className={cn(
+              "min-w-0 flex-1 truncate text-[15px] font-medium text-foreground",
+              classNames?.title,
+            )}
+          >
             {item.title}
           </span>
           <motion.span
             aria-hidden
             animate={{ rotate: open ? 180 : 0 }}
             transition={reduce ? { duration: 0 } : CHEVRON_TRANSITION}
-            className={cn("grid h-6 w-6 shrink-0 place-items-center text-muted-foreground", classNames?.chevron)}
+            className={cn(
+              "grid h-6 w-6 shrink-0 place-items-center text-muted-foreground",
+              classNames?.chevron,
+            )}
           >
             <ChevronDown className="h-4 w-4" />
           </motion.span>
@@ -193,16 +229,29 @@ function BouncyAccordionRow({
           inert={!open}
           initial={false}
           style={{ height: open && item.description ? contentHeight : 0 }}
-          transition={reduce ? { duration: 0 } : open ? CONTENT_OPEN_TRANSITION : CONTENT_CLOSE_TRANSITION}
+          transition={
+            reduce
+              ? { duration: 0 }
+              : open
+                ? CONTENT_OPEN_TRANSITION
+                : CONTENT_CLOSE_TRANSITION
+          }
           className={cn("overflow-hidden", classNames?.content)}
         >
           <motion.div
             ref={contentRef}
-            animate={{ opacity: open ? 1 : 0 }}
+            animate={{
+              opacity: open ? 1 : 0,
+            }}
             transition={reduce ? { duration: 0 } : DESCRIPTION_TRANSITION}
             className="px-5 pb-5"
           >
-            <div className={cn("text-[15px] leading-6 text-muted-foreground", classNames?.description)}>
+            <div
+              className={cn(
+                "text-[15px] leading-6 text-muted-foreground",
+                classNames?.description,
+              )}
+            >
               {item.description}
             </div>
           </motion.div>
@@ -233,9 +282,12 @@ export function BouncyAccordion({
   const toggleItem = useCallback(
     (id: string) => {
       if (activeValue === id) {
-        if (collapsible) setActiveValue(null);
+        if (collapsible) {
+          setActiveValue(null);
+        }
         return;
       }
+
       setActiveValue(id);
     },
     [activeValue, collapsible, setActiveValue],
@@ -252,6 +304,7 @@ export function BouncyAccordion({
         const separatedFromPrevious = index > 0 && (open || previousIsOpen);
         const contentId = `${baseId}-${item.id}-content`;
         const triggerId = `${baseId}-${item.id}-trigger`;
+
         return (
           <BouncyAccordionRow
             key={item.id}

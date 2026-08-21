@@ -535,10 +535,16 @@ impl<'connection> AggregateReader<'connection> {
         let total_sessions = session_count
             .checked_add(error_sessions)
             .ok_or(AggregateError::ArithmeticOverflow)?;
+        let cost_incomplete_session_count = incomplete_sessions
+            .checked_add(error_sessions)
+            .ok_or(AggregateError::ArithmeticOverflow)?;
+        if cost_incomplete_session_count < 0 || cost_incomplete_session_count > total_sessions {
+            return Err(AggregateError::InvariantViolation);
+        }
         Ok(UsageSummary {
             totals,
             session_count,
-            cost_incomplete_session_count: incomplete_sessions,
+            cost_incomplete_session_count,
             health: SessionHealthSummary {
                 total_sessions,
                 complete_sessions,
@@ -1748,90 +1754,6 @@ fn compare_sort_index_items(
     result.then_with(|| left.root_session_id.cmp(&right.root_session_id))
 }
 
-fn compare_sort_aggregates(
-    left: &SessionSortAggregate,
-    right: &SessionSortAggregate,
-    field: SessionSortField,
-    order: SessionSortOrder,
-) -> std::cmp::Ordering {
-    use std::cmp::Ordering;
-    let compare_optional = |left: Option<&str>, right: Option<&str>| match (left, right) {
-        (None, None) => Ordering::Equal,
-        (None, Some(_)) => Ordering::Greater,
-        (Some(_), None) => Ordering::Less,
-        (Some(left), Some(right)) => match order {
-            SessionSortOrder::Asc => left.cmp(right),
-            SessionSortOrder::Desc => right.cmp(left),
-        },
-    };
-    let compare_number = |left: i64, right: i64| match order {
-        SessionSortOrder::Asc => left.cmp(&right),
-        SessionSortOrder::Desc => right.cmp(&left),
-    };
-    let compare_optional_number = |left: Option<i64>, right: Option<i64>| match (left, right) {
-        (None, None) => Ordering::Equal,
-        (None, Some(_)) => Ordering::Greater,
-        (Some(_), None) => Ordering::Less,
-        (Some(left), Some(right)) => match order {
-            SessionSortOrder::Asc => left.cmp(&right),
-            SessionSortOrder::Desc => right.cmp(&left),
-        },
-    };
-    let compare_ratio = |left: Option<f64>, right: Option<f64>| match (left, right) {
-        (None, None) => Ordering::Equal,
-        (None, Some(_)) => Ordering::Greater,
-        (Some(_), None) => Ordering::Less,
-        (Some(left), Some(right)) => match order {
-            SessionSortOrder::Asc => left.total_cmp(&right),
-            SessionSortOrder::Desc => right.total_cmp(&left),
-        },
-    };
-    let ordering = match field {
-        SessionSortField::LastActivity => {
-            compare_number(left.last_activity_at_ms, right.last_activity_at_ms)
-        }
-        SessionSortField::Project => compare_optional(
-            left.project_name
-                .as_deref()
-                .or(left.project_path.as_deref()),
-            right
-                .project_name
-                .as_deref()
-                .or(right.project_path.as_deref()),
-        ),
-        SessionSortField::Model => compare_optional(
-            left.model_sort_key.as_deref(),
-            right.model_sort_key.as_deref(),
-        ),
-        SessionSortField::TotalTokens => {
-            compare_number(left.self_usage.total_tokens, right.self_usage.total_tokens)
-        }
-        SessionSortField::CombinedTotalTokens => compare_number(
-            left.inclusive_usage.total_tokens,
-            right.inclusive_usage.total_tokens,
-        ),
-        SessionSortField::CombinedEstimatedCost => compare_optional_number(
-            match left.inclusive_usage.cost_completeness {
-                CostCompleteness::Complete | CostCompleteness::Partial => {
-                    left.inclusive_usage.estimated_cost_nanos_usd
-                }
-                CostCompleteness::Empty | CostCompleteness::Unknown => None,
-            },
-            match right.inclusive_usage.cost_completeness {
-                CostCompleteness::Complete | CostCompleteness::Partial => {
-                    right.inclusive_usage.estimated_cost_nanos_usd
-                }
-                CostCompleteness::Empty | CostCompleteness::Unknown => None,
-            },
-        ),
-        SessionSortField::CacheHitRate => compare_ratio(
-            left.inclusive_usage.cache_hit_rate,
-            right.inclusive_usage.cache_hit_rate,
-        ),
-    };
-    ordering.then_with(|| left.root_session_id.cmp(&right.root_session_id))
-}
-
 struct AggregateRow {
     input_tokens: i64,
     cached_tokens: i64,
@@ -2165,6 +2087,119 @@ mod tests {
             .unwrap();
     }
 
+    fn summary_cost_fixture(incomplete: bool, error: bool) -> Connection {
+        let connection = fixture();
+        connection
+            .execute(
+                "UPDATE usage_events
+                 SET estimated_cost_nanos_usd=CASE event_id
+                     WHEN 'a-self' THEN 10
+                     WHEN 'a-child' THEN 20
+                     WHEN 'a-unknown' THEN 30
+                     WHEN 'b-self' THEN 40
+                 END
+                 WHERE event_id IN ('a-self','a-child','a-unknown','b-self')",
+                [],
+            )
+            .unwrap();
+        if incomplete {
+            connection
+                .execute(
+                    "UPDATE usage_events
+                     SET estimated_cost_nanos_usd=NULL
+                     WHERE event_id='a-unknown'",
+                    [],
+                )
+                .unwrap();
+        }
+        connection
+            .execute(
+                "INSERT INTO threads(
+                    thread_id,parent_thread_id,root_session_id,agent_role,title,
+                    project_name,project_path,project_kind
+                 ) VALUES ('root-c',NULL,'root-c','main','Root C','project-c',?1,'project')",
+                params![fixture_path("project/c")],
+            )
+            .unwrap();
+        insert_event(
+            &connection,
+            "c-self",
+            300,
+            "root-c",
+            "root-c",
+            "gpt-c",
+            100,
+            10,
+            Some(1),
+            10,
+            1,
+        );
+        connection
+            .execute(
+                "UPDATE usage_events
+                 SET estimated_cost_nanos_usd=30
+                 WHERE event_id='c-self'",
+                [],
+            )
+            .unwrap();
+        if error {
+            connection
+                .execute(
+                    "INSERT INTO threads(
+                        thread_id,parent_thread_id,root_session_id,agent_role,title,
+                        project_name,project_path,project_kind
+                     ) VALUES ('root-error',NULL,'root-error','main','Root Error',
+                               'project-error',?1,'project')",
+                    params![fixture_path("project/error")],
+                )
+                .unwrap();
+            connection
+                .execute(
+                    "INSERT INTO usage_session_quarantine(
+                        ledger_epoch,root_session_id,primary_error_code,last_activity_at_ms,
+                        first_seen_at_ms,updated_at_ms
+                     ) VALUES (7,'root-error','TEST_ERROR',350,350,350)",
+                    [],
+                )
+                .unwrap();
+        }
+        connection
+    }
+
+    fn assert_summary_cost_counts(
+        summary: &UsageSummary,
+        healthy: i64,
+        incomplete: i64,
+        error: i64,
+        complete_for_footer: i64,
+    ) {
+        assert_eq!(summary.session_count, healthy);
+        assert_eq!(summary.health.incomplete_sessions, incomplete);
+        assert_eq!(summary.health.error_sessions, error);
+        assert_eq!(
+            summary.health.complete_sessions,
+            healthy.checked_sub(incomplete).unwrap()
+        );
+        assert_eq!(
+            summary.health.total_sessions,
+            healthy.checked_add(error).unwrap()
+        );
+        assert_eq!(
+            summary.cost_incomplete_session_count,
+            incomplete.checked_add(error).unwrap()
+        );
+        assert!(summary.cost_incomplete_session_count >= 0);
+        assert!(summary.cost_incomplete_session_count <= summary.health.total_sessions);
+        assert_eq!(
+            summary
+                .health
+                .total_sessions
+                .checked_sub(summary.cost_incomplete_session_count)
+                .unwrap(),
+            complete_for_footer
+        );
+    }
+
     fn filter_fixture() -> Connection {
         let connection = Connection::open_in_memory().unwrap();
         let project_a = fixture_path("project/a");
@@ -2468,6 +2503,46 @@ mod tests {
         assert_eq!(exact.other_output_tokens, 800);
         assert_eq!(exact.cache_hit_rate, Some(0.18));
         assert_ne!(exact.cache_hit_rate, Some((0.9 + 0.1) / 2.0));
+    }
+
+    #[test]
+    fn t_s03_004_summary_cost_count_uses_all_root_sessions() {
+        for (
+            incomplete,
+            error,
+            expected_incomplete,
+            expected_error,
+            footer_complete,
+            footer_total,
+        ) in [
+            (false, false, 0_i64, 0_i64, 3_i64, 3_i64),
+            (true, false, 1_i64, 0_i64, 2_i64, 3_i64),
+            (true, true, 1_i64, 1_i64, 2_i64, 4_i64),
+        ] {
+            let connection = summary_cost_fixture(incomplete, error);
+            let summary = AggregateReader::new(&connection)
+                .summary(SummaryQuery::new(
+                    TimeRange::new(0, 400).unwrap(),
+                    UsageFilter::default(),
+                ))
+                .unwrap();
+            assert_summary_cost_counts(
+                &summary,
+                3,
+                expected_incomplete,
+                expected_error,
+                footer_complete,
+            );
+            assert_eq!(summary.health.total_sessions, footer_total);
+            assert_eq!(
+                summary
+                    .health
+                    .total_sessions
+                    .checked_sub(summary.cost_incomplete_session_count)
+                    .unwrap(),
+                footer_complete
+            );
+        }
     }
 
     #[test]

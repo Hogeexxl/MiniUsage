@@ -26,46 +26,57 @@ export function useColumnResize<T>({
   const [widths, setWidths] = useState<Record<string, number>>({});
 
   const startResize = useCallback(
-    (key: string, event: ReactPointerEvent) => {
-      event.preventDefault();
-      event.stopPropagation();
+    (key: string, e: ReactPointerEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      // Freeze every column to its current pixel width so resizing one only
+      // moves the trailing spacer, never the other columns.
       const snapshot = { ...widths };
       for (const column of orderedColumns) {
         if (snapshot[column.key] == null) {
-          const measured = thRefs.current[column.key]?.getBoundingClientRect().width;
-          snapshot[column.key] = measured ? Math.round(measured) : minColumnWidth;
+          const measured = thRefs.current[column.key]?.getBoundingClientRect()
+            .width;
+          snapshot[column.key] = measured
+            ? Math.round(measured)
+            : minColumnWidth;
         }
       }
       resizeRef.current = {
         key,
-        startX: event.clientX,
+        startX: e.clientX,
         startWidth: snapshot[key],
       };
       setWidths(snapshot);
-      capturePointer(event.currentTarget, event.pointerId);
+      capturePointer(e.currentTarget, e.pointerId);
     },
     [minColumnWidth, orderedColumns, thRefs, widths],
   );
 
   const moveResize = useCallback(
-    (event: ReactPointerEvent) => {
+    (e: ReactPointerEvent) => {
       const state = resizeRef.current;
       if (!state) return;
-      const width = Math.max(minColumnWidth, state.startWidth + (event.clientX - state.startX));
-      setWidths((previous) => ({ ...previous, [state.key]: width }));
+      const width = Math.max(
+        minColumnWidth,
+        state.startWidth + (e.clientX - state.startX),
+      );
+      setWidths((prev) => ({ ...prev, [state.key]: width }));
     },
     [minColumnWidth],
   );
 
   const endResize = useCallback(
-    (event: ReactPointerEvent) => {
+    (e: ReactPointerEvent) => {
       const state = resizeRef.current;
       resizeRef.current = null;
-      releasePointer(event.currentTarget, event.pointerId);
-      if (state) onColumnResize?.(state.key, widths[state.key] ?? state.startWidth);
+      releasePointer(e.currentTarget, e.pointerId);
+      if (state) {
+        onColumnResize?.(state.key, widths[state.key] ?? state.startWidth);
+      }
     },
     [onColumnResize, widths],
   );
 
   return { widths, startResize, moveResize, endResize };
 }
+

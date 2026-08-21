@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildDistribution, type DistributionItem } from "./distribution";
+import { chartSeriesColor } from "./chartPalette";
 
 const items: DistributionItem[] = Array.from({ length: 7 }, (_, index) => ({
   id: `m${index}`,
@@ -13,7 +14,7 @@ describe("distribution ranking", () => {
   it("uses Top 5 + Other for tokens", () => {
     const tokens = buildDistribution(items, "tokens");
     expect(tokens.segments).toHaveLength(6);
-    expect(tokens.segments.at(-1)?.label).toBe("其他");
+    expect(tokens.segments.at(-1)).toMatchObject({ id: "__other__", label: "其他", isOther: true });
     expect(tokens.total).toBe(items.reduce((sum, item) => sum + item.totalTokens, 0));
   });
 
@@ -21,6 +22,14 @@ describe("distribution ranking", () => {
     const cost = buildDistribution(items, "cost");
     expect(cost.segments.some((segment) => segment.id === "m6")).toBe(false);
     expect(cost.total).toBe(27);
-    expect(cost.segments.at(-1)).toMatchObject({ label: "其他", value: 2 });
+    expect(cost.segments.at(-1)).toMatchObject({ id: "__other__", label: "其他", value: 2, isOther: true });
+  });
+
+  it("[T-S06-003] maps ranked series to the shared palette and keeps Other neutral", () => {
+    expect(chartSeriesColor(0)).toBe("var(--chart-mint-a)");
+    expect(chartSeriesColor(4)).toBe("var(--chart-butter-a)");
+    expect(chartSeriesColor(5)).toBe("var(--chart-mint-b)");
+    expect(chartSeriesColor(9)).toBe("var(--chart-butter-b)");
+    expect(chartSeriesColor(0, true)).toBe("var(--chart-other)");
   });
 });

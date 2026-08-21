@@ -890,7 +890,6 @@ mod tests {
         Busy,
         Internal,
         SourceChanged,
-        Delay(Duration),
         BlockAfter,
     }
 
@@ -966,10 +965,7 @@ mod tests {
             };
             let (_, failure) = failures.remove(index).unwrap();
             drop(failures);
-            if let InjectedFailure::Delay(duration) = failure {
-                thread::sleep(duration);
-                Ok(false)
-            } else if failure == InjectedFailure::BlockAfter {
+            if failure == InjectedFailure::BlockAfter {
                 Ok(true)
             } else {
                 Err(injected_storage_error(failure))
@@ -1044,7 +1040,7 @@ mod tests {
             )),
             InjectedFailure::Internal => StorageError::invalid_state("injected lifecycle failure"),
             InjectedFailure::SourceChanged => StorageError::source_changed("old", "new"),
-            InjectedFailure::Delay(_) | InjectedFailure::BlockAfter => {
+            InjectedFailure::BlockAfter => {
                 unreachable!("test-only timing controls are not storage errors")
             }
         }

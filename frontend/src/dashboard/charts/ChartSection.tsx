@@ -32,8 +32,8 @@ export function ChartSection({ view }: { view: DashboardChartsView }) {
       <div className="grid grid-cols-2 gap-4 max-[1279px]:grid-cols-1">
         <DistributionDonutCard title="模型分布" items={modelItems} />
         <DistributionDonutCard title="项目分布" items={projectItems} />
+        <SkillsUsageChart className="col-span-2 max-[1279px]:col-span-1" response={view.skills} />
       </div>
-      <SkillsUsageChart response={view.skills} />
     </section>
   );
 }

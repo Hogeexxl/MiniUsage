@@ -4,7 +4,7 @@ use std::convert::TryFrom;
 
 use crate::usage::NormalizedTokenUsage;
 
-use super::{ContextTier, ModelPricing, UsageCostGranularity};
+use super::{ContextTier, UsageCostGranularity, pricing::ModelPricing};
 
 /// The four billable components and their total, in USD nanodollars.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -38,9 +38,6 @@ pub enum CostEstimationError {
     InvalidPricing,
     ArithmeticOverflow,
 }
-
-/// Backwards-compatible short name for callers that prefer “estimate error”.
-pub type CostEstimateError = CostEstimationError;
 
 /// Stateless estimator for one normalized usage value.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -135,21 +132,6 @@ impl CostEstimator {
         Ok(CostEstimateOutcome::Known(estimated))
     }
 
-    /// Estimate after an exact repository lookup. A missing pricing rule is
-    /// represented as `UnknownModel` and never receives fallback rates.
-    pub fn estimate_optional(
-        usage: &NormalizedTokenUsage,
-        pricing: Option<&ModelPricing>,
-        granularity: UsageCostGranularity,
-    ) -> Result<CostEstimateOutcome, CostEstimationError> {
-        match pricing {
-            Some(pricing) => Self::estimate(usage, pricing, granularity),
-            None => Ok(CostEstimateOutcome::Unknown(
-                UnknownCostReason::UnknownModel,
-            )),
-        }
-    }
-
     /// Instance-oriented spelling for callers that keep an estimator value.
     pub fn estimate_with(
         &self,
@@ -199,7 +181,7 @@ fn to_non_negative_i64(value: i128) -> Result<i64, CostEstimationError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cost::{TokenRates, pricing::GPT_5_6_SOL_PRICING};
+    use crate::cost::pricing::{GPT_5_6_SOL_PRICING, TokenRates};
 
     fn usage(
         input_tokens: i64,

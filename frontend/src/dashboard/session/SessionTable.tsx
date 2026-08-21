@@ -23,6 +23,11 @@ type SessionTableProps = {
   onSort: (sortBy: SessionSortField) => void;
 };
 
+const TABLE_ROW_HEIGHT = 48;
+const TABLE_PAGE_SIZE = 15;
+const TABLE_EMPTY_HEIGHT = 192;
+const TABLE_INITIAL_LOADING_HEIGHT = 720;
+
 export const sortableColumns: Array<{ field: SessionSortField; label: string }> = [
   { field: "last_activity", label: "最后活动" },
   { field: "project", label: "项目" },
@@ -44,7 +49,17 @@ export function SessionTable({
   sortOrder,
   onSort,
 }: SessionTableProps) {
-  const loading = loadState === "initial" || loadState === "loading" || pageState === "loading";
+  const loading =
+    loadState === "initial" ||
+    loadState === "loading" ||
+    loadState === "refreshing" ||
+    pageState === "loading";
+  const tableHeight =
+    rows.length === 0
+      ? loading
+        ? TABLE_INITIAL_LOADING_HEIGHT
+        : TABLE_EMPTY_HEIGHT
+      : TABLE_ROW_HEIGHT * (Math.min(rows.length, TABLE_PAGE_SIZE) + 1);
   const columns: TableColumn<SessionItemDto>[] = [
     {
       key: "last_activity",
@@ -92,7 +107,7 @@ export function SessionTable({
     {
       key: "model",
       header: "模型",
-      width: "166px",
+      width: "150px",
       sortable: true,
       cell: (item) => {
         const model = formatSessionModel(item.models_used);
@@ -106,8 +121,8 @@ export function SessionTable({
       sortable: true,
       align: "right",
       cell: (item) => item.self_usage
-        ? <span title={String(item.self_usage.total_tokens)}>{formatSessionTokenInteger(item.self_usage.total_tokens).text}</span>
-        : "—",
+        ? <span className="tabular-nums" title={String(item.self_usage.total_tokens)}>{formatSessionTokenInteger(item.self_usage.total_tokens).text}</span>
+        : <span className="tabular-nums">—</span>,
     },
     {
       key: "combined_total_tokens",
@@ -116,28 +131,28 @@ export function SessionTable({
       sortable: true,
       align: "right",
       cell: (item) => item.inclusive_usage
-        ? <span title={String(item.inclusive_usage.total_tokens)}>{formatSessionTokenInteger(item.inclusive_usage.total_tokens).text}</span>
-        : "—",
+        ? <span className="tabular-nums" title={String(item.inclusive_usage.total_tokens)}>{formatSessionTokenInteger(item.inclusive_usage.total_tokens).text}</span>
+        : <span className="tabular-nums">—</span>,
     },
     {
       key: "cache_hit_rate",
       header: "缓存命中率",
-      width: "96px",
+      width: "112px",
       sortable: true,
       align: "right",
       cell: (item) => item.inclusive_usage
-        ? <span title={formatRatio(item.inclusive_usage.cache_hit_rate).title}>{formatRatio(item.inclusive_usage.cache_hit_rate).text}</span>
-        : "—",
+        ? <span className="tabular-nums" title={formatRatio(item.inclusive_usage.cache_hit_rate).title}>{formatRatio(item.inclusive_usage.cache_hit_rate).text}</span>
+        : <span className="tabular-nums">—</span>,
     },
     {
       key: "combined_estimated_cost",
       header: "合计费用",
-      width: "112px",
+      width: "96px",
       sortable: true,
       align: "right",
       cell: (item) => item.data_status === "error"
-        ? "—"
-        : <span title={formatCost(item.inclusive_usage?.estimated_cost ?? null).title}>{formatCost(item.inclusive_usage?.estimated_cost ?? null).text}</span>,
+        ? <span className="tabular-nums">—</span>
+        : <span className="tabular-nums" title={formatCost(item.inclusive_usage?.estimated_cost ?? null).title}>{formatCost(item.inclusive_usage?.estimated_cost ?? null).text}</span>,
     },
   ];
 
@@ -148,8 +163,8 @@ export function SessionTable({
       data={rows}
       columns={columns}
       getRowId={(row) => row.root_session_id}
-      rowHeight={48}
-      height={48 * 16}
+      rowHeight={TABLE_ROW_HEIGHT}
+      height={tableHeight}
       loading={loading}
       skeletonRows={15}
       emptyState="当前时间范围暂无 Session 记录"
@@ -159,7 +174,7 @@ export function SessionTable({
       selectable={false}
       resizable={false}
       reorderable={false}
-      className="rounded-2xl bg-card"
+      className="rounded-2xl"
       getRowProps={(item) => {
         const error = item.data_status === "error";
         const activate = () => {
