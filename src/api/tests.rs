@@ -1,5 +1,6 @@
 use super::*;
 
+use std::path::Path;
 use std::sync::{
     Arc, Mutex as StdMutex,
     atomic::{AtomicUsize, Ordering},
@@ -15,6 +16,9 @@ use tokio::sync::{Mutex, Notify};
 use tower::ServiceExt;
 
 use crate::{
+    codex::quota::{
+        CodexQuotaService, CodexQuotaStatus, QuotaFetchError, QuotaProvider, ReadyPayload,
+    },
     platform::browser::{BrowserError, BrowserOpener},
     update::{ReleaseInfo, ReleaseProvider, UpdateFailureKind, UpdateService},
 };
@@ -58,6 +62,43 @@ struct BlockingProvider {
     proceed: Arc<Notify>,
 }
 
+#[derive(Clone)]
+struct QuotaFixtureProvider {
+    calls: Arc<AtomicUsize>,
+    payload: ReadyPayload,
+}
+
+impl QuotaProvider for QuotaFixtureProvider {
+    fn fetch<'a>(
+        &'a self,
+        _auth_path: &'a Path,
+        _now_ms: i64,
+    ) -> BoxFuture<'a, Result<ReadyPayload, QuotaFetchError>> {
+        async move {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            Ok(self.payload.clone())
+        }
+        .boxed()
+    }
+}
+
+fn quota_fixture_provider() -> QuotaFixtureProvider {
+    QuotaFixtureProvider {
+        calls: Arc::new(AtomicUsize::new(0)),
+        payload: ReadyPayload {
+            account_email: Some("hoge@example.com".to_owned()),
+            plan_type: Some("prolite".to_owned()),
+            weekly: crate::codex::quota::CodexWeeklyQuota {
+                used_percent: 55.0,
+                remaining_percent: 45.0,
+                limit_window_seconds: 604_800,
+                reset_at_ms: Some(1_700_000_120_000),
+            },
+            reset_credits_available: Some(2),
+        },
+    }
+}
+
 impl ReleaseProvider for BlockingProvider {
     fn fetch_latest(&self) -> BoxFuture<'_, Result<ReleaseInfo, UpdateFailureKind>> {
         async move {
@@ -95,6 +136,53 @@ fn fixed_service(provider: Arc<dyn ReleaseProvider>) -> Arc<UpdateService> {
 
 async fn json_body(response: axum::response::Response) -> Value {
     serde_json::from_slice(&to_bytes(response.into_body(), 64 * 1024).await.unwrap()).unwrap()
+}
+
+#[tokio::test]
+async fn t_q_004_quota_refresh_isolated_from_scanner_refresh_and_ledger_state() {
+    let provider = quota_fixture_provider();
+    let calls = Arc::clone(&provider.calls);
+    let service = CodexQuotaService::with_provider_and_clock(
+        "/tmp/codex-quota-api-test",
+        Arc::new(provider),
+        Arc::new(|| 1_700_000_000_000),
+    );
+    let fixture = support::ApiFixture::with_quota_service("quota-isolation", service.clone());
+
+    let loading = fixture.call(Method::GET, "/api/codex/quota", &[]).await;
+    assert_eq!(loading.status(), StatusCode::OK);
+    assert_eq!(json_body(loading).await["status"], "loading");
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+
+    let before = fixture.ledger.app_state().unwrap();
+    let ready = service.refresh_now().await;
+    assert_eq!(ready.status, CodexQuotaStatus::Ready);
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    let after = fixture.ledger.app_state().unwrap();
+    assert_eq!(before.data_revision, after.data_revision);
+    assert_eq!(before.scan.status_revision, after.scan.status_revision);
+    assert_eq!(
+        before.scan.last_scan_started_at_ms,
+        after.scan.last_scan_started_at_ms
+    );
+    assert_eq!(
+        before.scan.last_scan_completed_at_ms,
+        after.scan.last_scan_completed_at_ms
+    );
+
+    let refreshed = fixture
+        .call(
+            Method::POST,
+            "/api/refresh",
+            &[("x-miniusage-request", "1")],
+        )
+        .await;
+    assert!(matches!(
+        refreshed.status(),
+        StatusCode::OK | StatusCode::ACCEPTED
+    ));
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    fixture.scanner.shutdown().unwrap();
 }
 
 #[tokio::test]

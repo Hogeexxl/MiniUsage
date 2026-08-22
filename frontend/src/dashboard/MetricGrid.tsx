@@ -2,18 +2,19 @@ import { CircleAlert } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { memo, useState } from "react";
 
-import type { SummaryUsageDto } from "../data/types";
+import type { CodexQuotaResponse, SummaryUsageDto } from "../data/types";
+import { chartMuted, chartSeriesColor } from "./charts/chartPalette";
 import { EASE_OUT } from "../ui/lib/ease";
 import { NumberTicker } from "../ui/beui/number-ticker";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/beui/popover";
 import { TiltCard } from "../ui/beui/tilt-card";
-import { formatCostFull, formatIntegerFull, formatRatio, type FormattedValue } from "./format";
+import { formatCodexPlanType, formatCodexResetTime, formatCostFull, formatIntegerFull, formatRatio, type FormattedValue } from "./format";
 
-type MetricGridProps = { usage: SummaryUsageDto | null; modelFilterActive: boolean };
+type MetricGridProps = { usage: SummaryUsageDto | null; modelFilterActive: boolean; quota?: CodexQuotaResponse };
 type Focus = "input" | "output" | "reasoning" | null;
 type CacheFocus = "cached" | "input" | null;
 
-const CARD = "h-36 border border-border bg-card p-5 text-foreground";
+const CARD = "h-36 min-w-0 border border-border bg-card p-5 text-foreground";
 const TITLE = "text-xs font-medium leading-4 text-muted-foreground";
 const VALUE = "mt-1 text-[28px] font-semibold leading-8 tracking-tight text-foreground";
 const LEGEND = "text-xs leading-4 text-muted-foreground";
@@ -59,7 +60,7 @@ function TotalTokenMetric({ usage }: { usage: SummaryUsageDto }) {
   const transition = reduce ? { duration: 0 } : { ease: EASE_OUT };
 
   return (
-    <TiltCard className={`${CARD} min-w-0 max-[1279px]:col-span-2 max-[767px]:col-span-1`}>
+    <TiltCard className={`${CARD} min-w-0 max-[1439px]:col-span-2 max-[767px]:col-span-1`}>
       <div className={TITLE}>总 Token</div>
       <CompactTicker value={total} formatter={formatIntegerFull} />
       <div className="relative mt-2 h-[5px] overflow-hidden rounded-full bg-muted" aria-label="输入与输出 Token 构成；推理 Token 包含在输出 Token 中">
@@ -169,9 +170,64 @@ function EstimatedCostMetric({ usage }: { usage: SummaryUsageDto }) {
   );
 }
 
+export function codexQuotaColor(remainingPercent: number): string {
+  if (remainingPercent >= 60) return chartSeriesColor(8);
+  if (remainingPercent >= 20) return chartSeriesColor(5);
+  return chartSeriesColor(9);
+}
+
+function CodexQuotaCard({ quota }: { quota: CodexQuotaResponse }) {
+  if (quota.status === "loading") return <SkeletonCard bar />;
+
+  const weekly = quota.status === "ready" ? quota.weekly : null;
+  if (weekly === null) {
+    return (
+      <TiltCard className={`${CARD} flex flex-col`}>
+        <div className={TITLE}>剩余配额</div>
+        <div className={VALUE}>—</div>
+        <div className={`${LEGEND} mt-auto`}>暂时无法获取配额</div>
+      </TiltCard>
+    );
+  }
+
+  const plan = formatCodexPlanType(quota.plan_type);
+  const email = quota.account_email || "—";
+  const resetCredits = quota.reset_credits_available === null ? "—" : `${quota.reset_credits_available} 次`;
+  const remaining = Math.round(weekly.remaining_percent);
+
+  return (
+    <TiltCard className={`${CARD} flex flex-col`}>
+      <div className="flex min-w-0 items-center justify-between gap-2">
+        <div className={`${TITLE} min-w-0`}>剩余配额</div>
+        <Popover trigger="hover" side="bottom" align="end">
+          <PopoverTrigger>
+            <button type="button" className="min-w-0 truncate text-xs font-medium leading-4 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+              {plan}
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-max max-w-64 text-xs">
+            <div className="flex flex-col gap-1">
+              <div>{email}</div>
+              <div>重置卡：{resetCredits}</div>
+            </div>
+          </PopoverContent>
+        </Popover>
+      </div>
+      <span className={VALUE} title={`${remaining}%`} aria-label={`${remaining}%`}>
+        <NumberTicker value={weekly.remaining_percent} blur format={(value) => `${value}%`} />
+      </span>
+      <div className="relative mt-2 h-[5px] overflow-hidden rounded-full bg-muted" aria-label="剩余与已使用配额">
+        <div className="absolute inset-y-0 left-0" style={{ width: `${weekly.remaining_percent}%`, backgroundColor: codexQuotaColor(weekly.remaining_percent) }} />
+        <div className="absolute inset-y-0 right-0" style={{ width: `${100 - weekly.remaining_percent}%`, backgroundColor: chartMuted }} />
+      </div>
+      <div className={`${LEGEND} mt-auto`}>下次重置 · {formatCodexResetTime(weekly.reset_at_ms)}</div>
+    </TiltCard>
+  );
+}
+
 function SkeletonCard({ wide = false, bar = false }: { wide?: boolean; bar?: boolean }) {
   return (
-    <div aria-hidden className={`h-36 animate-pulse rounded-2xl border border-border bg-card p-5 ${wide ? "min-w-0 max-[1279px]:col-span-2 max-[767px]:col-span-1" : ""}`}>
+      <div aria-hidden className={`h-36 animate-pulse rounded-2xl border border-border bg-card p-5 ${wide ? "min-w-0 max-[1439px]:col-span-2 max-[767px]:col-span-1" : ""}`}>
       <div className="h-3 w-20 rounded bg-muted" />
       <div className="mt-3 h-8 w-28 rounded bg-muted" />
       {bar ? <div className="mt-3 h-[5px] rounded-full bg-muted" /> : null}
@@ -179,15 +235,29 @@ function SkeletonCard({ wide = false, bar = false }: { wide?: boolean; bar?: boo
   );
 }
 
-export const MetricGrid = memo(function MetricGrid({ usage, modelFilterActive }: MetricGridProps) {
+const LOADING_QUOTA: CodexQuotaResponse = {
+  status: "loading",
+  account_email: null,
+  plan_type: null,
+  weekly: null,
+  reset_credits_available: null,
+  fetched_at_ms: null,
+};
+
+export const MetricGrid = memo(function MetricGrid({ usage, modelFilterActive, quota = LOADING_QUOTA }: MetricGridProps) {
+  const columns = modelFilterActive
+    ? "[grid-template-columns:minmax(0,1fr)_repeat(3,236px)]"
+    : "[grid-template-columns:minmax(0,1fr)_repeat(4,236px)]";
+
   return (
-    <div className="grid gap-4 [grid-template-columns:minmax(488px,1fr)_repeat(3,236px)] max-[1279px]:[grid-template-columns:minmax(0,1fr)_236px] max-[767px]:grid-cols-1" aria-label={usage ? "KPI 指标" : "KPI 加载中"}>
+    <div className={`grid gap-4 ${columns} max-[1439px]:[grid-template-columns:minmax(0,1fr)_236px] max-[767px]:grid-cols-1`} aria-label={usage ? "KPI 指标" : "KPI 加载中"}>
       {!usage ? (
         <>
           <SkeletonCard wide bar />
           <SkeletonCard bar />
           {!modelFilterActive ? <SkeletonCard /> : null}
           <SkeletonCard />
+          <SkeletonCard bar />
         </>
       ) : (
         <>
@@ -195,6 +265,7 @@ export const MetricGrid = memo(function MetricGrid({ usage, modelFilterActive }:
           <CacheHitMetric usage={usage} />
           {!modelFilterActive ? <SessionCountMetric usage={usage} /> : null}
           <EstimatedCostMetric usage={usage} />
+          <CodexQuotaCard quota={quota} />
         </>
       )}
     </div>

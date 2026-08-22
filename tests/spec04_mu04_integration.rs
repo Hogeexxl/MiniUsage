@@ -13,6 +13,7 @@ use axum::{
 };
 use mini_usage::{
     api::{AppContext, QueryApi},
+    codex::quota::CodexQuotaService,
     domain::{ScanResult, ScanTrigger},
     platform::browser::SystemBrowser,
     scanner::{CodexMetadata, RequestDisposition, ScanConfig, ScanCoordinator, ScanHandle},
@@ -105,10 +106,12 @@ impl Fixture {
     }
 
     fn router(&self, ledger: Arc<Ledger>, scanner: ScanHandle) -> Router {
+        let codex_quota_service = CodexQuotaService::unavailable(ledger.codex_home());
         QueryApi::router(
             AppContext {
                 ledger,
                 scanner,
+                codex_quota_service,
                 update_service: UpdateService::unavailable(),
                 browser_opener: Arc::new(SystemBrowser),
             },

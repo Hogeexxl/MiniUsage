@@ -51,6 +51,7 @@ impl SourceAvailability {
 
 pub mod global_state;
 pub mod metadata;
+pub mod quota;
 pub mod rollout;
 pub mod session_index;
 mod skill_usage;

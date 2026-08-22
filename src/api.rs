@@ -23,6 +23,7 @@ use futures_util::stream;
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    codex::quota::{CodexQuotaResponse, CodexQuotaService},
     platform::browser::BrowserOpener,
     range::{RangeKey, resolve_day_buckets, resolve_system_range},
     scanner::{CommitFailureKind, ScanHandle, ScanShutdownError},
@@ -48,6 +49,7 @@ const REFRESH_HEADER: &str = "x-miniusage-request";
 pub struct AppContext {
     pub ledger: Arc<Ledger>,
     pub scanner: ScanHandle,
+    pub codex_quota_service: Arc<CodexQuotaService>,
     pub update_service: Arc<UpdateService>,
     pub browser_opener: Arc<dyn BrowserOpener>,
 }
@@ -85,14 +87,6 @@ impl QueryApi {
         static_dir: impl Into<PathBuf>,
         process_shutdown: ProcessShutdown,
     ) -> Result<Router, ApiError> {
-        Self::router_with_static_dir_and_shutdown(context, static_dir, process_shutdown)
-    }
-
-    pub fn router_with_static_dir_and_shutdown(
-        context: AppContext,
-        static_dir: impl Into<PathBuf>,
-        process_shutdown: ProcessShutdown,
-    ) -> Result<Router, ApiError> {
         let static_dir = static_dir.into();
         let state = ApiState {
             context,
@@ -102,6 +96,14 @@ impl QueryApi {
             state,
             static_assets::FrontendSource::Filesystem(static_dir),
         ))
+    }
+
+    pub fn router_with_static_dir_and_shutdown(
+        context: AppContext,
+        static_dir: impl Into<PathBuf>,
+        process_shutdown: ProcessShutdown,
+    ) -> Result<Router, ApiError> {
+        Self::router_with_shutdown(context, static_dir, process_shutdown)
     }
 
     #[cfg(feature = "embedded-frontend")]
@@ -161,6 +163,7 @@ pub const fn listen_address() -> SocketAddr {
 fn build_router(state: ApiState, frontend: static_assets::FrontendSource) -> Router {
     let api = Router::new()
         .route("/health", get(health))
+        .route("/codex/quota", get(codex_quota))
         .route("/revision", get(revision))
         .route("/status", get(status))
         .route("/usage/summary", get(summary))
@@ -199,6 +202,10 @@ async fn health() -> Response {
     );
     headers.insert(APP_VERSION_HEADER, HeaderValue::from_static(APP_VERSION));
     response
+}
+
+async fn codex_quota(State(state): State<ApiState>) -> Json<CodexQuotaResponse> {
+    Json(state.context.codex_quota_service.snapshot())
 }
 
 #[derive(Deserialize)]

@@ -44,6 +44,22 @@ export type SummaryResponse = {
   usage: SummaryUsageDto;
 };
 
+export type CodexWeeklyQuotaDto = {
+  used_percent: number;
+  remaining_percent: number;
+  limit_window_seconds: number;
+  reset_at_ms: number | null;
+};
+
+export type CodexQuotaResponse = {
+  status: "loading" | "ready" | "auth_required" | "unavailable";
+  account_email: string | null;
+  plan_type: string | null;
+  weekly: CodexWeeklyQuotaDto | null;
+  reset_credits_available: number | null;
+  fetched_at_ms: number | null;
+};
+
 export type ProjectFilterOption =
   | { kind: "project"; project_name: string; project_path: string }
   | { kind: "projectless" }

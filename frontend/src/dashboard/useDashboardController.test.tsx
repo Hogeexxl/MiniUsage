@@ -62,6 +62,14 @@ function fakeEvents() {
 function clientWith(overrides: Partial<MiniUsageClient> = {}): MiniUsageClient {
   return {
     filterOptions: vi.fn(async () => ({ data_revision: 1, models: [], projects: [] })),
+    codexQuota: vi.fn(async () => ({
+      status: "unavailable" as const,
+      account_email: null,
+      plan_type: null,
+      weekly: null,
+      reset_credits_available: null,
+      fetched_at_ms: null,
+    })),
     summary: vi.fn(async (range) => summary(range)),
     modelDistribution: vi.fn(),
     projectDistribution: vi.fn(),

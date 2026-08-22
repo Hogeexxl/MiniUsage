@@ -13,6 +13,7 @@ use axum::{
 
 use mini_usage::{
     api::{AppContext, QueryApi},
+    codex::quota::CodexQuotaService,
     domain::{ScanResult, ScanTrigger},
     platform::browser::SystemBrowser,
     platform::file_identity,
@@ -951,10 +952,12 @@ async fn t_mu03_s03_usage_v3_to_v5_rebuild_uses_rollout_effort_and_preserves_tok
     let static_dir = fixture._root.path().join("static");
     fs::create_dir_all(&static_dir).unwrap();
     fs::write(static_dir.join("index.html"), "<html>s03</html>").unwrap();
+    let codex_quota_service = CodexQuotaService::unavailable(ledger.codex_home());
     let app = QueryApi::router(
         AppContext {
             ledger: Arc::clone(&ledger),
             scanner: scanner.clone(),
+            codex_quota_service,
             update_service: UpdateService::unavailable(),
             browser_opener: Arc::new(SystemBrowser),
         },

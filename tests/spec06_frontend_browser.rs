@@ -11,6 +11,7 @@ use std::{
 use axum::serve;
 use mini_usage::{
     api::{AppContext, QueryApi},
+    codex::quota::CodexQuotaService,
     domain::ScanResult,
     platform::browser::SystemBrowser,
     platform::file_identity,
@@ -132,6 +133,7 @@ async fn serve_fixture(
             AppContext {
                 ledger: Arc::clone(&ledger),
                 scanner: scanner.clone(),
+                codex_quota_service: CodexQuotaService::unavailable(ledger.codex_home()),
                 update_service: UpdateService::unavailable(),
                 browser_opener: Arc::new(SystemBrowser),
             },

@@ -18,6 +18,7 @@ import { useSessionDetailController } from "./session/useSessionDetailController
 import { useSessionTableController } from "./session/useSessionTableController";
 import { SyncButton } from "./SyncButton";
 import { UpdateButton } from "./UpdateButton";
+import { useCodexQuotaController } from "./useCodexQuotaController";
 import { useDashboardController, type DashboardControllerOptions } from "./useDashboardController";
 
 const LazySessionDetailDrawer = lazy(() =>
@@ -48,6 +49,7 @@ export function DashboardPage({ options }: { options?: DashboardPageOptions }) {
     });
   }
   const view = useDashboardController({ ...options, revisionFeed: feedRef.current });
+  const quota = useCodexQuotaController({ client: options?.client });
   const sessionScope = resolveDashboardScope(DASHBOARD_SCOPE_POLICIES.sessions, view.range, view.filters);
   const sessions = useSessionTableController(sessionScope.range, sessionScope.filters, { client: options?.client, revisionFeed: feedRef.current });
   const detail = useSessionDetailController(sessionScope.range, sessionScope.filters, {
@@ -120,7 +122,7 @@ export function DashboardPage({ options }: { options?: DashboardPageOptions }) {
           </section>
 
           <section className="metrics-section" aria-label="关键指标" aria-busy={loading}>
-            <MetricGrid usage={view.metrics} modelFilterActive={view.modelFilterActive} />
+            <MetricGrid usage={view.metrics} modelFilterActive={view.modelFilterActive} quota={quota} />
           </section>
           <SessionSection view={sessions} detail={detail} />
           <ChartSection view={charts} />

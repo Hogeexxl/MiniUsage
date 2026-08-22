@@ -204,6 +204,19 @@ async function json(route: Route, body: unknown) {
 
 async function routeStableDashboardData(page: Page) {
   await page.route("**/api/events*", (route) => route.abort());
+  await page.route("**/api/codex/quota", (route) => json(route, {
+    status: "ready",
+    account_email: "hoge@example.com",
+    plan_type: "prolite",
+    weekly: {
+      used_percent: 55,
+      remaining_percent: 45,
+      limit_window_seconds: 604800,
+      reset_at_ms: Date.UTC(2026, 7, 12, 4, 23),
+    },
+    reset_credits_available: 2,
+    fetched_at_ms: Date.UTC(2026, 7, 1),
+  }));
   await page.route("**/api/revision*", (route) => json(route, { data_revision: REVISION, status_revision: 1 }));
   await page.route("**/api/status*", (route) => json(route, {
     data_revision: REVISION,
@@ -365,7 +378,7 @@ test("C1 desktop 1512px matches the approved v0.2.0 dashboard geometry", async (
   const topLevelStack = content.locator(":scope > div.flex.flex-col.gap-8").first();
   const kpi = page.getByLabel("KPI 指标");
   const cards = kpi.locator(":scope > *");
-  await expect(cards).toHaveCount(4);
+  await expect(cards).toHaveCount(5);
   await expect(topLevelStack.locator(":scope > *")).toHaveCount(5);
 
   const topLevelBoxes = await topLevelStack.locator(":scope > *").evaluateAll((nodes) => nodes.map((node) => {
@@ -391,8 +404,8 @@ test("C1 desktop 1512px matches the approved v0.2.0 dashboard geometry", async (
     const rect = node.getBoundingClientRect();
     return { width: rect.width, height: rect.height, x: rect.x };
   }));
-  expect(cardBoxes.map((box) => Math.round(box.width))).toEqual([556, 236, 236, 236]);
-  expect(cardBoxes.map((box) => Math.round(box.height))).toEqual([144, 144, 144, 144]);
+  expect(cardBoxes.map((box) => Math.round(box.width))).toEqual([304, 236, 236, 236, 236]);
+  expect(cardBoxes.map((box) => Math.round(box.height))).toEqual([144, 144, 144, 144, 144]);
   expect(Math.round(cardBoxes[1].x - (cardBoxes[0].x + cardBoxes[0].width))).toBe(16);
 
   const chartSection = page.getByLabel("使用分布图表");
@@ -451,7 +464,7 @@ test("C2 covers the approved v0.2.0 core interaction flow", async ({ page }) => 
   await page.getByRole("button", { name: "模型筛选，全部" }).click();
   await page.getByRole("checkbox", { name: "gpt-5" }).click();
   await page.keyboard.press("Escape");
-  await expect(kpi.locator(":scope > *")).toHaveCount(3);
+  await expect(kpi.locator(":scope > *")).toHaveCount(4);
   await expect(kpi.locator('span[title="1400"]')).toHaveCount(1);
 
   await page.getByRole("button", { name: "项目筛选，全部" }).click();
@@ -516,7 +529,7 @@ test("C3 narrow viewport wraps KPI and Donuts, scrolls only the Table, and makes
   await waitForDashboard(page);
 
   const kpiCards = page.getByLabel("KPI 指标").locator(":scope > *");
-  await expect(kpiCards).toHaveCount(4);
+  await expect(kpiCards).toHaveCount(5);
   const kpiColumns = await kpiCards.evaluateAll((nodes) => new Set(nodes.map((node) => Math.round(node.getBoundingClientRect().x))).size);
   expect(kpiColumns).toBe(1);
 
@@ -548,4 +561,29 @@ test("C3 narrow viewport wraps KPI and Donuts, scrolls only the Table, and makes
   await dialog.getByRole("button", { name: "关闭 Session 详情" }).click();
   await expect(dialog).toBeHidden();
   expect(await illegalStorageWrites(page)).toBe(0);
+});
+
+test("T-Q-008 Codex Quota stays last, fixed-width, and overflow-free at required viewports", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await routeStableDashboardData(page);
+  await page.goto("/");
+  await waitForDashboard(page);
+
+  const kpi = page.getByLabel("KPI 指标");
+  const cards = kpi.locator(":scope > *");
+  await expect(cards).toHaveCount(5);
+  await expect(cards.last().getByText("剩余配额")).toBeVisible();
+  const cardWidths = await cards.evaluateAll((nodes) => nodes.map((node) => Math.round(node.getBoundingClientRect().width)));
+  expect(cardWidths.slice(1)).toEqual([236, 236, 236, 236]);
+  expect(cardWidths[0]).toBeLessThan(236);
+
+  await cards.last().getByRole("button", { name: "Pro 5x", exact: true }).hover();
+  await expect(page.getByRole("dialog")).toContainText("hoge@example.com");
+  await expect(page.getByRole("dialog")).toContainText("重置卡：2 次");
+
+  for (const width of [1280, 767]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    await expect.poll(() => page.evaluate(() => document.body.scrollWidth)).toBeLessThanOrEqual(width);
+  }
 });

@@ -6,6 +6,7 @@ import { createRevisionFeed, type RevisionEventSource } from "./revisionFeed";
 function clientWithRevision(revision: number): MiniUsageClient {
   return {
     filterOptions: vi.fn(),
+    codexQuota: vi.fn(),
     summary: vi.fn(),
     modelDistribution: vi.fn(),
     projectDistribution: vi.fn(),

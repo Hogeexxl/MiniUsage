@@ -14,6 +14,7 @@ use tower::ServiceExt;
 
 use crate::{
     api::{AppContext, ProcessShutdown, QueryApi},
+    codex::quota::CodexQuotaService,
     platform::browser::{BrowserOpener, SystemBrowser},
     scanner::{CodexMetadata, ScanConfig, ScanCoordinator, ScanHandle},
     storage::{Ledger, LedgerOptions},
@@ -60,10 +61,28 @@ impl ApiFixture {
         Self::with_updates(label, UpdateService::unavailable(), Arc::new(SystemBrowser))
     }
 
+    pub fn with_quota_service(label: &str, codex_quota_service: Arc<CodexQuotaService>) -> Self {
+        Self::with_updates_and_quota_service(
+            label,
+            UpdateService::unavailable(),
+            Arc::new(SystemBrowser),
+            Some(codex_quota_service),
+        )
+    }
+
     pub fn with_updates(
         label: &str,
         update_service: Arc<UpdateService>,
         browser_opener: Arc<dyn BrowserOpener>,
+    ) -> Self {
+        Self::with_updates_and_quota_service(label, update_service, browser_opener, None)
+    }
+
+    fn with_updates_and_quota_service(
+        label: &str,
+        update_service: Arc<UpdateService>,
+        browser_opener: Arc<dyn BrowserOpener>,
+        quota_service: Option<Arc<CodexQuotaService>>,
     ) -> Self {
         let root = TempRoot::new(label);
         let home = root.path().join("codex");
@@ -78,15 +97,18 @@ impl ApiFixture {
         let scanner = ScanCoordinator::start(
             ScanConfig::new(home.clone()).with_interval(std::time::Duration::from_secs(3_600)),
             Arc::clone(&ledger),
-            CodexMetadata::from_home(home),
+            CodexMetadata::from_home(home.clone()),
         )
         .unwrap();
         wait_scan(&ledger);
         let (process_shutdown, process_shutdown_receiver) = ProcessShutdown::channel();
+        let codex_quota_service =
+            quota_service.unwrap_or_else(|| CodexQuotaService::unavailable(&home));
         let app = QueryApi::router_with_shutdown(
             AppContext {
                 ledger: Arc::clone(&ledger),
                 scanner: scanner.clone(),
+                codex_quota_service,
                 update_service,
                 browser_opener,
             },

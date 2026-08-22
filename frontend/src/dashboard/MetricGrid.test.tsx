@@ -2,7 +2,10 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import type { SummaryUsageDto } from "../data/types";
-import { MetricGrid } from "./MetricGrid";
+import { chartMuted, chartSeriesColor } from "./charts/chartPalette";
+import type { CodexQuotaResponse } from "../data/types";
+import { codexQuotaColor, MetricGrid } from "./MetricGrid";
+import { formatCodexPlanType, formatCodexResetTime } from "./format";
 
 const usage: SummaryUsageDto = {
   input_tokens: 1_500,
@@ -39,6 +42,20 @@ const compactUsage: SummaryUsageDto = {
 
 const TOKEN_BAR_LABEL = "输入与输出 Token 构成；推理 Token 包含在输出 Token 中";
 
+const readyQuota: CodexQuotaResponse = {
+  status: "ready",
+  account_email: "hoge@example.com",
+  plan_type: "prolite",
+  weekly: {
+    used_percent: 55,
+    remaining_percent: 45,
+    limit_window_seconds: 604800,
+    reset_at_ms: Date.UTC(2026, 7, 12, 4, 23),
+  },
+  reset_credits_available: 2,
+  fetched_at_ms: Date.UTC(2026, 7, 1),
+};
+
 function cardByTitle(title: string): HTMLElement {
   const card = screen.getByText(title).closest(".h-36");
   if (!card) throw new Error(`Metric card not found: ${title}`);
@@ -55,24 +72,24 @@ function widths(segments: HTMLElement[]): string[] {
   return segments.map((segment) => segment.style.width);
 }
 
-describe("MetricGrid v0.2.0", () => {
-  it("[T-S03-001] renders four KPI cards and all required titles without a model filter", () => {
-    render(<MetricGrid usage={usage} modelFilterActive={false} />);
+describe("MetricGrid v0.2.1", () => {
+  it("[T-S03-001] renders five KPI cards and all required titles without a model filter", () => {
+    render(<MetricGrid usage={usage} modelFilterActive={false} quota={readyQuota} />);
 
     const grid = screen.getByLabelText("KPI 指标");
-    expect(grid.children).toHaveLength(4);
-    for (const title of ["总 Token", "缓存命中", "会话数量", "预估费用"]) {
+    expect(grid.children).toHaveLength(5);
+    for (const title of ["总 Token", "缓存命中", "会话数量", "预估费用", "剩余配额"]) {
       expect(within(grid).getByText(title)).toBeInTheDocument();
     }
   });
 
   it("[T-S03-001] hides only Session Count while a model filter is active", () => {
-    render(<MetricGrid usage={usage} modelFilterActive />);
+    render(<MetricGrid usage={usage} modelFilterActive quota={readyQuota} />);
 
     const grid = screen.getByLabelText("KPI 指标");
-    expect(grid.children).toHaveLength(3);
+    expect(grid.children).toHaveLength(4);
     expect(within(grid).queryByText("会话数量")).not.toBeInTheDocument();
-    for (const title of ["总 Token", "缓存命中", "预估费用"]) {
+    for (const title of ["总 Token", "缓存命中", "预估费用", "剩余配额"]) {
       expect(within(grid).getByText(title)).toBeInTheDocument();
     }
   });
@@ -191,13 +208,60 @@ describe("MetricGrid v0.2.0", () => {
     expect(cost).toHaveTextContent("$1.24K");
   });
 
+  it("T-Q-005 formats known and unknown plan types", () => {
+    expect(formatCodexPlanType("prolite")).toBe("Pro 5x");
+    expect(formatCodexPlanType("pro")).toBe("Pro 20x");
+    expect(formatCodexPlanType("plus")).toBe("Plus");
+    expect(formatCodexPlanType("team_plan")).toBe("Team Plan");
+    expect(formatCodexPlanType(null)).toBe("—");
+  });
+
+  it("T-Q-006 renders weekly remaining quota, Popover details, reset time, and palette thresholds", async () => {
+    render(<MetricGrid usage={usage} modelFilterActive={false} quota={readyQuota} />);
+
+    const card = cardByTitle("剩余配额");
+    expect(within(card).getByLabelText("45%")).toBeInTheDocument();
+    expect(within(card).getByText("Pro 5x")).toBeInTheDocument();
+    expect(within(card).getByText(/下次重置 ·/)).toHaveTextContent(`下次重置 · ${formatCodexResetTime(readyQuota.weekly!.reset_at_ms)}`);
+
+    const bar = within(card).getByLabelText("剩余与已使用配额");
+    expect(bar.children).toHaveLength(2);
+    expect((bar.children[0] as HTMLElement).style.width).toBe("45%");
+    expect((bar.children[0] as HTMLElement).style.backgroundColor).toBe(chartSeriesColor(5));
+    expect((bar.children[1] as HTMLElement).style.backgroundColor).toBe(chartMuted);
+
+    expect(codexQuotaColor(60)).toBe(chartSeriesColor(8));
+    expect(codexQuotaColor(45)).toBe(chartSeriesColor(5));
+    expect(codexQuotaColor(20)).toBe(chartSeriesColor(5));
+    expect(codexQuotaColor(19)).toBe(chartSeriesColor(9));
+
+    const trigger = within(card).getByRole("button", { name: "Pro 5x" });
+    fireEvent.pointerEnter(trigger.parentElement!, { pointerId: 1, pointerType: "mouse", buttons: 0 });
+    const dialog = (await screen.findByText("hoge@example.com")).closest('[role="dialog"]');
+    expect(dialog).toHaveTextContent("hoge@example.com");
+    expect(dialog).toHaveTextContent("重置卡：2 次");
+  });
+
+  it("T-Q-007 uses quota skeletons while loading and never fabricates zero for unavailable data", () => {
+    const { rerender } = render(<MetricGrid usage={usage} modelFilterActive={false} quota={{ ...readyQuota, status: "loading", weekly: null }} />);
+    const grid = screen.getByLabelText("KPI 指标");
+    expect(grid.children).toHaveLength(5);
+    expect(within(grid).queryByText("剩余配额")).not.toBeInTheDocument();
+
+    rerender(<MetricGrid usage={usage} modelFilterActive={false} quota={{ ...readyQuota, status: "unavailable", weekly: null }} />);
+    const quotaCard = grid.children[4] as HTMLElement;
+    expect(within(quotaCard).getByText("—")).toBeInTheDocument();
+    expect(within(quotaCard).getByText("暂时无法获取配额")).toBeInTheDocument();
+    expect(within(quotaCard).queryByText("0%")).not.toBeInTheDocument();
+  });
+
   it("renders structural skeletons without fabricated KPI values", () => {
     const { rerender } = render(<MetricGrid usage={null} modelFilterActive={false} />);
-    expect(screen.getByLabelText("KPI 加载中").children).toHaveLength(4);
+    expect(screen.getByLabelText("KPI 加载中").children).toHaveLength(5);
     expect(screen.getByLabelText("KPI 加载中")).toHaveTextContent("");
 
     rerender(<MetricGrid usage={null} modelFilterActive />);
-    expect(screen.getByLabelText("KPI 加载中").children).toHaveLength(3);
+    expect(screen.getByLabelText("KPI 加载中").children).toHaveLength(4);
     expect(screen.getByLabelText("KPI 加载中")).toHaveTextContent("");
   });
 });

@@ -29,6 +29,8 @@ import {
   type ProjectDistributionResponse,
   type SkillsUsageResponse,
   type DistributionUsageDto,
+  type CodexQuotaResponse,
+  type CodexWeeklyQuotaDto,
 } from "./types";
 
 const SAFE_INTEGER_MAX = Number.MAX_SAFE_INTEGER;
@@ -524,6 +526,55 @@ function parseSkillsUsage(value: unknown): SkillsUsageResponse {
   };
 }
 
+function quotaPercent(record: JsonRecord, key: string): number {
+  const value = record[key];
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 100) {
+    throw new MiniUsageClientError("HTTP_ERROR", 200);
+  }
+  return value;
+}
+
+function parseCodexWeeklyQuota(value: unknown): CodexWeeklyQuotaDto {
+  const record = requiredRecord(value);
+  const limitWindowSeconds = requiredSafeInteger(record, "limit_window_seconds");
+  if (limitWindowSeconds !== 604_800) throw new MiniUsageClientError("HTTP_ERROR", 200);
+  return {
+    used_percent: quotaPercent(record, "used_percent"),
+    remaining_percent: quotaPercent(record, "remaining_percent"),
+    limit_window_seconds: limitWindowSeconds,
+    reset_at_ms: nullableSafeInteger(record, "reset_at_ms"),
+  };
+}
+
+function parseCodexQuota(value: unknown): CodexQuotaResponse {
+  const record = requiredRecord(value);
+  const status = requiredString(record, "status");
+  if (status !== "loading" && status !== "ready" && status !== "auth_required" && status !== "unavailable") {
+    throw new MiniUsageClientError("HTTP_ERROR", 200);
+  }
+  const parsedStatus = status as CodexQuotaResponse["status"];
+  const weeklyValue = record.weekly;
+  const weekly = weeklyValue === null ? null : parseCodexWeeklyQuota(weeklyValue);
+  if (parsedStatus === "ready" && weekly === null) throw new MiniUsageClientError("HTTP_ERROR", 200);
+  if (parsedStatus !== "ready" && weekly !== null) throw new MiniUsageClientError("HTTP_ERROR", 200);
+  if (parsedStatus === "loading" && (
+    record.account_email !== null ||
+    record.plan_type !== null ||
+    record.reset_credits_available !== null ||
+    record.fetched_at_ms !== null
+  )) {
+    throw new MiniUsageClientError("HTTP_ERROR", 200);
+  }
+  return {
+    status: parsedStatus,
+    account_email: nullableString(record, "account_email"),
+    plan_type: nullableString(record, "plan_type"),
+    weekly,
+    reset_credits_available: nullableSafeInteger(record, "reset_credits_available"),
+    fetched_at_ms: nullableSafeInteger(record, "fetched_at_ms"),
+  };
+}
+
 function parseRevision(value: unknown): RevisionResponse {
   const record = requiredRecord(value);
   return {
@@ -677,6 +728,7 @@ async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
 }
 
 export type MiniUsageClient = {
+  codexQuota(signal?: AbortSignal): Promise<CodexQuotaResponse>;
   filterOptions(signal?: AbortSignal): Promise<FilterOptionsResponse>;
   summary(range: RangeKey, filters: DashboardFilters, signal?: AbortSignal): Promise<SummaryResponse>;
   modelDistribution(range: RangeKey, filters: DashboardFilters, signal?: AbortSignal): Promise<ModelDistributionResponse>;
@@ -800,6 +852,10 @@ function canonicalSessionIds(ids: readonly string[]): string[] {
 }
 
 export const miniUsageClient: MiniUsageClient & MiniUsageUpdateClient = {
+  async codexQuota(signal) {
+    const body = await getJson<unknown>("/api/codex/quota", signal);
+    return parseCodexQuota(body);
+  },
   async filterOptions(signal) {
     const body = await getJson<unknown>("/api/usage/filter-options", signal);
     return parseFilterOptions(body);

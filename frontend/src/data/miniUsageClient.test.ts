@@ -59,6 +59,62 @@ const sessionItem = (root_session_id = "root-1") => ({
 afterEach(() => vi.restoreAllMocks());
 
 describe("miniUsageClient DTO seam", () => {
+  it("T-Q-005 parses the Codex weekly quota contract without dashboard query inputs", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          status: "ready",
+          account_email: "hoge@example.com",
+          plan_type: "prolite",
+          weekly: {
+            used_percent: 55,
+            remaining_percent: 45,
+            limit_window_seconds: 604800,
+            reset_at_ms: 1_786_508_580_000,
+          },
+          reset_credits_available: 2,
+          fetched_at_ms: 1_786_076_580_000,
+        }),
+        { status: 200 },
+      ),
+    );
+
+    await expect(miniUsageClient.codexQuota()).resolves.toEqual({
+      status: "ready",
+      account_email: "hoge@example.com",
+      plan_type: "prolite",
+      weekly: {
+        used_percent: 55,
+        remaining_percent: 45,
+        limit_window_seconds: 604800,
+        reset_at_ms: 1_786_508_580_000,
+      },
+      reset_credits_available: 2,
+      fetched_at_ms: 1_786_076_580_000,
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/codex/quota",
+      expect.objectContaining({ method: "GET", credentials: "same-origin" }),
+    );
+
+    for (const weekly of [
+      { used_percent: 101, remaining_percent: 0, limit_window_seconds: 604800, reset_at_ms: null },
+      { used_percent: 55, remaining_percent: 45, limit_window_seconds: 18000, reset_at_ms: null },
+    ]) {
+      fetchMock.mockResolvedValueOnce(
+        new Response(JSON.stringify({
+          status: "ready",
+          account_email: null,
+          plan_type: null,
+          weekly,
+          reset_credits_available: null,
+          fetched_at_ms: null,
+        }), { status: 200 }),
+      );
+      await expect(miniUsageClient.codexQuota()).rejects.toBeInstanceOf(MiniUsageClientError);
+    }
+  });
+
   it("t_s07_001 parses typed options and canonicalizes every summary filter shape", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch");
     fetchMock.mockResolvedValueOnce(

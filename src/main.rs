@@ -5,6 +5,7 @@ use std::path::PathBuf;
 
 use mini_usage::{
     api::{AppContext, ProcessShutdown, QueryApi, listen_address},
+    codex::quota::CodexQuotaService,
     launcher::{self, BindOutcome},
     platform::browser::{self, BrowserOpener, SystemBrowser},
     scanner::{CodexMetadata, ScanConfig, ScanCoordinator},
@@ -68,6 +69,13 @@ where
         CodexMetadata::from_home(ledger.codex_home()),
     )
     .map_err(|error| format!("could not start MiniUsage scanner: {error:?}"))?;
+    let codex_quota_service = match CodexQuotaService::new(ledger.codex_home()) {
+        Ok(service) => service,
+        Err(error) => {
+            eprintln!("MiniUsage Codex quota unavailable: {error}");
+            CodexQuotaService::unavailable(ledger.codex_home())
+        }
+    };
     let (process_shutdown, mut shutdown_requested) = ProcessShutdown::channel();
     let update_service = match update_factory() {
         Ok(service) => service,
@@ -82,6 +90,7 @@ where
         AppContext {
             ledger,
             scanner,
+            codex_quota_service: Arc::clone(&codex_quota_service),
             update_service: Arc::clone(&update_service),
             browser_opener: Arc::clone(&browser_opener),
         },
@@ -94,6 +103,7 @@ where
         AppContext {
             ledger,
             scanner,
+            codex_quota_service: Arc::clone(&codex_quota_service),
             update_service: Arc::clone(&update_service),
             browser_opener: Arc::clone(&browser_opener),
         },
@@ -121,6 +131,8 @@ where
         }
     }
 
+    let codex_quota_task = codex_quota_service.spawn_background();
+
     if let Err(error) = browser::open_dashboard(browser_opener.as_ref()) {
         eprintln!("MiniUsage server is ready, but the browser could not be opened: {error}");
         eprintln!("Open {} manually.", browser::DASHBOARD_URL);
@@ -133,6 +145,8 @@ where
         .map_err(|error| format!("MiniUsage server stopped unexpectedly: {error}"));
     update_task.abort();
     let _ = update_task.await;
+    codex_quota_task.abort();
+    let _ = codex_quota_task.await;
     result
 }
 

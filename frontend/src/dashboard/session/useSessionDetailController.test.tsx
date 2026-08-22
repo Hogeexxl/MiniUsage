@@ -86,6 +86,7 @@ function detail(revision: number, total = revision, rootSessionId = "root-1"): S
 function clientWith(overrides: Partial<MiniUsageClient> = {}): MiniUsageClient {
   return {
     filterOptions: vi.fn(),
+    codexQuota: vi.fn(),
     summary: vi.fn(),
     modelDistribution: vi.fn(),
     projectDistribution: vi.fn(),

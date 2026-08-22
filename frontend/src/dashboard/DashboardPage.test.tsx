@@ -3,9 +3,10 @@ import { StrictMode, type ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import type { MiniUsageClient } from "../data/miniUsageClient";
-import { MiniUsageClientError, type ApiErrorCode, type StatusResponse } from "../data/types";
+import { MiniUsageClientError, type ApiErrorCode, type CodexQuotaResponse, type StatusResponse } from "../data/types";
 import { ThemeProvider } from "../theme/ThemeProvider";
 import { DashboardPage } from "./DashboardPage";
+import { useCodexQuotaController } from "./useCodexQuotaController";
 
 const summary = (range: "today" | "yesterday") => ({
   range: { key: range, start_ms: 1, end_ms: 2, timezone: "Asia/Shanghai" },
@@ -57,6 +58,29 @@ const sessionSnapshot = {
   items: [],
 };
 
+const quotaLoading: CodexQuotaResponse = {
+  status: "loading",
+  account_email: null,
+  plan_type: null,
+  weekly: null,
+  reset_credits_available: null,
+  fetched_at_ms: null,
+};
+
+const quotaReady: CodexQuotaResponse = {
+  status: "ready",
+  account_email: "hoge@example.com",
+  plan_type: "prolite",
+  weekly: {
+    used_percent: 55,
+    remaining_percent: 45,
+    limit_window_seconds: 604800,
+    reset_at_ms: 1_786_508_580_000,
+  },
+  reset_credits_available: 2,
+  fetched_at_ms: 1_786_076_580_000,
+};
+
 const offsetHeightDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "offsetHeight");
 
 function fakeClient(overrides: Partial<MiniUsageClient> = {}): MiniUsageClient {
@@ -84,6 +108,14 @@ function fakeClient(overrides: Partial<MiniUsageClient> = {}): MiniUsageClient {
         total: 0,
         skills: [],
       })),
+      })),
+    codexQuota: vi.fn(async () => ({
+      status: "unavailable" as const,
+      account_email: null,
+      plan_type: null,
+      weekly: null,
+      reset_credits_available: null,
+      fetched_at_ms: null,
     })),
     getSessionSnapshot: vi.fn(async () => sessionSnapshot),
     getSessionRows: vi.fn(async ({ range }) => ({
@@ -123,11 +155,124 @@ function renderWithTheme(node: ReactNode) {
   return render(<ThemeProvider>{node}</ThemeProvider>);
 }
 
+function QuotaProbe({
+  client,
+  range = "today",
+  model = "",
+  project = "",
+  revision = 0,
+}: {
+  client: MiniUsageClient;
+  range?: string;
+  model?: string;
+  project?: string;
+  revision?: number;
+}) {
+  const quota = useCodexQuotaController({ client });
+  return <output data-testid="quota-probe" data-range={range} data-model={model} data-project={project} data-revision={revision}>{quota.status}</output>;
+}
+
+async function flushQuotaPromises() {
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
+
 function totalTokenCard() {
   return within(screen.getByLabelText("KPI 指标")).getByText("总 Token").parentElement;
 }
 
-describe("DashboardPage v0.2.0", () => {
+describe("DashboardPage v0.2.1", () => {
+  it("T-Q-006 controller reads immediately, retries loading after 1s, then polls every 300s", async () => {
+    vi.useFakeTimers();
+    try {
+      const codexQuota = vi.fn()
+        .mockResolvedValueOnce(quotaLoading)
+        .mockResolvedValue(quotaReady);
+      const client = fakeClient({ codexQuota });
+      const rendered = render(<QuotaProbe client={client} />);
+
+      expect(codexQuota).toHaveBeenCalledTimes(1);
+      await flushQuotaPromises();
+      await act(async () => { vi.advanceTimersByTime(999); });
+      expect(codexQuota).toHaveBeenCalledTimes(1);
+      await act(async () => { vi.advanceTimersByTime(1); });
+      await flushQuotaPromises();
+      expect(codexQuota).toHaveBeenCalledTimes(2);
+      expect(screen.getByTestId("quota-probe")).toHaveTextContent("ready");
+
+      await act(async () => { vi.advanceTimersByTime(299_999); });
+      expect(codexQuota).toHaveBeenCalledTimes(2);
+      await act(async () => { vi.advanceTimersByTime(1); });
+      await flushQuotaPromises();
+      expect(codexQuota).toHaveBeenCalledTimes(3);
+      rendered.unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("T-Q-006 controller aborts the active request and clears the loading retry on unmount", async () => {
+    vi.useFakeTimers();
+    try {
+      const signals: AbortSignal[] = [];
+      const codexQuota = vi.fn((signal?: AbortSignal) => {
+        signals.push(signal!);
+        if (signals.length === 1) return Promise.resolve(quotaLoading);
+        return new Promise<CodexQuotaResponse>(() => undefined);
+      });
+      const client = fakeClient({ codexQuota });
+      const rendered = render(<QuotaProbe client={client} />);
+      await flushQuotaPromises();
+      await act(async () => { vi.advanceTimersByTime(1_000); });
+      expect(codexQuota).toHaveBeenCalledTimes(2);
+      rendered.unmount();
+
+      expect(signals[1]).toHaveProperty("aborted", true);
+      await act(async () => { vi.advanceTimersByTime(300_000); });
+      expect(codexQuota).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("T-Q-006 controller ignores dashboard range, filters, and revision changes", async () => {
+    vi.useFakeTimers();
+    try {
+      const codexQuota = vi.fn(async () => quotaReady);
+      const client = fakeClient({ codexQuota });
+      const rendered = render(<QuotaProbe client={client} range="today" model="" project="" revision={1} />);
+      await flushQuotaPromises();
+      expect(codexQuota).toHaveBeenCalledTimes(1);
+      rendered.rerender(<QuotaProbe client={client} range="30d" model="gpt-5" project="MiniUsage" revision={99} />);
+      expect(codexQuota).toHaveBeenCalledTimes(1);
+      rendered.unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("T-Q-006 controller retains the ready view after a temporary local API failure", async () => {
+    vi.useFakeTimers();
+    try {
+      const codexQuota = vi.fn()
+        .mockResolvedValueOnce(quotaReady)
+        .mockRejectedValueOnce(new Error("temporary local API failure"));
+      const client = fakeClient({ codexQuota });
+      const rendered = render(<QuotaProbe client={client} />);
+      await flushQuotaPromises();
+      expect(screen.getByTestId("quota-probe")).toHaveTextContent("ready");
+      await act(async () => { vi.advanceTimersByTime(300_000); });
+      await flushQuotaPromises();
+      expect(codexQuota).toHaveBeenCalledTimes(2);
+      expect(screen.getByTestId("quota-probe")).toHaveTextContent("ready");
+      rendered.unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("shows the last completed sync time with seconds", async () => {
     const completedAt = Date.UTC(2026, 0, 2, 3, 4, 5);
     const client = fakeClient({
@@ -208,7 +353,7 @@ describe("DashboardPage v0.2.0", () => {
   it("keeps a range snapshot and renders the redesigned sections without navigation", async () => {
     renderWithTheme(<DashboardPage options={{ client: fakeClient(), eventSourceFactory: () => fakeEvents() }} />);
     await waitFor(() => expect(totalTokenCard()).toHaveTextContent("12"));
-    expect(screen.getByLabelText("KPI 指标").children).toHaveLength(4);
+    expect(screen.getByLabelText("KPI 指标").children).toHaveLength(5);
     expect(screen.queryByRole("navigation")).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Session 记录" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Switch to light mode/ })).toBeInTheDocument();

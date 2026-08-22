@@ -16,6 +16,7 @@ use axum::{
 use futures_util::StreamExt;
 use mini_usage::{
     api::{AppContext, QueryApi},
+    codex::quota::CodexQuotaService,
     platform::browser::SystemBrowser,
     scanner::{CodexMetadata, ScanConfig, ScanCoordinator},
     storage::{Ledger, LedgerOptions},
@@ -110,10 +111,12 @@ impl Fixture {
         )
         .unwrap();
         wait_quiet(&ledger, Duration::from_secs(8));
+        let codex_quota_service = CodexQuotaService::unavailable(ledger.codex_home());
         let app = QueryApi::router(
             AppContext {
                 ledger: Arc::clone(&ledger),
                 scanner: scanner.clone(),
+                codex_quota_service,
                 update_service: UpdateService::unavailable(),
                 browser_opener: Arc::new(SystemBrowser),
             },
