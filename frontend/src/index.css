@@ -1,5 +1,7 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 @import "./theme/beui.css";
+@import "./ui/shadcn/base-nova.css";
 
 @font-face {
   font-family: "JetBrains Mono";

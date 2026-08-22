@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useState, type ReactElement } from "react";
 import type { DateRange } from "react-day-picker";
-import * as PopoverPrimitive from "@radix-ui/react-popover";
 
 import type { DashboardRange } from "../data/types";
 import { Calendar } from "../ui/shadcn/calendar";
-import { Popover, PopoverContent } from "../ui/shadcn/popover";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "../ui/shadcn/popover";
 
 type CustomDateRangePickerProps = {
   open: boolean;
@@ -27,7 +30,9 @@ function formatDate(value: Date): string {
 }
 
 function selectedRange(value: DashboardRange): DateRange | undefined {
-  return value.key === "custom" ? { from: parseDate(value.from), to: parseDate(value.to) } : undefined;
+  return value.key === "custom"
+    ? { from: parseDate(value.from), to: parseDate(value.to) }
+    : undefined;
 }
 
 export function CustomDateRangePicker({
@@ -65,11 +70,19 @@ export function CustomDateRangePicker({
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
       {trigger ? (
-        <PopoverPrimitive.Anchor asChild>
-          <span className="inline-flex" onClick={() => onOpenChange(true)}>
-            {trigger}
-          </span>
-        </PopoverPrimitive.Anchor>
+        <PopoverTrigger
+          nativeButton={false}
+          render={(triggerProps) => (
+            <div
+              {...triggerProps}
+              role={undefined}
+              tabIndex={-1}
+              className="inline-flex"
+            >
+              {trigger}
+            </div>
+          )}
+        />
       ) : null}
       <PopoverContent className="w-auto p-0" align="start" aria-label="自定义日期范围">
         <Calendar

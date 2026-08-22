@@ -22,10 +22,7 @@ export function RangeSelector({ value, onChange }: RangeSelectorProps) {
   const activeValue = value.key;
   const handleValueChange = useCallback(
     (range: string) => {
-      if (range === "custom") {
-        setPickerOpen(true);
-        return;
-      }
+      if (range === "custom") return;
       setPickerOpen(false);
       onChange({ key: range as PresetRangeKey });
     },
