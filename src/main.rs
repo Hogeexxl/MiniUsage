@@ -13,6 +13,10 @@ use mini_usage::{
     update::UpdateService,
 };
 
+fn report_codex_auth_save_failure() {
+    eprintln!("MiniUsage Codex quota auth.json update failed");
+}
+
 #[tokio::main]
 async fn main() {
     if let Err(error) = run(SystemBrowser).await {
@@ -69,7 +73,10 @@ where
         CodexMetadata::from_home(ledger.codex_home()),
     )
     .map_err(|error| format!("could not start MiniUsage scanner: {error:?}"))?;
-    let codex_quota_service = match CodexQuotaService::new(ledger.codex_home()) {
+    let codex_quota_service = match CodexQuotaService::new_with_diagnostic(
+        ledger.codex_home(),
+        report_codex_auth_save_failure,
+    ) {
         Ok(service) => service,
         Err(error) => {
             eprintln!("MiniUsage Codex quota unavailable: {error}");

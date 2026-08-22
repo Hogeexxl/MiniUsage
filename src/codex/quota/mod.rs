@@ -157,6 +157,14 @@ impl CodexQuotaService {
         Ok(Self::with_client(codex_home, client))
     }
 
+    pub fn new_with_diagnostic(
+        codex_home: impl Into<PathBuf>,
+        auth_save_diagnostic: fn(),
+    ) -> Result<Arc<Self>, reqwest::Error> {
+        let client = Arc::new(CodexQuotaClient::new_with_diagnostic(auth_save_diagnostic)?);
+        Ok(Self::with_client(codex_home, client))
+    }
+
     pub fn with_client(codex_home: impl Into<PathBuf>, client: Arc<CodexQuotaClient>) -> Arc<Self> {
         Self::with_provider_and_clock(codex_home, client, Arc::new(now_ms))
     }

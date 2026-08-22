@@ -22,6 +22,7 @@ pub struct CodexQuotaClient {
     usage_url: String,
     refresh_url: String,
     user_agent: String,
+    auth_save_diagnostic: fn(),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -78,6 +79,18 @@ impl CodexQuotaClient {
         usage_url: impl Into<String>,
         refresh_url: impl Into<String>,
     ) -> Result<Self, reqwest::Error> {
+        Self::with_urls_and_diagnostic(usage_url, refresh_url, ignore_auth_save_diagnostic)
+    }
+
+    pub(crate) fn new_with_diagnostic(auth_save_diagnostic: fn()) -> Result<Self, reqwest::Error> {
+        Self::with_urls_and_diagnostic(USAGE_URL, REFRESH_URL, auth_save_diagnostic)
+    }
+
+    fn with_urls_and_diagnostic(
+        usage_url: impl Into<String>,
+        refresh_url: impl Into<String>,
+        auth_save_diagnostic: fn(),
+    ) -> Result<Self, reqwest::Error> {
         let user_agent = format!("MiniUsage/{}", env!("CARGO_PKG_VERSION"));
         let usage_client = Client::builder().timeout(USAGE_TIMEOUT).build()?;
         let refresh_client = Client::builder().timeout(REFRESH_TIMEOUT).build()?;
@@ -87,6 +100,7 @@ impl CodexQuotaClient {
             usage_url: usage_url.into(),
             refresh_url: refresh_url.into(),
             user_agent,
+            auth_save_diagnostic,
         })
     }
 
@@ -241,11 +255,11 @@ impl CodexQuotaClient {
             refreshed_at,
         )
         .map_err(|_: AuthWriteError| QuotaFetchError::Unavailable)?;
-        if let Err(error) = auth.save() {
+        if auth.save().is_err() {
             // The new token remains in memory for this request.  Keep the
             // diagnostic deliberately token-free; the next fetch will reload
             // the file and retry the normal flow.
-            eprintln!("Codex quota auth.json update failed: {error}");
+            (self.auth_save_diagnostic)();
         }
         Ok(())
     }
@@ -284,6 +298,8 @@ impl CodexQuotaClient {
         Ok((body, headers))
     }
 }
+
+fn ignore_auth_save_diagnostic() {}
 
 fn map_refresh_failure(failure: RefreshFailure) -> QuotaFetchError {
     match failure {
@@ -334,7 +350,10 @@ mod tests {
     use base64::Engine;
     use std::{
         fs,
-        sync::{Arc, Mutex},
+        sync::{
+            Arc, Mutex,
+            atomic::{AtomicU64, Ordering},
+        },
         time::{SystemTime, UNIX_EPOCH},
     };
 
@@ -358,6 +377,8 @@ mod tests {
         expected_access_token: Option<String>,
         reject_first_usage: bool,
     }
+
+    static AUTH_PATH_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
     #[test]
     fn production_request_coordinates_and_timeouts_are_fixed() {
@@ -447,8 +468,9 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
+        let sequence = AUTH_PATH_SEQUENCE.fetch_add(1, Ordering::Relaxed);
         std::env::temp_dir().join(format!(
-            "miniusage-quota-auth-{}-{stamp}.json",
+            "miniusage-quota-auth-{}-{stamp}-{sequence}.json",
             std::process::id()
         ))
     }
