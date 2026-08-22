@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { miniUsageClient, dashboardQueryKey, type MiniUsageClient } from "../../data/miniUsageClient";
-import type { DashboardFilters, ModelDistributionResponse, ProjectDistributionResponse, RangeKey, SkillsUsageResponse } from "../../data/types";
+import type { DashboardFilters, DashboardRange, ModelDistributionResponse, ProjectDistributionResponse, SkillsUsageResponse } from "../../data/types";
 import { DASHBOARD_SCOPE_POLICIES, resolveDashboardScope } from "../scope";
 
 export type DashboardChartsView = {
@@ -12,7 +12,7 @@ export type DashboardChartsView = {
 };
 
 export function useDashboardChartsController(args: {
-  range: RangeKey;
+  range: DashboardRange;
   filters: DashboardFilters;
   dataRevision: number;
   client?: MiniUsageClient;

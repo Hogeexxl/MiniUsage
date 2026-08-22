@@ -5,7 +5,7 @@ import type { MiniUsageClient } from "../../data/miniUsageClient";
 import { createRevisionFeed, type RevisionEventSource } from "../../data/revisionFeed";
 import type {
   DashboardFilters,
-  RangeKey,
+  DashboardRange,
   SessionItemDto,
   SessionSnapshotResponse,
   SessionSortField,
@@ -14,7 +14,7 @@ import type {
 import { useSessionTableController } from "./useSessionTableController";
 
 const emptyFilters: DashboardFilters = { models: [], projects: [] };
-const range = (key: RangeKey = "today") => ({ key, start_ms: 1, end_ms: 2, timezone: "Asia/Shanghai" });
+const range = (key: DashboardRange = { key: "today" }) => ({ key: key.key, start_ms: 1, end_ms: 2, timezone: "Asia/Shanghai" });
 const usage = {
   input_tokens: 1,
   cached_tokens: 0,
@@ -46,7 +46,7 @@ function item(id: string, total = 3): SessionItemDto {
   };
 }
 
-function snapshot(count: number, seedCount = 40, key: RangeKey = "today"): SessionSnapshotResponse {
+function snapshot(count: number, seedCount = 40, key: DashboardRange = { key: "today" }): SessionSnapshotResponse {
   const sort_index: SessionSortIndexItem[] = Array.from({ length: count }, (_, index) => ({
     root_session_id: `root-${index + 1}`,
     last_activity_at_ms: count - index,
@@ -117,8 +117,8 @@ describe("useSessionTableController", () => {
     const client = clientWith({ getSessionSnapshot, getSessionRows });
     const { feed } = sourceAndFeed(client);
     const { result, rerender } = renderHook(
-      ({ key, selectedFilters }: { key: RangeKey; selectedFilters: DashboardFilters }) => useSessionTableController(key, selectedFilters, { client, revisionFeed: feed }),
-      { initialProps: { key: "today", selectedFilters: emptyFilters } },
+      ({ key, selectedFilters }: { key: DashboardRange; selectedFilters: DashboardFilters }) => useSessionTableController(key, selectedFilters, { client, revisionFeed: feed }),
+      { initialProps: { key: { key: "today" }, selectedFilters: emptyFilters } },
     );
 
     await waitFor(() => expect(result.current.rows).toHaveLength(10));
@@ -139,7 +139,7 @@ describe("useSessionTableController", () => {
 
     await act(async () => result.current.select_sort("project"));
     expect(result.current.page).toBe(6);
-    rerender({ key: "yesterday", selectedFilters: { models: ["gpt-5"], projects: [] } });
+    rerender({ key: { key: "yesterday" }, selectedFilters: { models: ["gpt-5"], projects: [] } });
     await waitFor(() => expect(result.current.page).toBe(1));
     expect(result.current.sort_by).toBe("project");
     expect(result.current.filters.models).toEqual(["gpt-5"]);
@@ -175,7 +175,7 @@ describe("useSessionTableController", () => {
     }));
     const client = clientWith({ getSessionSnapshot, getSessionRows });
     const { feed } = sourceAndFeed(client);
-    const { result, unmount } = renderHook(() => useSessionTableController("today", emptyFilters, { client, revisionFeed: feed }));
+    const { result, unmount } = renderHook(() => useSessionTableController({ key: "today" }, emptyFilters, { client, revisionFeed: feed }));
     await waitFor(() => expect(result.current.rows).toHaveLength(10));
 
     const validText = (value: string | null) => value !== null && value.length > 0;
@@ -244,7 +244,7 @@ describe("useSessionTableController", () => {
       getSessionRows: prefetchRows,
     });
     const { feed: prefetchFeed } = sourceAndFeed(prefetchClient);
-    const { result: prefetchResult } = renderHook(() => useSessionTableController("today", emptyFilters, { client: prefetchClient, revisionFeed: prefetchFeed }));
+    const { result: prefetchResult } = renderHook(() => useSessionTableController({ key: "today" }, emptyFilters, { client: prefetchClient, revisionFeed: prefetchFeed }));
     await waitFor(() => expect(prefetchResult.current.rows).toHaveLength(10));
     const requestCountBeforePrefetch = prefetchRows.mock.calls.length;
     await act(async () => prefetchResult.current.go_to_page(3));
@@ -281,7 +281,7 @@ describe("useSessionTableController", () => {
       getSessionRows,
     });
     const { feed } = sourceAndFeed(client);
-    const { result } = renderHook(() => useSessionTableController("today", emptyFilters, { client, revisionFeed: feed }));
+    const { result } = renderHook(() => useSessionTableController({ key: "today" }, emptyFilters, { client, revisionFeed: feed }));
     await waitFor(() => expect(result.current.rows).toHaveLength(10));
 
     await act(async () => result.current.go_to_page(3));
@@ -311,13 +311,13 @@ describe("useSessionTableController", () => {
       getSessionRows: vi.fn(() => new Promise<Awaited<ReturnType<MiniUsageClient["getSessionRows"]>>>((resolve) => { resolveRows = resolve; })),
     });
     const { feed } = sourceAndFeed(client);
-    const { result, rerender } = renderHook(({ key }: { key: RangeKey }) => useSessionTableController(key, emptyFilters, { client, revisionFeed: feed }), { initialProps: { key: "today" } });
+    const { result, rerender } = renderHook(({ key }: { key: DashboardRange }) => useSessionTableController(key, emptyFilters, { client, revisionFeed: feed }), { initialProps: { key: { key: "today" } } });
     await waitFor(() => expect(result.current.rows).toHaveLength(10));
     await act(async () => result.current.go_to_page(6));
-    rerender({ key: "yesterday" });
-    resolveRows({ range: range("today"), data_revision: 1, items: [item("root-61")] });
+    rerender({ key: { key: "yesterday" } });
+    resolveRows({ range: range({ key: "today" }), data_revision: 1, items: [item("root-61")] });
     await act(async () => undefined);
-    expect(result.current.range).toBe("yesterday");
+    expect(result.current.range).toEqual({ key: "yesterday" });
     expect(result.current.rows.every((row) => row.root_session_id !== "root-61")).toBe(true);
     feed.dispose();
   });
@@ -346,7 +346,7 @@ describe("useSessionTableController", () => {
     });
     const client = clientWith({ getSessionSnapshot });
     const { feed, source } = sourceAndFeed(client);
-    const { result } = renderHook(() => useSessionTableController("today", emptyFilters, { client, revisionFeed: feed }));
+    const { result } = renderHook(() => useSessionTableController({ key: "today" }, emptyFilters, { client, revisionFeed: feed }));
     await waitFor(() => expect(result.current.rows.map((row) => row.root_session_id)).toEqual(["root-1"]));
     await act(async () => source()?.onmessage?.({ data: JSON.stringify({ data_revision: 2, status_revision: 2 }) } as MessageEvent<string>));
     await waitFor(() => expect(snapshotCalls).toBe(2));

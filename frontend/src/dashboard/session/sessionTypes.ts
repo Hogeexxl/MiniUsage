@@ -1,7 +1,7 @@
 import type { MiniUsageClient } from "../../data/miniUsageClient";
 import type {
   DashboardFilters,
-  RangeKey,
+  DashboardRange,
   SessionItemDto,
   SessionSortField,
   SessionSortOrder,
@@ -12,7 +12,7 @@ export type SessionLoadState = "initial" | "loading" | "ready" | "refreshing" | 
 export type SessionPageState = "idle" | "loading" | "error";
 
 export type SessionTableViewModel = {
-  range: RangeKey;
+  range: DashboardRange;
   filters: DashboardFilters;
   rows: SessionItemDto[];
   timezone: string;

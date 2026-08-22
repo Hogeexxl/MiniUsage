@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { createRevisionFeed, type RevisionFeed } from "../../data/revisionFeed";
-import { canonicalDashboardFilters, type MiniUsageClient, miniUsageClient } from "../../data/miniUsageClient";
+import { canonicalDashboardFilters, dashboardQueryKey, type MiniUsageClient, miniUsageClient } from "../../data/miniUsageClient";
 import {
   MiniUsageClientError,
   type DashboardFilters,
-  type RangeKey,
+  type DashboardRange,
   type RevisionTuple,
   type SessionDetailResponse,
   type SessionItemDto,
@@ -55,7 +55,7 @@ type DetailState = {
 };
 
 type Scope = {
-  range: RangeKey;
+  range: DashboardRange;
   filters: DashboardFilters;
   revision: number;
 };
@@ -69,7 +69,7 @@ function errorCode(error: unknown): string {
 }
 
 function detailCacheKey(scope: Scope, rootSessionId: string, revision = scope.revision): string {
-  return JSON.stringify([scope.range, scope.filters, rootSessionId, revision]);
+  return JSON.stringify([dashboardQueryKey(scope.range, scope.filters), rootSessionId, revision]);
 }
 
 function revisionFromFeed(feed: RevisionFeed | undefined): number {
@@ -77,7 +77,7 @@ function revisionFromFeed(feed: RevisionFeed | undefined): number {
 }
 
 export function useSessionDetailController(
-  range: RangeKey,
+  range: DashboardRange,
   filters: DashboardFilters,
   options: SessionDetailControllerOptions = {},
 ): SessionDetailControllerViewModel {

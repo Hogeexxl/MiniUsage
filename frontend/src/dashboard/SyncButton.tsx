@@ -10,23 +10,76 @@ type SyncButtonProps = {
 };
 
 export function SyncButton({ disabled, refreshState, lastSyncAtMs, onClick }: SyncButtonProps) {
-  const previousSyncRef = useRef(lastSyncAtMs);
-  const [success, setSuccess] = useState(false);
+  const refreshBusy = refreshState === "requesting" || refreshState === "running";
+  const refreshError = refreshState === "failed" || refreshState === "tracking_error" || refreshState === "source_changed";
+  const [visualState, setVisualState] = useState<ButtonState>(() => refreshBusy ? "loading" : refreshError ? "error" : "idle");
+  const activeCycle = useRef(false);
+  const cycleStartLastSyncAtMs = useRef<number | null>(null);
+  const cycleSyncUpdated = useRef(false);
+  const successTimer = useRef<number | null>(null);
+
+  function clearSuccessTimer() {
+    if (successTimer.current === null) return;
+    window.clearTimeout(successTimer.current);
+    successTimer.current = null;
+  }
+
+  function finishCycle() {
+    if (successTimer.current !== null) return;
+    setVisualState("success");
+    successTimer.current = window.setTimeout(() => {
+      successTimer.current = null;
+      activeCycle.current = false;
+      cycleStartLastSyncAtMs.current = null;
+      cycleSyncUpdated.current = false;
+      setVisualState((current) => current === "success" ? "idle" : current);
+    }, 1600);
+  }
+
+  function startCycle() {
+    clearSuccessTimer();
+    activeCycle.current = true;
+    cycleStartLastSyncAtMs.current = lastSyncAtMs;
+    cycleSyncUpdated.current = false;
+    setVisualState("loading");
+    onClick();
+  }
 
   useEffect(() => {
-    if (lastSyncAtMs === null || previousSyncRef.current === lastSyncAtMs) return;
-    previousSyncRef.current = lastSyncAtMs;
-    setSuccess(true);
-    const timer = window.setTimeout(() => setSuccess(false), 1600);
-    return () => window.clearTimeout(timer);
-  }, [lastSyncAtMs]);
+    if (activeCycle.current && lastSyncAtMs !== cycleStartLastSyncAtMs.current) {
+      cycleSyncUpdated.current = true;
+    }
 
-  const error = refreshState === "failed" || refreshState === "tracking_error" || refreshState === "source_changed";
-  const state: ButtonState = refreshState === "requesting" || refreshState === "running" ? "loading" : error ? "error" : success ? "success" : "idle";
+    if (refreshError) {
+      clearSuccessTimer();
+      activeCycle.current = false;
+      cycleStartLastSyncAtMs.current = null;
+      cycleSyncUpdated.current = false;
+      setVisualState("error");
+      return;
+    }
+
+    if (refreshBusy) {
+      setVisualState("loading");
+      return;
+    }
+
+    if (activeCycle.current) {
+      if (cycleSyncUpdated.current) finishCycle();
+      else setVisualState("loading");
+      return;
+    }
+
+    setVisualState((current) => current === "loading" ? "idle" : current);
+  }, [lastSyncAtMs, refreshBusy, refreshError]);
+
+  useEffect(() => () => {
+    clearSuccessTimer();
+  }, []);
 
   return (
     <StatefulButton
-      state={state}
+      state={visualState}
       variant="outline"
       size="sm"
       ripple={false}
@@ -34,7 +87,7 @@ export function SyncButton({ disabled, refreshState, lastSyncAtMs, onClick }: Sy
       loadingText="同步中…"
       successText="同步完成"
       errorText="同步失败"
-      onClick={onClick}
+      onClick={startCycle}
     >
       同步数据
     </StatefulButton>

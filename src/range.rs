@@ -25,6 +25,7 @@ pub enum RangeKey {
     SevenDays,
     ThirtyDays,
     Year,
+    Custom,
 }
 
 impl RangeKey {
@@ -35,6 +36,7 @@ impl RangeKey {
             Some("7d") => Ok(Self::SevenDays),
             Some("30d") => Ok(Self::ThirtyDays),
             Some("year") => Ok(Self::Year),
+            Some("custom") => Ok(Self::Custom),
             _ => Err(ApiError::InvalidRange),
         }
     }
@@ -46,6 +48,7 @@ impl RangeKey {
             Self::SevenDays => "7d",
             Self::ThirtyDays => "30d",
             Self::Year => "year",
+            Self::Custom => "custom",
         }
     }
 }
@@ -129,6 +132,9 @@ where
 }
 
 pub fn resolve_system_range(key: RangeKey) -> Result<ResolvedRange, ApiError> {
+    if key == RangeKey::Custom {
+        return Err(ApiError::InvalidRange);
+    }
     let now_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|_| ApiError::LocalTimeUnavailable)?
@@ -137,6 +143,77 @@ pub fn resolve_system_range(key: RangeKey) -> Result<ResolvedRange, ApiError> {
         .map_err(|_| ApiError::LocalTimeUnavailable)?;
     let timezone = system_timezone_name()?;
     resolve_range_at(key, now_ms, &timezone)
+}
+
+pub fn resolve_system_custom_range(from: &str, to: &str) -> Result<ResolvedRange, ApiError> {
+    let timezone = system_timezone_name()?;
+    resolve_custom_range_at(from, to, &timezone)
+}
+
+pub fn resolve_custom_range_at(
+    from: &str,
+    to: &str,
+    timezone: &str,
+) -> Result<ResolvedRange, ApiError> {
+    #[cfg(windows)]
+    {
+        return resolve_custom_range_at_with_loader(from, to, timezone, EmbeddedZone::load);
+    }
+
+    #[cfg(not(windows))]
+    {
+        resolve_custom_range_at_with_loader(from, to, timezone, TzifZone::load)
+    }
+}
+
+fn resolve_custom_range_at_with_loader<L, Z>(
+    from: &str,
+    to: &str,
+    timezone: &str,
+    loader: L,
+) -> Result<ResolvedRange, ApiError>
+where
+    L: FnOnce(&str) -> Result<Z, ApiError>,
+    Z: CivilZone,
+{
+    let from = parse_custom_date(from)?;
+    let to = parse_custom_date(to)?;
+    if from > to {
+        return Err(ApiError::InvalidRange);
+    }
+    let end_date = to
+        .checked_add_days(Days::new(1))
+        .ok_or(ApiError::InvalidRange)?;
+    let zone = loader(timezone)?;
+    let start_ms = zone.local_midnight_to_utc_ms(from)?;
+    let end_ms = zone.local_midnight_to_utc_ms(end_date)?;
+    if start_ms >= end_ms {
+        return Err(ApiError::InvalidRange);
+    }
+    Ok(ResolvedRange {
+        key: RangeKey::Custom,
+        start_ms,
+        end_ms,
+        timezone: timezone.to_owned(),
+    })
+}
+
+fn parse_custom_date(value: &str) -> Result<NaiveDate, ApiError> {
+    if value.len() != 10
+        || value.as_bytes()[4] != b'-'
+        || value.as_bytes()[7] != b'-'
+        || value
+            .as_bytes()
+            .iter()
+            .enumerate()
+            .any(|(index, byte)| index != 4 && index != 7 && !byte.is_ascii_digit())
+    {
+        return Err(ApiError::InvalidRange);
+    }
+    let date = NaiveDate::parse_from_str(value, "%Y-%m-%d").map_err(|_| ApiError::InvalidRange)?;
+    (date.format("%Y-%m-%d").to_string() == value)
+        .then_some(date)
+        .ok_or(ApiError::InvalidRange)
 }
 
 pub fn resolve_range_at(
@@ -258,6 +335,7 @@ fn civil_dates(key: RangeKey, today: NaiveDate) -> Result<(NaiveDate, NaiveDate)
             .ok_or(ApiError::LocalTimeUnavailable)?;
             Ok((start, end))
         }
+        RangeKey::Custom => Err(ApiError::InvalidRange),
     }
 }
 
@@ -710,6 +788,44 @@ mod tests {
             assert_eq!(
                 resolve_range_at_with_embedded_loader(RangeKey::Today, 0, timezone),
                 Err(ApiError::LocalTimeUnavailable)
+            );
+        }
+    }
+
+    #[test]
+    fn custom_range_includes_the_to_date_and_uses_local_midnights() {
+        let range = resolve_custom_range_at_with_loader(
+            "2026-03-08",
+            "2026-03-09",
+            "America/New_York",
+            EmbeddedZone::load,
+        )
+        .unwrap();
+        assert_eq!(range.key, RangeKey::Custom);
+        assert_eq!(
+            range.start_ms,
+            DateTime::parse_from_rfc3339("2026-03-08T05:00:00Z")
+                .unwrap()
+                .timestamp_millis()
+        );
+        assert_eq!(
+            range.end_ms,
+            DateTime::parse_from_rfc3339("2026-03-10T04:00:00Z")
+                .unwrap()
+                .timestamp_millis()
+        );
+    }
+
+    #[test]
+    fn custom_range_rejects_invalid_dates_and_reversed_ranges() {
+        for (from, to) in [
+            ("2026-02-30", "2026-03-01"),
+            ("2026-03-02", "2026-03-01"),
+            ("2026-03-01", "2026-03-01T00:00:00"),
+        ] {
+            assert_eq!(
+                resolve_custom_range_at_with_loader(from, to, "UTC", EmbeddedZone::load),
+                Err(ApiError::InvalidRange)
             );
         }
     }

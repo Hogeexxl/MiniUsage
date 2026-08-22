@@ -14,6 +14,7 @@ mod client;
 mod mapper;
 
 pub use client::CodexQuotaClient;
+#[cfg(test)]
 pub(crate) use client::QuotaFetchError;
 pub use mapper::CodexWeeklyQuota;
 

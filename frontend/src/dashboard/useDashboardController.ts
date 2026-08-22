@@ -3,13 +3,15 @@ import { useCallback, useEffect, useRef, useState, type MutableRefObject } from 
 import {
   miniUsageClient,
   canonicalDashboardFilters,
+  dashboardRangeKey,
+  dashboardRangesEqual,
   dashboardQueryKey,
   type MiniUsageClient,
 } from "../data/miniUsageClient";
 import { createRevisionFeed, type RevisionEventSource, type RevisionFeed } from "../data/revisionFeed";
 import { DASHBOARD_SCOPE_POLICIES, resolveDashboardScope } from "./scope";
 import {
-  type RangeKey,
+  type DashboardRange,
   type RefreshAccepted,
   type RevisionTuple,
   type StatusResponse,
@@ -29,7 +31,7 @@ export type RefreshState =
   | "source_changed";
 
 export type DashboardViewModel = {
-  range: RangeKey;
+  range: DashboardRange;
   filters: DashboardFilters;
   metrics: SummaryResponse["usage"] | null;
   data_revision: number;
@@ -44,7 +46,7 @@ export type DashboardViewModel = {
   load_state: LoadState;
   refresh_state: RefreshState;
   error_code?: string;
-  select_range: (range: RangeKey) => void;
+  select_range: (range: DashboardRange) => void;
   select_filters: (filters: DashboardFilters) => void;
   clear_filters: () => void;
   retry_filter_options: () => void;
@@ -61,7 +63,7 @@ type FailureFlags = {
 };
 
 type InternalState = {
-  range: RangeKey;
+  range: DashboardRange;
   filters: DashboardFilters;
   snapshot: Snapshot | null;
   last_scan_completed_at_ms: number | null;
@@ -113,7 +115,7 @@ export function useDashboardController(options: DashboardControllerOptions = {})
     if (!options.revisionFeed) ownedRevisionFeedRef.current = revisionFeedRef.current;
   }
   const [state, setState] = useState<InternalState>({
-    range: "today",
+    range: { key: "today" },
     filters: { models: [], projects: [] },
     snapshot: null,
     last_scan_completed_at_ms: null,
@@ -240,7 +242,7 @@ export function useDashboardController(options: DashboardControllerOptions = {})
   );
 
   const loadSummary = useCallback(
-    (range: RangeKey, filters: DashboardFilters = stateRef.current.filters) => {
+    (range: DashboardRange, filters: DashboardFilters = stateRef.current.filters) => {
       const scope = resolveDashboardScope(DASHBOARD_SCOPE_POLICIES.kpi, range, filters);
       const canonicalFilters = canonicalDashboardFilters(scope.filters);
       const queryKey = dashboardQueryKey(scope.range, canonicalFilters);
@@ -258,7 +260,7 @@ export function useDashboardController(options: DashboardControllerOptions = {})
       void client.summary(scope.range, canonicalFilters, controller.signal).then(
         (response) => {
           if (controller.signal.aborted || summaryGenerationRef.current !== generation) return;
-          if (response.range.key !== scope.range || queryKey !== dashboardQueryKey(stateRef.current.range, stateRef.current.filters)) {
+          if (response.range.key !== dashboardRangeKey(scope.range) || queryKey !== dashboardQueryKey(stateRef.current.range, stateRef.current.filters)) {
             setFailure(failuresRef, "summary", true);
             if (queryKey === dashboardQueryKey(stateRef.current.range, stateRef.current.filters)) {
               commit((value) => ({
@@ -500,8 +502,8 @@ export function useDashboardController(options: DashboardControllerOptions = {})
   );
 
   const selectRange = useCallback(
-    (range: RangeKey) => {
-      if (range === stateRef.current.range) return;
+    (range: DashboardRange) => {
+      if (dashboardRangesEqual(range, stateRef.current.range)) return;
       const filters = stateRef.current.filters;
       const snapshot = snapshotsRef.current.get(dashboardQueryKey(range, filters)) ?? null;
       failuresRef.current = { ...failuresRef.current, summary: false };
@@ -625,7 +627,7 @@ export function useDashboardController(options: DashboardControllerOptions = {})
 
   useEffect(() => {
     effectMountedRef.current = true;
-    loadSummary("today", stateRef.current.filters);
+    loadSummary({ key: "today" }, stateRef.current.filters);
     if (!filterOptionsStartedRef.current) {
       filterOptionsStartedRef.current = true;
       loadFilterOptions();

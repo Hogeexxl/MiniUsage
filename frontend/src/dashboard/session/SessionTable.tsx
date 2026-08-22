@@ -124,6 +124,13 @@ export function SessionTable({
         : <span className="tabular-nums">—</span>,
     },
     {
+      key: "subagent_count",
+      header: "sub数量",
+      width: "128px",
+      align: "right",
+      cell: (item) => <span className="tabular-nums">{item.subagent_count}</span>,
+    },
+    {
       key: "cache_hit_rate",
       header: "缓存命中率",
       width: "150px",
@@ -142,13 +149,6 @@ export function SessionTable({
       cell: (item) => item.data_status === "error"
         ? <span className="tabular-nums">—</span>
         : <span className="tabular-nums" title={formatCost(item.inclusive_usage?.estimated_cost ?? null).title}>{formatCost(item.inclusive_usage?.estimated_cost ?? null).text}</span>,
-    },
-    {
-      key: "subagent_count",
-      header: "Subagent 数",
-      width: "128px",
-      align: "right",
-      cell: (item) => <span className="tabular-nums">{item.subagent_count}</span>,
     },
   ];
 

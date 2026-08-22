@@ -3,6 +3,7 @@ import {
   type ApiErrorCode,
   type FollowupDto,
   type RangeDto,
+  type DashboardRange,
   type RangeKey,
   type RefreshAccepted,
   type RevisionResponse,
@@ -149,7 +150,7 @@ function requiredSessionDataStatus(record: JsonRecord, key: string): SessionItem
 function parseRange(value: unknown): RangeDto {
   const record = requiredRecord(value);
   const key = requiredString(record, "key");
-  if (!["today", "yesterday", "7d", "30d", "year"].includes(key)) {
+  if (!["today", "yesterday", "7d", "30d", "year", "custom"].includes(key)) {
     throw new MiniUsageClientError("HTTP_ERROR", 200);
   }
   return {
@@ -730,26 +731,26 @@ async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
 export type MiniUsageClient = {
   codexQuota(signal?: AbortSignal): Promise<CodexQuotaResponse>;
   filterOptions(signal?: AbortSignal): Promise<FilterOptionsResponse>;
-  summary(range: RangeKey, filters: DashboardFilters, signal?: AbortSignal): Promise<SummaryResponse>;
-  modelDistribution(range: RangeKey, filters: DashboardFilters, signal?: AbortSignal): Promise<ModelDistributionResponse>;
-  projectDistribution(range: RangeKey, filters: DashboardFilters, signal?: AbortSignal): Promise<ProjectDistributionResponse>;
-  skillsUsage(range: RangeKey, filters: DashboardFilters, signal?: AbortSignal): Promise<SkillsUsageResponse>;
+  summary(range: DashboardRange, filters: DashboardFilters, signal?: AbortSignal): Promise<SummaryResponse>;
+  modelDistribution(range: DashboardRange, filters: DashboardFilters, signal?: AbortSignal): Promise<ModelDistributionResponse>;
+  projectDistribution(range: DashboardRange, filters: DashboardFilters, signal?: AbortSignal): Promise<ProjectDistributionResponse>;
+  skillsUsage(range: DashboardRange, filters: DashboardFilters, signal?: AbortSignal): Promise<SkillsUsageResponse>;
   getSessionSnapshot(request: {
-    range: RangeKey;
+    range: DashboardRange;
     filters: DashboardFilters;
     seed_sort_by?: SessionSortField;
     seed_sort_order?: SessionSortOrder;
     signal?: AbortSignal;
   }): Promise<SessionSnapshotResponse>;
   getSessionRows(request: {
-    range: RangeKey;
+    range: DashboardRange;
     filters: DashboardFilters;
     root_session_ids: string[];
     expected_data_revision?: number;
     signal?: AbortSignal;
   }): Promise<SessionRowsResponse>;
   getSessionDetail(request: {
-    range: RangeKey;
+    range: DashboardRange;
     filters: DashboardFilters;
     root_session_id: string;
     expected_data_revision?: number;
@@ -819,14 +820,36 @@ export function canonicalDashboardFilters(filters: DashboardFilters): DashboardF
   };
 }
 
-export function dashboardQueryKey(range: RangeKey, filters: DashboardFilters): string {
+export function dashboardRangeKey(range: DashboardRange): RangeKey {
+  return range.key;
+}
+
+export function dashboardRangesEqual(left: DashboardRange, right: DashboardRange): boolean {
+  if (left.key !== right.key) return false;
+  if (left.key !== "custom" || right.key !== "custom") return true;
+  return left.from === right.from && left.to === right.to;
+}
+
+export function dashboardQueryKey(range: DashboardRange, filters: DashboardFilters): string {
   const canonical = canonicalDashboardFilters(filters);
   return JSON.stringify([range, canonical.models, canonical.projects]);
 }
 
-function sessionParams(range: RangeKey, filters: DashboardFilters): URLSearchParams {
+export function appendRangeParams(params: URLSearchParams, range: DashboardRange): URLSearchParams {
+  params.set("range", range.key);
+  if (range.key === "custom") {
+    params.set("from", range.from);
+    params.set("to", range.to);
+  } else {
+    params.delete("from");
+    params.delete("to");
+  }
+  return params;
+}
+
+function sessionParams(range: DashboardRange, filters: DashboardFilters): URLSearchParams {
   const canonical = canonicalDashboardFilters(filters);
-  const params = new URLSearchParams({ range });
+  const params = appendRangeParams(new URLSearchParams(), range);
   for (const model of canonical.models) params.append("model", model);
   for (const project of canonical.projects) {
     if (project.kind === "project") params.append("project_path", project.project_path);
@@ -869,21 +892,22 @@ export const miniUsageClient: MiniUsageClient & MiniUsageUpdateClient = {
     const params = sessionParams(range, filters);
     const body = await getJson<unknown>(`/api/usage/model-distribution?${params.toString()}`, signal);
     const response = parseModelDistribution(body);
-    if (response.range.key !== range) throw new MiniUsageClientError("HTTP_ERROR", 200);
+    if (response.range.key !== dashboardRangeKey(range)) throw new MiniUsageClientError("HTTP_ERROR", 200);
     return response;
   },
   async projectDistribution(range, filters, signal) {
     const params = sessionParams(range, filters);
     const body = await getJson<unknown>(`/api/usage/projects?${params.toString()}`, signal);
     const response = parseProjectDistribution(body);
-    if (response.range.key !== range) throw new MiniUsageClientError("HTTP_ERROR", 200);
+    if (response.range.key !== dashboardRangeKey(range)) throw new MiniUsageClientError("HTTP_ERROR", 200);
     return response;
   },
   async skillsUsage(range, filters, signal) {
-    const params = sessionParams(range, filters);
+    const skillsRange: DashboardRange = { key: "7d" };
+    const params = sessionParams(skillsRange, filters);
     const body = await getJson<unknown>(`/api/usage/skills?${params.toString()}`, signal);
     const response = parseSkillsUsage(body);
-    if (response.range.key !== range) throw new MiniUsageClientError("HTTP_ERROR", 200);
+    if (response.range.key !== dashboardRangeKey(skillsRange)) throw new MiniUsageClientError("HTTP_ERROR", 200);
     return response;
   },
   async getSessionSnapshot({ range, filters, seed_sort_by, seed_sort_order, signal }) {
@@ -892,7 +916,7 @@ export const miniUsageClient: MiniUsageClient & MiniUsageUpdateClient = {
     if (seed_sort_order) params.append("seed_sort_order", seed_sort_order);
     const body = await getJson<unknown>(`/api/usage/sessions?${params.toString()}`, signal);
     const response = parseSessionSnapshot(body);
-    if (response.range.key !== range) throw new MiniUsageClientError("HTTP_ERROR", 200);
+    if (response.range.key !== dashboardRangeKey(range)) throw new MiniUsageClientError("HTTP_ERROR", 200);
     return response;
   },
   async getSessionRows({ range, filters, root_session_ids, expected_data_revision, signal }) {
@@ -903,7 +927,7 @@ export const miniUsageClient: MiniUsageClient & MiniUsageUpdateClient = {
     for (const id of ids) params.append("root_session_id", id);
     const body = await getJson<unknown>(`/api/usage/session-rows?${params.toString()}`, signal);
     const response = parseSessionRows(body);
-    if (response.range.key !== range || response.items.some((item) => !ids.includes(item.root_session_id))) {
+    if (response.range.key !== dashboardRangeKey(range) || response.items.some((item) => !ids.includes(item.root_session_id))) {
       throw new MiniUsageClientError("HTTP_ERROR", 200);
     }
     return response;
@@ -918,7 +942,7 @@ export const miniUsageClient: MiniUsageClient & MiniUsageUpdateClient = {
       signal,
     );
     const response = parseSessionDetail(body);
-    if (response.range.key !== range || response.root_session_id !== root_session_id) {
+    if (response.range.key !== dashboardRangeKey(range) || response.root_session_id !== root_session_id) {
       throw new MiniUsageClientError("HTTP_ERROR", 200);
     }
     return response;

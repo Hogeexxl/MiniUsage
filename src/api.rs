@@ -25,7 +25,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     codex::quota::{CodexQuotaResponse, CodexQuotaService},
     platform::browser::BrowserOpener,
-    range::{RangeKey, resolve_day_buckets, resolve_system_range},
+    range::{RangeKey, resolve_day_buckets, resolve_system_custom_range, resolve_system_range},
     scanner::{CommitFailureKind, ScanHandle, ScanShutdownError},
     storage::{Ledger, RevisionTuple},
     update::{ReleaseInfo, UpdateService, UpdateSnapshot},
@@ -241,7 +241,11 @@ async fn summary(
     RawQuery(raw_query): RawQuery,
 ) -> Result<Json<query::SummaryResponse>, ApiError> {
     let params = query::parse_summary_params(raw_query.as_deref())?;
-    let range = resolve_request_range(params.range.as_deref())?;
+    let range = resolve_request_range(
+        params.range.as_deref(),
+        params.from.as_deref(),
+        params.to.as_deref(),
+    )?;
     let aggregate_range = range.aggregate_range()?;
     let summary_query = SummaryQuery::new(aggregate_range, params.filter);
     let ledger = Arc::clone(&state.context.ledger);
@@ -257,7 +261,11 @@ async fn sessions(
     RawQuery(raw_query): RawQuery,
 ) -> Result<Json<query::SessionsResponse>, ApiError> {
     let params = query::parse_session_query_params(raw_query.as_deref())?;
-    let range = resolve_request_range(params.range.as_deref())?;
+    let range = resolve_request_range(
+        params.range.as_deref(),
+        params.from.as_deref(),
+        params.to.as_deref(),
+    )?;
     let aggregate_range = range.aggregate_range()?;
     let ledger = Arc::clone(&state.context.ledger);
     let snapshot = run_blocking_query(move || {
@@ -278,7 +286,11 @@ async fn session_rows(
     RawQuery(raw_query): RawQuery,
 ) -> Result<Json<query::SessionRowsResponse>, ApiError> {
     let params = query::parse_session_query_params(raw_query.as_deref())?;
-    let range = resolve_request_range(params.range.as_deref())?;
+    let range = resolve_request_range(
+        params.range.as_deref(),
+        params.from.as_deref(),
+        params.to.as_deref(),
+    )?;
     let aggregate_range = range.aggregate_range()?;
     let ledger = Arc::clone(&state.context.ledger);
     let snapshot = run_blocking_query(move || {
@@ -303,7 +315,11 @@ async fn session_detail(
     if params.root_session_ids.is_empty() {
         params.root_session_ids.push(root_session_id.clone());
     }
-    let range = resolve_request_range(params.range.as_deref())?;
+    let range = resolve_request_range(
+        params.range.as_deref(),
+        params.from.as_deref(),
+        params.to.as_deref(),
+    )?;
     let aggregate_range = range.aggregate_range()?;
     let ledger = Arc::clone(&state.context.ledger);
     let snapshot = run_blocking_query(move || {
@@ -323,7 +339,7 @@ async fn models(
     State(state): State<ApiState>,
     Query(params): Query<RangeParams>,
 ) -> Result<Json<query::ModelsResponse>, ApiError> {
-    let range = resolve_request_range(params.range.as_deref())?;
+    let range = resolve_system_range(RangeKey::parse(params.range.as_deref())?)?;
     let aggregate_range = range.aggregate_range()?;
     let ledger = Arc::clone(&state.context.ledger);
     let snapshot =
@@ -338,7 +354,11 @@ async fn model_distribution(
     RawQuery(raw_query): RawQuery,
 ) -> Result<Json<query::ModelDistributionResponse>, ApiError> {
     let params = query::parse_summary_params(raw_query.as_deref())?;
-    let range = resolve_request_range(params.range.as_deref())?;
+    let range = resolve_request_range(
+        params.range.as_deref(),
+        params.from.as_deref(),
+        params.to.as_deref(),
+    )?;
     let aggregate_range = range.aggregate_range()?;
     let ledger = Arc::clone(&state.context.ledger);
     let snapshot = run_blocking_query(move || {
@@ -358,7 +378,11 @@ async fn project_distribution(
     RawQuery(raw_query): RawQuery,
 ) -> Result<Json<query::ProjectDistributionResponse>, ApiError> {
     let params = query::parse_summary_params(raw_query.as_deref())?;
-    let range = resolve_request_range(params.range.as_deref())?;
+    let range = resolve_request_range(
+        params.range.as_deref(),
+        params.from.as_deref(),
+        params.to.as_deref(),
+    )?;
     let aggregate_range = range.aggregate_range()?;
     let ledger = Arc::clone(&state.context.ledger);
     let snapshot = run_blocking_query(move || {
@@ -380,7 +404,11 @@ async fn skills_usage(
     RawQuery(raw_query): RawQuery,
 ) -> Result<Json<query::SkillsUsageResponse>, ApiError> {
     let params = query::parse_summary_params(raw_query.as_deref())?;
-    let range = resolve_request_range(params.range.as_deref())?;
+    let range = resolve_request_range(
+        params.range.as_deref(),
+        params.from.as_deref(),
+        params.to.as_deref(),
+    )?;
     if range.key != RangeKey::SevenDays {
         return Err(ApiError::InvalidRange);
     }
@@ -477,8 +505,23 @@ async fn update_open_release(
     Ok(StatusCode::NO_CONTENT)
 }
 
-fn resolve_request_range(value: Option<&str>) -> Result<crate::range::ResolvedRange, ApiError> {
-    resolve_system_range(RangeKey::parse(value)?)
+fn resolve_request_range(
+    value: Option<&str>,
+    from: Option<&str>,
+    to: Option<&str>,
+) -> Result<crate::range::ResolvedRange, ApiError> {
+    match RangeKey::parse(value)? {
+        RangeKey::Custom => resolve_system_custom_range(
+            from.ok_or(ApiError::InvalidRange)?,
+            to.ok_or(ApiError::InvalidRange)?,
+        ),
+        key => {
+            if from.is_some() || to.is_some() {
+                return Err(ApiError::InvalidRange);
+            }
+            resolve_system_range(key)
+        }
+    }
 }
 
 struct AbortBlockingOnDrop(Option<tokio::task::AbortHandle>);
