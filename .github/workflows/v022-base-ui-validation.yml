@@ -1,0 +1,53 @@
+name: v0.2.2 Base UI validation
+
+on:
+  push:
+    branches:
+      - codex/v0.2.2-optimization
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Unit tests
+        working-directory: frontend
+        run: npm test
+
+      - name: Type check
+        working-directory: frontend
+        run: npm run check
+
+      - name: Production build
+        working-directory: frontend
+        run: npm run build
+
+      - name: Commit validation marker
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'Base UI picker validation passed at %s\n' "$GITHUB_SHA" > frontend/v022-base-ui-validation.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/v022-base-ui-validation.txt
+          git commit -m "test: confirm Base UI picker validation"
+          git push origin HEAD:codex/v0.2.2-optimization
