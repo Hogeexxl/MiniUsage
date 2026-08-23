@@ -84,15 +84,21 @@
 }
 
 /* MiniUsage-local calendar color adaptation. Keep Base UI calendar structure/logic unchanged. */
+.cn-calendar-popover {
+  background-color: var(--background) !important;
+  color: var(--foreground) !important;
+}
+
 .cn-calendar-nav-button:hover,
-.cn-calendar-day-button:hover {
+.cn-calendar-day-button:not([data-range-start="true"]):not([data-range-middle="true"]):not([data-range-end="true"]):hover {
   background-color: #f5f5f5 !important;
   color: var(--foreground) !important;
 }
 
 .dark .cn-calendar-nav-button:hover,
-.dark .cn-calendar-day-button:hover {
+.dark .cn-calendar-day-button:not([data-range-start="true"]):not([data-range-middle="true"]):not([data-range-end="true"]):hover {
   background-color: #1f1f1f !important;
+  color: var(--foreground) !important;
 }
 
 .cn-calendar-range-start,
@@ -100,7 +106,8 @@
 .cn-calendar-range-end,
 .cn-calendar-range-start::after,
 .cn-calendar-range-end::after,
-.cn-calendar-day-button[data-range-middle="true"] {
+.cn-calendar-day-button[data-range-middle="true"],
+.cn-calendar-day-button[data-range-middle="true"]:hover {
   background-color: #f5f5f5 !important;
 }
 
@@ -109,17 +116,22 @@
 .dark .cn-calendar-range-end,
 .dark .cn-calendar-range-start::after,
 .dark .cn-calendar-range-end::after,
-.dark .cn-calendar-day-button[data-range-middle="true"] {
+.dark .cn-calendar-day-button[data-range-middle="true"],
+.dark .cn-calendar-day-button[data-range-middle="true"]:hover {
   background-color: #262626 !important;
 }
 
-.cn-calendar-day-button[data-range-middle="true"] {
+.cn-calendar-day-button[data-range-middle="true"],
+.cn-calendar-day-button[data-range-middle="true"]:hover {
   color: var(--foreground) !important;
 }
 
 .cn-calendar-day-button[data-range-start="true"],
+.cn-calendar-day-button[data-range-start="true"]:hover,
 .cn-calendar-day-button[data-range-end="true"],
-.cn-calendar-day-button[data-selected-single="true"] {
+.cn-calendar-day-button[data-range-end="true"]:hover,
+.cn-calendar-day-button[data-selected-single="true"],
+.cn-calendar-day-button[data-selected-single="true"]:hover {
   background-color: var(--primary) !important;
   color: var(--primary-foreground) !important;
 }
