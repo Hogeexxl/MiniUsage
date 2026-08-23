@@ -143,8 +143,16 @@ describe("MetricGrid v0.2.1", () => {
     expect(legends[1]).toHaveTextContent("输入");
     expect(legends[0].firstElementChild).toHaveAttribute("aria-hidden", "true");
     expect(legends[1].firstElementChild).toHaveAttribute("aria-hidden", "true");
-    expect(legends[0].firstElementChild).toHaveClass("bg-[#be506e]");
-    expect(legends[1].firstElementChild).toHaveClass("bg-[#4057a5]");
+    expect(legends[0]).toHaveClass("h-4", "gap-1");
+    expect(legends[1]).toHaveClass("h-4", "gap-1");
+    expect(legends[0].firstElementChild).toHaveClass("h-4", "shrink-0", "items-center", "justify-center");
+    expect(legends[1].firstElementChild).toHaveClass("h-4", "shrink-0", "items-center", "justify-center");
+    expect(legends[0].firstElementChild).not.toHaveClass("w-4");
+    expect(legends[1].firstElementChild).not.toHaveClass("w-4");
+    expect(legends[0].firstElementChild?.firstElementChild).toHaveClass("h-1.5", "w-1.5", "bg-[#be506e]");
+    expect(legends[1].firstElementChild?.firstElementChild).toHaveClass("h-1.5", "w-1.5", "bg-[#4057a5]");
+    expect(within(card).getByText("缓存读")).toHaveClass("h-4", "items-center");
+    expect(within(card).getByText("输入")).toHaveClass("h-4", "items-center");
 
     const before = widths(Array.from(cached.children) as HTMLElement[]);
     for (const legend of legends) {
