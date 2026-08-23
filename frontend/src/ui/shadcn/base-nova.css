@@ -82,3 +82,44 @@
 .cn-popover-content-logical {
   @apply data-[side=inline-start]:slide-in-from-right-2 data-[side=inline-end]:slide-in-from-left-2;
 }
+
+/* MiniUsage-local calendar color adaptation. Keep Base UI calendar structure/logic unchanged. */
+.cn-calendar-nav-button:hover,
+.cn-calendar-day-button:hover {
+  background-color: #f5f5f5 !important;
+  color: var(--foreground) !important;
+}
+
+.dark .cn-calendar-nav-button:hover,
+.dark .cn-calendar-day-button:hover {
+  background-color: #1f1f1f !important;
+}
+
+.cn-calendar-range-start,
+.cn-calendar-range-middle,
+.cn-calendar-range-end,
+.cn-calendar-range-start::after,
+.cn-calendar-range-end::after,
+.cn-calendar-day-button[data-range-middle="true"] {
+  background-color: #f5f5f5 !important;
+}
+
+.dark .cn-calendar-range-start,
+.dark .cn-calendar-range-middle,
+.dark .cn-calendar-range-end,
+.dark .cn-calendar-range-start::after,
+.dark .cn-calendar-range-end::after,
+.dark .cn-calendar-day-button[data-range-middle="true"] {
+  background-color: #262626 !important;
+}
+
+.cn-calendar-day-button[data-range-middle="true"] {
+  color: var(--foreground) !important;
+}
+
+.cn-calendar-day-button[data-range-start="true"],
+.cn-calendar-day-button[data-range-end="true"],
+.cn-calendar-day-button[data-selected-single="true"] {
+  background-color: var(--primary) !important;
+  color: var(--primary-foreground) !important;
+}
