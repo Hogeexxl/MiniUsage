@@ -1,0 +1,47 @@
+name: Bootstrap v0.2.3 Release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  actions: write
+  contents: write
+
+jobs:
+  bootstrap:
+    if: github.event.head_commit.message == 'chore: bootstrap v0.2.3 release'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TARGET_COMMIT: dfcee08fea7282b51471dc4ec5f4d736b266bbf6
+      RELEASE_TAG: v0.2.3
+    steps:
+      - name: Verify release target
+        shell: bash
+        run: |
+          set -euo pipefail
+          resolved="$(gh api "repos/$GITHUB_REPOSITORY/commits/$TARGET_COMMIT" --jq .sha)"
+          test "$resolved" = "$TARGET_COMMIT"
+
+      - name: Create stable release tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          if existing="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --jq .object.sha 2>/dev/null)"; then
+            if [[ "$existing" != "$TARGET_COMMIT" ]]; then
+              echo "Existing $RELEASE_TAG points to $existing, expected $TARGET_COMMIT" >&2
+              exit 1
+            fi
+          else
+            gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
+              -f ref="refs/tags/$RELEASE_TAG" \
+              -f sha="$TARGET_COMMIT" >/dev/null
+          fi
+
+      - name: Dispatch canonical release workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref "$RELEASE_TAG"
