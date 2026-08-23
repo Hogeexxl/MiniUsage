@@ -84,7 +84,11 @@ export function CustomDateRangePicker({
           )}
         />
       ) : null}
-      <PopoverContent className="w-auto p-0" align="start" aria-label="自定义日期范围">
+      <PopoverContent
+        className="cn-calendar-popover w-auto p-0"
+        align="start"
+        aria-label="自定义日期范围"
+      >
         <Calendar
           mode="range"
           defaultMonth={draft?.from ?? new Date()}
