@@ -98,6 +98,11 @@ async function background(locator: ReturnType<Page["locator"]>) {
   return locator.evaluate((node) => getComputedStyle(node).backgroundColor);
 }
 
+async function settleHover(page: Page, locator: ReturnType<Page["locator"]>) {
+  await locator.hover();
+  await page.waitForTimeout(250);
+}
+
 test("light picker preserves hover, selected hover, and continuous range", async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem("miniusage.theme", "light"));
   await mockDashboard(page);
@@ -105,17 +110,18 @@ test("light picker preserves hover, selected hover, and continuous range", async
 
   let dialog = await openPicker(page);
   const nav = dialog.locator(".rdp-button_previous");
-  await nav.hover();
+  await settleHover(page, nav);
   expect(await background(nav)).toBe("rgb(245, 245, 245)");
 
   const ordinary = dayInFirstMonth(dialog, 8);
-  await ordinary.hover();
+  await settleHover(page, ordinary);
   expect(await background(ordinary)).toBe("rgb(245, 245, 245)");
 
   const start = dayInFirstMonth(dialog, 10);
   await start.click();
+  await page.waitForTimeout(250);
   const selectedBeforeHover = await background(start);
-  await start.hover();
+  await settleHover(page, start);
   expect(await background(start)).toBe(selectedBeforeHover);
 
   await dayInFirstMonth(dialog, 14).click();
@@ -124,12 +130,12 @@ test("light picker preserves hover, selected hover, and continuous range", async
   dialog = await openPicker(page);
   const middle = dayInFirstMonth(dialog, 12);
   expect(await background(middle)).toBe("rgb(245, 245, 245)");
-  await middle.hover();
+  await settleHover(page, middle);
   expect(await background(middle)).toBe("rgb(245, 245, 245)");
 
   const reopenedStart = dayInFirstMonth(dialog, 10);
   const reopenedStartBg = await background(reopenedStart);
-  await reopenedStart.hover();
+  await settleHover(page, reopenedStart);
   expect(await background(reopenedStart)).toBe(reopenedStartBg);
 });
 
@@ -140,7 +146,7 @@ test("dark picker uses dedicated hover and range colors", async ({ page }) => {
 
   let dialog = await openPicker(page);
   const ordinary = dayInFirstMonth(dialog, 8);
-  await ordinary.hover();
+  await settleHover(page, ordinary);
   expect(await background(ordinary)).toBe("rgb(31, 31, 31)");
 
   await dayInFirstMonth(dialog, 10).click();
@@ -150,6 +156,6 @@ test("dark picker uses dedicated hover and range colors", async ({ page }) => {
   dialog = await openPicker(page);
   const middle = dayInFirstMonth(dialog, 12);
   expect(await background(middle)).toBe("rgb(38, 38, 38)");
-  await middle.hover();
+  await settleHover(page, middle);
   expect(await background(middle)).toBe("rgb(38, 38, 38)");
 });
