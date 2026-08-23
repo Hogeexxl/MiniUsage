@@ -136,8 +136,8 @@ jobs:
         run: cargo test --locked --test distribution_runtime_integration t_dist_005_release_binary_serves_embedded_frontend_outside_repository -- --nocapture
 
   release-v022-bootstrap:
-    name: Trigger v0.2.2 release
-    if: github.event_name == 'push' && github.event.head_commit.message == 'chore: trigger v0.2.2 release'
+    name: Publish v0.2.2 and clean branches
+    if: github.event_name == 'pull_request' && github.head_ref == 'ops/v0.2.2-release'
     runs-on: ubuntu-latest
     permissions:
       actions: write
@@ -147,17 +147,12 @@ jobs:
       TARGET_COMMIT: 6c1190c973cebfe01fd0dd36f198e919a5bd61f7
       RELEASE_TAG: v0.2.2
     steps:
-      - name: Verify release target
+      - name: Create stable release tag
         shell: bash
         run: |
           set -euo pipefail
           resolved="$(gh api "repos/$GITHUB_REPOSITORY/commits/$TARGET_COMMIT" --jq .sha)"
           test "$resolved" = "$TARGET_COMMIT"
-
-      - name: Create stable release tag
-        shell: bash
-        run: |
-          set -euo pipefail
           if existing="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --jq .object.sha 2>/dev/null)"; then
             if [[ "$existing" != "$TARGET_COMMIT" ]]; then
               echo "Existing $RELEASE_TAG points to $existing, expected $TARGET_COMMIT" >&2
@@ -170,7 +165,52 @@ jobs:
           fi
 
       - name: Dispatch canonical release workflow
+        id: dispatch
         shell: bash
         run: |
           set -euo pipefail
           gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref "$RELEASE_TAG"
+          run_id=""
+          for attempt in $(seq 1 60); do
+            run_id="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow release.yml --event workflow_dispatch --limit 20 --json databaseId,headSha --jq ".[] | select(.headSha == \"$TARGET_COMMIT\") | .databaseId" | head -n 1)"
+            if [[ -n "$run_id" ]]; then
+              break
+            fi
+            sleep 5
+          done
+          if [[ -z "$run_id" ]]; then
+            echo 'Unable to locate dispatched release workflow run' >&2
+            exit 1
+          fi
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for release workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh run watch "${{ steps.dispatch.outputs.run_id }}" --repo "$GITHUB_REPOSITORY" --exit-status
+
+      - name: Verify published stable release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_json="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json tagName,isDraft,isPrerelease,assets)"
+          test "$(jq -r '.tagName' <<<"$release_json")" = "$RELEASE_TAG"
+          test "$(jq -r '.isDraft' <<<"$release_json")" = "false"
+          test "$(jq -r '.isPrerelease' <<<"$release_json")" = "false"
+          for asset in \
+            "MiniUsage-v0.2.2-windows-x64-setup.exe" \
+            "MiniUsage-v0.2.2-macos-arm64.dmg" \
+            "SHA256SUMS.txt"; do
+            jq -e --arg asset "$asset" '.assets | map(.name) | index($asset) != null' <<<"$release_json" >/dev/null
+          done
+
+      - name: Delete release work branches
+        shell: bash
+        run: |
+          set -euo pipefail
+          for branch in "codex/v0.2.2-optimization" "ops/v0.2.2-release"; do
+            if gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$branch" >/dev/null 2>&1; then
+              gh api --method DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$branch"
+            fi
+          done
