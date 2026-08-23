@@ -137,7 +137,7 @@ jobs:
 
   release-v023-bootstrap:
     name: Trigger v0.2.3 release
-    if: github.event_name == 'push' && github.event.head_commit.message == 'chore: trigger v0.2.3 release'
+    if: github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore: trigger v0.2.3 release')
     runs-on: ubuntu-latest
     permissions:
       actions: write
