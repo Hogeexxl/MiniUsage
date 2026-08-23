@@ -60,12 +60,12 @@ function Calendar({
         ),
         button_previous: cn(
           buttonVariants({ variant: buttonVariant }),
-          "size-(--cell-size) p-0 select-none aria-disabled:opacity-50 hover:bg-[#f5f5f5]! hover:text-foreground! dark:hover:bg-[#1f1f1f]!",
+          "cn-calendar-nav-button size-(--cell-size) p-0 select-none aria-disabled:opacity-50",
           defaultClassNames.button_previous,
         ),
         button_next: cn(
           buttonVariants({ variant: buttonVariant }),
-          "size-(--cell-size) p-0 select-none aria-disabled:opacity-50 hover:bg-[#f5f5f5]! hover:text-foreground! dark:hover:bg-[#1f1f1f]!",
+          "cn-calendar-nav-button size-(--cell-size) p-0 select-none aria-disabled:opacity-50",
           defaultClassNames.button_next,
         ),
         month_caption: cn(
@@ -114,12 +114,15 @@ function Calendar({
           defaultClassNames.day,
         ),
         range_start: cn(
-          "relative isolate z-0 rounded-l-(--cell-radius) bg-[#f5f5f5] after:absolute after:inset-y-0 after:right-0 after:w-4 after:bg-[#f5f5f5] dark:bg-[#262626] dark:after:bg-[#262626]",
+          "cn-calendar-range-start relative isolate z-0 rounded-l-(--cell-radius) after:absolute after:inset-y-0 after:right-0 after:w-4",
           defaultClassNames.range_start,
         ),
-        range_middle: cn("rounded-none", defaultClassNames.range_middle),
+        range_middle: cn(
+          "cn-calendar-range-middle rounded-none",
+          defaultClassNames.range_middle,
+        ),
         range_end: cn(
-          "relative isolate z-0 rounded-r-(--cell-radius) bg-[#f5f5f5] after:absolute after:inset-y-0 after:left-0 after:w-4 after:bg-[#f5f5f5] dark:bg-[#262626] dark:after:bg-[#262626]",
+          "cn-calendar-range-end relative isolate z-0 rounded-r-(--cell-radius) after:absolute after:inset-y-0 after:left-0 after:w-4",
           defaultClassNames.range_end,
         ),
         today: cn(
@@ -216,7 +219,7 @@ function CalendarDayButton({
       data-range-end={modifiers.range_end}
       data-range-middle={modifiers.range_middle}
       className={cn(
-        "cn-calendar-day-button relative isolate z-10 flex aspect-square size-auto w-full min-w-(--cell-size) flex-col gap-1 border-0 leading-none font-normal hover:bg-[#f5f5f5]! hover:text-foreground! dark:hover:bg-[#1f1f1f]! group-data-[focused=true]/day:relative group-data-[focused=true]/day:z-10 group-data-[focused=true]/day:border-ring group-data-[focused=true]/day:ring-[3px] group-data-[focused=true]/day:ring-ring/50 data-[range-end=true]:rounded-(--cell-radius) data-[range-end=true]:rounded-r-(--cell-radius) data-[range-end=true]:bg-primary! data-[range-end=true]:text-primary-foreground! data-[range-end=true]:hover:bg-primary! data-[range-end=true]:hover:text-primary-foreground! data-[range-middle=true]:rounded-none data-[range-middle=true]:bg-[#f5f5f5]! data-[range-middle=true]:text-foreground! data-[range-middle=true]:hover:bg-[#f5f5f5]! data-[range-middle=true]:hover:text-foreground! dark:data-[range-middle=true]:bg-[#262626]! dark:data-[range-middle=true]:hover:bg-[#262626]! data-[range-start=true]:rounded-(--cell-radius) data-[range-start=true]:rounded-l-(--cell-radius) data-[range-start=true]:bg-primary! data-[range-start=true]:text-primary-foreground! data-[range-start=true]:hover:bg-primary! data-[range-start=true]:hover:text-primary-foreground! data-[selected-single=true]:bg-primary! data-[selected-single=true]:text-primary-foreground! data-[selected-single=true]:hover:bg-primary! data-[selected-single=true]:hover:text-primary-foreground! dark:hover:text-foreground [&>span]:text-xs [&>span]:opacity-70",
+        "cn-calendar-day-button relative isolate z-10 flex aspect-square size-auto w-full min-w-(--cell-size) flex-col gap-1 border-0 leading-none font-normal group-data-[focused=true]/day:relative group-data-[focused=true]/day:z-10 group-data-[focused=true]/day:border-ring group-data-[focused=true]/day:ring-[3px] group-data-[focused=true]/day:ring-ring/50 data-[range-end=true]:rounded-(--cell-radius) data-[range-end=true]:rounded-r-(--cell-radius) data-[range-middle=true]:rounded-none data-[range-start=true]:rounded-(--cell-radius) data-[range-start=true]:rounded-l-(--cell-radius) dark:hover:text-foreground [&>span]:text-xs [&>span]:opacity-70",
         defaultClassNames.day,
         className,
       )}
