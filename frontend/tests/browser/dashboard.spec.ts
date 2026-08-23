@@ -16,8 +16,8 @@ function rangeDto(key: RangeKey) {
 function usage(kind: "base" | "model" | "filtered" | "main" | "sub" = "base", cost?: number | null) {
   const values = {
     base: { input: 1200, cached: 400, output: 600, reasoning: 180, total: 2200 },
-    model: { input: 800, cached: 250, output: 350, reasoning: 100, total: 1400 },
-    filtered: { input: 500, cached: 150, output: 250, reasoning: 70, total: 900 },
+    model: { input: 800, cached: 250, output: 350, reasoning: 100, total: 1150 },
+    filtered: { input: 500, cached: 150, output: 250, reasoning: 70, total: 750 },
     main: { input: 230, cached: 70, output: 120, reasoning: 30, total: 420 },
     sub: { input: 95, cached: 25, output: 60, reasoning: 15, total: 180 },
   }[kind];
@@ -460,17 +460,34 @@ test("C2 covers the approved v0.2.0 core interaction flow", async ({ page }) => 
   await page.getByRole("tab", { name: "7d" }).click();
   await expect(page.getByRole("tab", { name: "7d" })).toHaveAttribute("aria-selected", "true");
 
+  const customRangeTab = page.getByRole("tab", { name: "自定义", exact: true });
+  await customRangeTab.click();
+  const customRangeDialog = page.getByRole("dialog", { name: "自定义日期范围" });
+  await expect(customRangeDialog).toBeVisible();
+  const customRangeBox = await customRangeDialog.boundingBox();
+  expect(customRangeBox).not.toBeNull();
+  expect(customRangeBox?.x ?? -1).toBeGreaterThanOrEqual(0);
+  expect(customRangeBox?.y ?? -1).toBeGreaterThanOrEqual(0);
+  expect(customRangeBox?.width ?? 0).toBeGreaterThan(0);
+  expect(customRangeBox?.height ?? 0).toBeGreaterThan(0);
+  expect((customRangeBox?.x ?? 0) + (customRangeBox?.width ?? 0)).toBeLessThanOrEqual(1512);
+  expect((customRangeBox?.y ?? 0) + (customRangeBox?.height ?? 0)).toBeLessThanOrEqual(1000);
+  await page.waitForTimeout(250);
+  await expect(customRangeDialog).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(customRangeDialog).toBeHidden();
+
   const kpi = page.getByLabel("KPI 指标");
   await page.getByRole("button", { name: "模型筛选，全部" }).click();
   await page.getByRole("checkbox", { name: "gpt-5" }).click();
   await page.keyboard.press("Escape");
   await expect(kpi.locator(":scope > *")).toHaveCount(4);
-  await expect(kpi.locator('span[title="1400"]')).toHaveCount(1);
+  await expect(kpi.locator('span[title="1,150"]')).toHaveCount(1);
 
   await page.getByRole("button", { name: "项目筛选，全部" }).click();
   await page.getByRole("checkbox", { name: "MiniUsage" }).click();
   await page.keyboard.press("Escape");
-  await expect(kpi.locator('span[title="900"]')).toHaveCount(1);
+  await expect(kpi.locator('span[title="750"]')).toHaveCount(1);
 
   const chartSection = page.getByLabel("使用分布图表");
   const modelCard = chartSection.locator("article").filter({ has: page.getByRole("heading", { name: "模型分布" }) });

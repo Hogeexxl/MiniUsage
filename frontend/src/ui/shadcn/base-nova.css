@@ -1,0 +1,125 @@
+:root {
+  --radius: 0.625rem;
+  --radius-md: calc(var(--radius) * 0.8);
+}
+
+.cn-button {
+  @apply focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 rounded-lg border border-transparent bg-clip-padding text-sm font-medium focus-visible:ring-3 aria-invalid:ring-3 active:not-aria-[haspopup]:translate-y-px [&_svg:not([class*='size-'])]:size-4;
+}
+
+.cn-button-variant-default {
+  @apply bg-primary text-primary-foreground hover:bg-primary/80;
+}
+
+.cn-button-variant-outline {
+  @apply border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 aria-expanded:bg-muted aria-expanded:text-foreground;
+}
+
+.cn-button-variant-secondary {
+  @apply bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground;
+}
+
+.cn-button-variant-ghost {
+  @apply hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground;
+}
+
+.cn-button-variant-destructive {
+  @apply bg-destructive/10 hover:bg-destructive/20 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/20 text-destructive focus-visible:border-destructive/40 dark:hover:bg-destructive/30;
+}
+
+.cn-button-variant-link {
+  @apply text-primary underline-offset-4 hover:underline;
+}
+
+.cn-button-size-xs {
+  @apply h-6 gap-1 rounded-[min(var(--radius-md),10px)] px-2 text-xs has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3;
+}
+
+.cn-button-size-sm {
+  @apply h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5;
+}
+
+.cn-button-size-default {
+  @apply h-8 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2;
+}
+
+.cn-button-size-lg {
+  @apply h-9 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2;
+}
+
+.cn-button-size-icon-xs {
+  @apply size-6 rounded-[min(var(--radius-md),10px)] [&_svg:not([class*='size-'])]:size-3;
+}
+
+.cn-button-size-icon-sm {
+  @apply size-7 rounded-[min(var(--radius-md),12px)];
+}
+
+.cn-button-size-icon {
+  @apply size-8;
+}
+
+.cn-button-size-icon-lg {
+  @apply size-9;
+}
+
+.cn-calendar {
+  @apply p-2 [--cell-radius:var(--radius-md)] [--cell-size:--spacing(7)];
+}
+
+.cn-calendar-dropdown-root {
+  @apply has-focus:border-ring border-input has-focus:ring-ring/50 border has-focus:ring-3;
+}
+
+.cn-calendar-caption-label {
+  @apply h-6 pr-1 pl-1.5;
+}
+
+.cn-popover-content {
+  @apply bg-popover text-popover-foreground data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 ring-foreground/10 flex flex-col gap-2.5 rounded-lg p-2.5 text-sm shadow-md ring-1 duration-100;
+}
+
+.cn-popover-content-logical {
+  @apply data-[side=inline-start]:slide-in-from-right-2 data-[side=inline-end]:slide-in-from-left-2;
+}
+
+/* MiniUsage-local calendar color adaptation. Keep Base UI calendar structure/logic unchanged. */
+.cn-calendar-nav-button:hover,
+.cn-calendar-day-button:hover {
+  background-color: #f5f5f5 !important;
+  color: var(--foreground) !important;
+}
+
+.dark .cn-calendar-nav-button:hover,
+.dark .cn-calendar-day-button:hover {
+  background-color: #1f1f1f !important;
+}
+
+.cn-calendar-range-start,
+.cn-calendar-range-middle,
+.cn-calendar-range-end,
+.cn-calendar-range-start::after,
+.cn-calendar-range-end::after,
+.cn-calendar-day-button[data-range-middle="true"] {
+  background-color: #f5f5f5 !important;
+}
+
+.dark .cn-calendar-range-start,
+.dark .cn-calendar-range-middle,
+.dark .cn-calendar-range-end,
+.dark .cn-calendar-range-start::after,
+.dark .cn-calendar-range-end::after,
+.dark .cn-calendar-day-button[data-range-middle="true"] {
+  background-color: #262626 !important;
+}
+
+.cn-calendar-day-button[data-range-middle="true"] {
+  color: var(--foreground) !important;
+}
+
+.cn-calendar-day-button[data-range-start="true"],
+.cn-calendar-day-button[data-range-end="true"],
+.cn-calendar-day-button[data-selected-single="true"] {
+  background-color: var(--primary) !important;
+  color: var(--primary-foreground) !important;
+}

@@ -1,14 +1,14 @@
 import { canonicalDashboardFilters } from "../data/miniUsageClient";
-import type { DashboardFilters, RangeKey } from "../data/types";
+import type { DashboardFilters, DashboardRange } from "../data/types";
 
-export type RangePolicy = { kind: "dashboard" } | { kind: "fixed"; range: RangeKey };
+export type RangePolicy = { kind: "dashboard" } | { kind: "fixed"; range: DashboardRange };
 export type FilterPolicy = "dashboard" | "ignore";
 export type DashboardScopePolicy = {
   range: RangePolicy;
   models: FilterPolicy;
   projects: FilterPolicy;
 };
-export type ResolvedDashboardScope = { range: RangeKey; filters: DashboardFilters };
+export type ResolvedDashboardScope = { range: DashboardRange; filters: DashboardFilters };
 
 const FOLLOW_DASHBOARD: DashboardScopePolicy = {
   range: { kind: "dashboard" },
@@ -16,7 +16,7 @@ const FOLLOW_DASHBOARD: DashboardScopePolicy = {
   projects: "dashboard",
 };
 const ROLLING_7D_FILTERED: DashboardScopePolicy = {
-  range: { kind: "fixed", range: "7d" },
+  range: { kind: "fixed", range: { key: "7d" } },
   models: "dashboard",
   projects: "dashboard",
 };
@@ -31,7 +31,7 @@ export const DASHBOARD_SCOPE_POLICIES = {
 
 export function resolveDashboardScope(
   policy: DashboardScopePolicy,
-  dashboardRange: RangeKey,
+  dashboardRange: DashboardRange,
   dashboardFilters: DashboardFilters,
 ): ResolvedDashboardScope {
   const canonical = canonicalDashboardFilters(dashboardFilters);

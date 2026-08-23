@@ -86,14 +86,14 @@ const offsetHeightDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.proto
 function fakeClient(overrides: Partial<MiniUsageClient> = {}): MiniUsageClient {
   return {
     filterOptions: vi.fn(async () => ({ data_revision: 1, models: [], projects: [] })),
-    summary: vi.fn(async (range) => (range === "today" ? summary("today") : summary("yesterday"))),
+    summary: vi.fn(async (range) => (range.key === "today" ? summary("today") : summary("yesterday"))),
     modelDistribution: vi.fn(async (range) => ({
-      range: { key: range, start_ms: 1, end_ms: 2, timezone: "Asia/Shanghai" },
+      range: { key: range.key, start_ms: 1, end_ms: 2, timezone: "Asia/Shanghai" },
       data_revision: 1,
       items: [],
     })),
     projectDistribution: vi.fn(async (range) => ({
-      range: { key: range, start_ms: 1, end_ms: 2, timezone: "Asia/Shanghai" },
+      range: { key: range.key, start_ms: 1, end_ms: 2, timezone: "Asia/Shanghai" },
       data_revision: 1,
       items: [],
     })),
@@ -119,7 +119,7 @@ function fakeClient(overrides: Partial<MiniUsageClient> = {}): MiniUsageClient {
     })),
     getSessionSnapshot: vi.fn(async () => sessionSnapshot),
     getSessionRows: vi.fn(async ({ range }) => ({
-      range: { ...sessionSnapshot.range, key: range },
+      range: { ...sessionSnapshot.range, key: range.key },
       data_revision: 1,
       items: [],
     })),

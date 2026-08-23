@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { miniUsageClient } from "./miniUsageClient";
+import { appendRangeParams, dashboardQueryKey, miniUsageClient } from "./miniUsageClient";
 import { MiniUsageClientError, type DashboardFilters } from "./types";
 
 const emptyFilters: DashboardFilters = { models: [], projects: [] };
@@ -169,18 +169,35 @@ describe("miniUsageClient DTO seam", () => {
       ],
     };
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ range, data_revision: 1, usage }), { status: 200 }));
-    await miniUsageClient.summary("today", filters);
+    await miniUsageClient.summary({ key: "today" }, filters);
     expect(fetchMock).toHaveBeenLastCalledWith(
       "/api/usage/summary?range=today&model=gpt-a&model=gpt-b&project_path=%2Fa+%26+b&include_projectless=1&include_unknown_project=1",
       expect.objectContaining({ method: "GET" }),
     );
 
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ range, data_revision: 1, usage }), { status: 200 }));
-    await miniUsageClient.summary("today", { models: [], projects: [] });
+    await miniUsageClient.summary({ key: "today" }, { models: [], projects: [] });
     expect(fetchMock).toHaveBeenLastCalledWith(
       "/api/usage/summary?range=today",
       expect.objectContaining({ method: "GET" }),
     );
+  });
+
+  it("T-022-A2 serializes custom ranges into URLs and query identities", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ range: { ...range, key: "custom" }, data_revision: 1, usage }), { status: 200 }),
+    );
+    const custom = { key: "custom" as const, from: "2026-08-01", to: "2026-08-03" };
+    await miniUsageClient.summary(custom, emptyFilters);
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "/api/usage/summary?range=custom&from=2026-08-01&to=2026-08-03",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(dashboardQueryKey(custom, emptyFilters)).not.toBe(
+      dashboardQueryKey({ key: "custom", from: "2026-08-10", to: "2026-08-12" }, emptyFilters),
+    );
+    const params = appendRangeParams(new URLSearchParams({ from: "stale", to: "stale" }), { key: "7d" });
+    expect(params.toString()).toBe("range=7d");
   });
 
   it("validates summary/status/revision and keeps exact nullable fields through the public client", async () => {
@@ -208,7 +225,7 @@ describe("miniUsageClient DTO seam", () => {
         ),
       )
       .mockResolvedValueOnce(new Response(JSON.stringify({ data_revision: 3, status_revision: 4 }), { status: 200 }));
-    await expect(miniUsageClient.summary("today", emptyFilters)).resolves.toEqual({
+    await expect(miniUsageClient.summary({ key: "today" }, emptyFilters)).resolves.toEqual({
       range,
       data_revision: 3,
       usage,
@@ -234,7 +251,7 @@ describe("miniUsageClient DTO seam", () => {
     fetchMock.mockResolvedValueOnce(
       new Response(JSON.stringify({ range, data_revision: 0, usage: acceptedUsage }), { status: 200 }),
     );
-    await expect(miniUsageClient.summary("today", emptyFilters)).resolves.toMatchObject({ usage: acceptedUsage });
+    await expect(miniUsageClient.summary({ key: "today" }, emptyFilters)).resolves.toMatchObject({ usage: acceptedUsage });
 
     fetchMock.mockResolvedValueOnce(
       new Response(
@@ -246,7 +263,7 @@ describe("miniUsageClient DTO seam", () => {
         { status: 200 },
       ),
     );
-    await expect(miniUsageClient.summary("today", emptyFilters)).rejects.toBeInstanceOf(MiniUsageClientError);
+    await expect(miniUsageClient.summary({ key: "today" }, emptyFilters)).rejects.toBeInstanceOf(MiniUsageClientError);
   });
 
   it("rejects unsafe integers, invalid ratios, and legacy-field-only responses", async () => {
@@ -276,9 +293,9 @@ describe("miniUsageClient DTO seam", () => {
           { status: 200 },
         ),
       );
-    await expect(miniUsageClient.summary("today", emptyFilters)).rejects.toBeInstanceOf(MiniUsageClientError);
-    await expect(miniUsageClient.summary("today", emptyFilters)).rejects.toBeInstanceOf(MiniUsageClientError);
-    await expect(miniUsageClient.summary("today", emptyFilters)).rejects.toBeInstanceOf(MiniUsageClientError);
+    await expect(miniUsageClient.summary({ key: "today" }, emptyFilters)).rejects.toBeInstanceOf(MiniUsageClientError);
+    await expect(miniUsageClient.summary({ key: "today" }, emptyFilters)).rejects.toBeInstanceOf(MiniUsageClientError);
+    await expect(miniUsageClient.summary({ key: "today" }, emptyFilters)).rejects.toBeInstanceOf(MiniUsageClientError);
   });
 
   it("preserves cache-write null and zero as distinct canonical values", async () => {
@@ -295,8 +312,8 @@ describe("miniUsageClient DTO seam", () => {
           { status: 200 },
         ),
       );
-    await expect(miniUsageClient.summary("today", emptyFilters)).resolves.toMatchObject({ usage });
-    await expect(miniUsageClient.summary("today", emptyFilters)).resolves.toMatchObject({
+    await expect(miniUsageClient.summary({ key: "today" }, emptyFilters)).resolves.toMatchObject({ usage });
+    await expect(miniUsageClient.summary({ key: "today" }, emptyFilters)).resolves.toMatchObject({
       usage: { cache_write_tokens: 0, uncached_input_tokens: 6 },
     });
   });
@@ -343,7 +360,7 @@ describe("miniUsageClient DTO seam", () => {
         { status: 200 },
       ),
     );
-    await expect(miniUsageClient.getSessionSnapshot({ range: "today", filters: emptyFilters })).resolves.toEqual({
+    await expect(miniUsageClient.getSessionSnapshot({ range: { key: "today" }, filters: emptyFilters })).resolves.toEqual({
       range,
       data_revision: 4,
       total_items: 1,
@@ -360,7 +377,7 @@ describe("miniUsageClient DTO seam", () => {
     );
     await expect(
       miniUsageClient.getSessionRows({
-        range: "today",
+        range: { key: "today" },
         filters: { models: ["gpt-b", "gpt-a", "gpt-b"], projects: [{ kind: "projectless" }] },
         root_session_ids: ["root-1", "root-1"],
         expected_data_revision: 4,
@@ -406,7 +423,7 @@ describe("miniUsageClient DTO seam", () => {
         }],
       }), { status: 200 }),
     );
-    await expect(miniUsageClient.getSessionDetail({ range: "today", filters: emptyFilters, root_session_id: "root-1", expected_data_revision: 4 })).resolves.toMatchObject({
+    await expect(miniUsageClient.getSessionDetail({ range: { key: "today" }, filters: emptyFilters, root_session_id: "root-1", expected_data_revision: 4 })).resolves.toMatchObject({
       last_activity_at_ms: 1_700_000_000_000,
       main: { model_usage: [{ model: "gpt-5", reasoning_effort: "high" }], self_usage: sessionUsage, inclusive_usage: sessionUsage },
       subagents: [{ parent_thread_id: null, model: "o4-mini", reasoning_effort: null, reasoning_effort_mixed: true, usage: { reasoning_tokens: 9, cache_write_tokens: 0, estimated_cost: 1.25 } }],
@@ -419,10 +436,10 @@ describe("miniUsageClient DTO seam", () => {
     fetchMock.mockResolvedValueOnce(
       new Response(JSON.stringify({ error: { code: "STALE_DATA_REVISION" } }), { status: 409 }),
     );
-    await expect(miniUsageClient.getSessionRows({ range: "today", filters: emptyFilters, root_session_ids: ["root-1"], expected_data_revision: 4 })).rejects.toMatchObject({ code: "STALE_DATA_REVISION" });
+    await expect(miniUsageClient.getSessionRows({ range: { key: "today" }, filters: emptyFilters, root_session_ids: ["root-1"], expected_data_revision: 4 })).rejects.toMatchObject({ code: "STALE_DATA_REVISION" });
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ range, data_revision: 4, items: Array.from({ length: 61 }, () => sessionItem()) }), { status: 200 }));
-    await expect(miniUsageClient.getSessionRows({ range: "today", filters: emptyFilters, root_session_ids: ["root-1"] })).rejects.toBeInstanceOf(MiniUsageClientError);
-    await expect(miniUsageClient.getSessionRows({ range: "today", filters: emptyFilters, root_session_ids: Array.from({ length: 61 }, (_, index) => `root-${index}`) })).rejects.toMatchObject({ code: "INVALID_SESSION_IDS" });
+    await expect(miniUsageClient.getSessionRows({ range: { key: "today" }, filters: emptyFilters, root_session_ids: ["root-1"] })).rejects.toBeInstanceOf(MiniUsageClientError);
+    await expect(miniUsageClient.getSessionRows({ range: { key: "today" }, filters: emptyFilters, root_session_ids: Array.from({ length: 61 }, (_, index) => `root-${index}`) })).rejects.toMatchObject({ code: "INVALID_SESSION_IDS" });
   });
 
   it("T-MU04-C03 validates cost status combinations across summary, session, and detail DTOs", async () => {
@@ -436,7 +453,7 @@ describe("miniUsageClient DTO seam", () => {
       fetchMock.mockResolvedValueOnce(
         new Response(JSON.stringify({ range, data_revision: 0, usage: { ...usage, ...cost } }), { status: 200 }),
       );
-      await expect(miniUsageClient.summary("today", emptyFilters)).resolves.toMatchObject({ usage: cost });
+      await expect(miniUsageClient.summary({ key: "today" }, emptyFilters)).resolves.toMatchObject({ usage: cost });
     }
 
     for (const invalidUsage of [
@@ -449,7 +466,7 @@ describe("miniUsageClient DTO seam", () => {
       fetchMock.mockResolvedValueOnce(
         new Response(JSON.stringify({ range, data_revision: 0, usage: invalidUsage }), { status: 200 }),
       );
-      await expect(miniUsageClient.summary("today", emptyFilters)).rejects.toBeInstanceOf(MiniUsageClientError);
+      await expect(miniUsageClient.summary({ key: "today" }, emptyFilters)).rejects.toBeInstanceOf(MiniUsageClientError);
     }
 
     const sortIndex = {
@@ -482,7 +499,7 @@ describe("miniUsageClient DTO seam", () => {
         { status: 200 },
       ),
     );
-    await expect(miniUsageClient.getSessionSnapshot({ range: "today", filters: emptyFilters })).resolves.toMatchObject({
+    await expect(miniUsageClient.getSessionSnapshot({ range: { key: "today" }, filters: emptyFilters })).resolves.toMatchObject({
       items: [{ inclusive_usage: partialSessionUsage, self_usage: partialSessionUsage, subagent_usage: partialSessionUsage }],
     });
 
@@ -520,7 +537,7 @@ describe("miniUsageClient DTO seam", () => {
       ),
     );
     await expect(
-      miniUsageClient.getSessionDetail({ range: "today", filters: emptyFilters, root_session_id: "root-1" }),
+      miniUsageClient.getSessionDetail({ range: { key: "today" }, filters: emptyFilters, root_session_id: "root-1" }),
     ).resolves.toMatchObject({
       main: {
         model_usage: [{ usage: detailUsage }],

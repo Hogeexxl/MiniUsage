@@ -236,6 +236,9 @@ describe("MetricGrid v0.2.1", () => {
     expect(codexQuotaColor(19)).toBe(chartSeriesColor(9));
 
     const trigger = within(card).getByRole("button", { name: "Pro 5x" });
+    expect(trigger).toHaveAttribute("aria-label", "Pro 5x");
+    expect(trigger).toHaveClass("h-4", "rounded-full", "border", "border-foreground/40", "whitespace-nowrap");
+    expect(trigger).not.toHaveClass("w-8", "truncate");
     fireEvent.pointerEnter(trigger.parentElement!, { pointerId: 1, pointerType: "mouse", buttons: 0 });
     const dialog = (await screen.findByText("hoge@example.com")).closest('[role="dialog"]');
     expect(dialog).toHaveTextContent("hoge@example.com");

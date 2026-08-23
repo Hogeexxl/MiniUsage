@@ -166,6 +166,8 @@ pub struct SummaryResponse {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SummaryParams {
     pub range: Option<String>,
+    pub from: Option<String>,
+    pub to: Option<String>,
     pub filter: UsageFilter,
 }
 
@@ -401,6 +403,8 @@ pub struct StatusResponse {
 
 pub fn parse_summary_params(raw_query: Option<&str>) -> Result<SummaryParams, ApiError> {
     let mut range = None;
+    let mut from = None;
+    let mut to = None;
     let mut models = Vec::new();
     let mut project_paths = Vec::new();
     let mut include_projectless = false;
@@ -413,6 +417,16 @@ pub fn parse_summary_params(raw_query: Option<&str>) -> Result<SummaryParams, Ap
         match name.as_ref() {
             "range" => {
                 if range.replace(value.into_owned()).is_some() {
+                    return Err(ApiError::InvalidRange);
+                }
+            }
+            "from" => {
+                if from.replace(value.into_owned()).is_some() {
+                    return Err(ApiError::InvalidRange);
+                }
+            }
+            "to" => {
+                if to.replace(value.into_owned()).is_some() {
                     return Err(ApiError::InvalidRange);
                 }
             }
@@ -436,8 +450,12 @@ pub fn parse_summary_params(raw_query: Option<&str>) -> Result<SummaryParams, Ap
         }
     }
 
+    validate_range_params(range.as_deref(), from.as_deref(), to.as_deref())?;
+
     Ok(SummaryParams {
         range,
+        from,
+        to,
         filter: UsageFilter::new(
             models,
             project_paths,
@@ -447,9 +465,54 @@ pub fn parse_summary_params(raw_query: Option<&str>) -> Result<SummaryParams, Ap
     })
 }
 
+pub fn validate_range_params(
+    range: Option<&str>,
+    from: Option<&str>,
+    to: Option<&str>,
+) -> Result<(), ApiError> {
+    match range {
+        Some("custom") => {
+            let from = from.ok_or(ApiError::InvalidRange)?;
+            let to = to.ok_or(ApiError::InvalidRange)?;
+            let from = parse_custom_date(from)?;
+            let to = parse_custom_date(to)?;
+            if from > to {
+                return Err(ApiError::InvalidRange);
+            }
+        }
+        Some(_) | None => {
+            if from.is_some() || to.is_some() {
+                return Err(ApiError::InvalidRange);
+            }
+        }
+    }
+    Ok(())
+}
+
+fn parse_custom_date(value: &str) -> Result<chrono::NaiveDate, ApiError> {
+    if value.len() != 10
+        || value.as_bytes()[4] != b'-'
+        || value.as_bytes()[7] != b'-'
+        || value
+            .as_bytes()
+            .iter()
+            .enumerate()
+            .any(|(index, byte)| index != 4 && index != 7 && !byte.is_ascii_digit())
+    {
+        return Err(ApiError::InvalidRange);
+    }
+    let date =
+        chrono::NaiveDate::parse_from_str(value, "%Y-%m-%d").map_err(|_| ApiError::InvalidRange)?;
+    (date.format("%Y-%m-%d").to_string() == value)
+        .then_some(date)
+        .ok_or(ApiError::InvalidRange)
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct SessionQueryParams {
     pub range: Option<String>,
+    pub from: Option<String>,
+    pub to: Option<String>,
     pub filter: UsageFilter,
     pub seed_sort_field: SessionSortField,
     pub seed_sort_order: SessionSortOrder,
@@ -511,6 +574,8 @@ pub fn parse_session_query_params(raw_query: Option<&str>) -> Result<SessionQuer
     }
     Ok(SessionQueryParams {
         range: summary.range,
+        from: summary.from,
+        to: summary.to,
         filter: summary.filter,
         seed_sort_field,
         seed_sort_order,
@@ -1242,6 +1307,31 @@ mod tests {
             parse_summary_params(Some("range=year&range=30d")),
             Err(ApiError::InvalidRange)
         );
+    }
+
+    #[test]
+    fn t_022_a1_custom_range_query_requires_a_valid_inclusive_date_pair() {
+        let parsed = parse_summary_params(Some(
+            "range=custom&from=2026-08-01&to=2026-08-03&model=gpt-5",
+        ))
+        .unwrap();
+        assert_eq!(parsed.range.as_deref(), Some("custom"));
+        assert_eq!(parsed.from.as_deref(), Some("2026-08-01"));
+        assert_eq!(parsed.to.as_deref(), Some("2026-08-03"));
+
+        for query in [
+            "range=custom&from=2026-08-01",
+            "range=custom&to=2026-08-03",
+            "range=custom&from=2026-08-04&to=2026-08-03",
+            "range=custom&from=2026-02-30&to=2026-03-01",
+            "range=7d&from=2026-08-01&to=2026-08-03",
+        ] {
+            assert_eq!(
+                parse_summary_params(Some(query)),
+                Err(ApiError::InvalidRange),
+                "query should be rejected: {query}"
+            );
+        }
     }
 
     #[test]

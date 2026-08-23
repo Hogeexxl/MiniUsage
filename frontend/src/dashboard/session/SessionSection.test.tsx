@@ -66,7 +66,7 @@ const item: SessionItemDto = {
 
 function view(overrides: Partial<SessionTableViewModel> = {}): SessionTableViewModel {
   return {
-    range: "today",
+    range: { key: "today" },
     rows: [item],
     timezone: "Asia/Shanghai",
     load_state: "ready",
@@ -188,13 +188,13 @@ describe("SessionSection v0.2.0", () => {
       "项目",
       "模型",
       "合计 Token",
+      "sub数量",
       "缓存命中率",
       "合计费用",
-      "Subagent 数",
     ]);
 
     expect(headers[1].querySelector("button")).toBeNull();
-    expect(headers[7].querySelector("button")).toBeNull();
+    expect(headers[5].querySelector("button")).toBeNull();
     expect(headers.filter((header) => header.querySelector("button")).length).toBe(6);
 
     for (const label of ["合计 Token", "缓存命中率", "合计费用"]) {
@@ -208,9 +208,9 @@ describe("SessionSection v0.2.0", () => {
       expect(cells[index]).toHaveClass("text-right");
     }
     expect(cells[4]).toHaveTextContent("5,678");
-    expect(cells[7]).toHaveTextContent("2");
+    expect(cells[5]).toHaveTextContent("2");
     expect(cells[4].querySelector(".tabular-nums")).toBeTruthy();
-    expect(cells[7].querySelector(".tabular-nums")).toBeTruthy();
+    expect(cells[5].querySelector(".tabular-nums")).toBeTruthy();
 
     const table = rendered.container.querySelector("table");
     if (!table) throw new Error("Session table not found");
@@ -220,9 +220,9 @@ describe("SessionSection v0.2.0", () => {
       "150px",
       "168px",
       "150px",
+      "128px",
       "150px",
       "120px",
-      "128px",
       "0px",
     ]);
   });

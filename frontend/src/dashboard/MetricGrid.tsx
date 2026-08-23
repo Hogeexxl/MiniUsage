@@ -201,7 +201,7 @@ function CodexQuotaCard({ quota }: { quota: CodexQuotaResponse }) {
         <div className={`${TITLE} min-w-0`}>剩余配额</div>
         <Popover trigger="hover" side="bottom" align="end">
           <PopoverTrigger>
-            <button type="button" className="min-w-0 truncate text-xs font-medium leading-4 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+            <button type="button" aria-label={plan} className="inline-flex h-4 shrink-0 items-center justify-center rounded-full border border-foreground/40 px-1 text-center text-[10px] font-medium leading-[10px] whitespace-nowrap text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
               {plan}
             </button>
           </PopoverTrigger>

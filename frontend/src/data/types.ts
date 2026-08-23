@@ -1,6 +1,14 @@
-export const RANGE_KEYS = ["today", "yesterday", "7d", "30d", "year"] as const;
+export const PRESET_RANGE_KEYS = ["today", "yesterday", "7d", "30d", "year"] as const;
 
-export type RangeKey = (typeof RANGE_KEYS)[number];
+export const RANGE_KEYS = PRESET_RANGE_KEYS;
+
+export type PresetRangeKey = (typeof PRESET_RANGE_KEYS)[number];
+
+export type RangeKey = PresetRangeKey | "custom";
+
+export type DashboardRange =
+  | { key: PresetRangeKey }
+  | { key: "custom"; from: string; to: string };
 
 export type EstimatedCostStatus = "complete" | "partial" | "unknown";
 

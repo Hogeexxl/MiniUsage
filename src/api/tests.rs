@@ -657,6 +657,36 @@ async fn t_s06_002_http_compatibility_and_filter_boundary_matrix() {
     fixture.scanner.shutdown().unwrap();
 }
 
+#[tokio::test]
+async fn t_022_a1_custom_range_resolves_inclusive_dates_and_rejects_invalid_pairs() {
+    let fixture = support::ApiFixture::new("t-022-a1-custom-range");
+
+    let response = fixture
+        .call(
+            Method::GET,
+            "/api/usage/summary?range=custom&from=2026-08-01&to=2026-08-03",
+            &[],
+        )
+        .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = json_body(response).await;
+    assert_eq!(body["range"]["key"], "custom");
+    assert!(
+        body["range"]["end_ms"].as_i64().unwrap() > body["range"]["start_ms"].as_i64().unwrap()
+    );
+
+    for query in [
+        "/api/usage/summary?range=custom&from=2026-08-01",
+        "/api/usage/summary?range=custom&from=2026-08-04&to=2026-08-03",
+    ] {
+        let response = fixture.call(Method::GET, query, &[]).await;
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{query}");
+        assert_eq!(json_body(response).await["error"]["code"], "INVALID_RANGE");
+    }
+
+    fixture.scanner.shutdown().unwrap();
+}
+
 mod support;
 
 mod spec05_concurrency;

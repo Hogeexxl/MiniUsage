@@ -5,7 +5,7 @@ import { canonicalDashboardFilters, dashboardQueryKey, miniUsageClient, type Min
 import {
   MiniUsageClientError,
   type DashboardFilters,
-  type RangeKey,
+  type DashboardRange,
   type RevisionTuple,
   type SessionItemDto,
   type SessionRowsResponse,
@@ -20,7 +20,7 @@ export const ROW_BATCH_LIMIT = 40;
 
 type Snapshot = {
   query_key: string;
-  range: RangeKey;
+  range: DashboardRange;
   filters: DashboardFilters;
   timezone: string;
   data_revision: number;
@@ -30,7 +30,7 @@ type Snapshot = {
 };
 
 type State = {
-  range: RangeKey;
+  range: DashboardRange;
   filters: DashboardFilters;
   snapshot: Snapshot | null;
   page: number;
@@ -125,7 +125,7 @@ function windowIds(snapshot: Snapshot, page: number, sortBy: SessionSortField, s
 
 function makeSnapshot(
   queryKey: string,
-  range: RangeKey,
+  range: DashboardRange,
   filters: DashboardFilters,
   response: Awaited<ReturnType<MiniUsageClient["getSessionSnapshot"]>>,
   previous: Snapshot | null,
@@ -148,7 +148,7 @@ function makeSnapshot(
 }
 
 export function useSessionTableController(
-  range: RangeKey,
+  range: DashboardRange,
   filters: DashboardFilters,
   options: SessionControllerOptions = {},
 ): SessionTableViewModel {
@@ -193,7 +193,7 @@ export function useSessionTableController(
   }, []);
 
   const loadSnapshot = useCallback(
-    (targetRange: RangeKey, targetFilters: DashboardFilters, force = false) => {
+    (targetRange: DashboardRange, targetFilters: DashboardFilters, force = false) => {
       const canonical = canonicalDashboardFilters(targetFilters);
       const targetKey = dashboardQueryKey(targetRange, canonical);
       snapshotAbortRef.current?.abort();
@@ -222,7 +222,7 @@ export function useSessionTableController(
         })
         .then((response) => {
           if (controller.signal.aborted || generation !== snapshotGenerationRef.current) return;
-          if (stateRef.current.range !== targetRange || dashboardQueryKey(stateRef.current.range, stateRef.current.filters) !== targetKey) return;
+          if (dashboardQueryKey(stateRef.current.range, stateRef.current.filters) !== targetKey) return;
           const feedRevision = feedRef.current?.get_snapshot()?.data_revision ?? 0;
           const requiredRevision = Math.max(previous?.data_revision ?? 0, feedRevision);
           if (response.data_revision < requiredRevision) {
@@ -263,7 +263,7 @@ export function useSessionTableController(
         })
         .catch((error: unknown) => {
           if (controller.signal.aborted || generation !== snapshotGenerationRef.current || isAbortError(error)) return;
-          if (stateRef.current.range !== targetRange || dashboardQueryKey(stateRef.current.range, stateRef.current.filters) !== targetKey) return;
+          if (dashboardQueryKey(stateRef.current.range, stateRef.current.filters) !== targetKey) return;
           commit((current) => ({
             ...current,
             load_state: "error",

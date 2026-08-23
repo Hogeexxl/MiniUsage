@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { MiniUsageClient } from "../data/miniUsageClient";
 import { createRevisionFeed } from "../data/revisionFeed";
-import type { DashboardFilters, RangeKey, StatusResponse, SummaryResponse } from "../data/types";
+import type { DashboardFilters, DashboardRange, StatusResponse, SummaryResponse } from "../data/types";
 import { useDashboardController } from "./useDashboardController";
 
 const status = (overrides: Partial<StatusResponse> = {}): StatusResponse => ({
@@ -23,8 +23,8 @@ const status = (overrides: Partial<StatusResponse> = {}): StatusResponse => ({
   ...overrides,
 });
 
-const summary = (range: RangeKey, revision = 1, input = 10): SummaryResponse => ({
-  range: { key: range, start_ms: 1, end_ms: 2, timezone: "Asia/Shanghai" },
+const summary = (range: DashboardRange, revision = 1, input = 10): SummaryResponse => ({
+  range: { key: range.key, start_ms: 1, end_ms: 2, timezone: "Asia/Shanghai" },
   data_revision: revision,
   usage: {
     input_tokens: input,
@@ -82,7 +82,7 @@ function clientWith(overrides: Partial<MiniUsageClient> = {}): MiniUsageClient {
       items: [],
     })),
     getSessionRows: vi.fn(async ({ range }) => ({
-      range: { key: range, start_ms: 1, end_ms: 2, timezone: "Asia/Shanghai" },
+      range: { key: range.key, start_ms: 1, end_ms: 2, timezone: "Asia/Shanghai" },
       data_revision: 1,
       items: [],
     })),
@@ -101,7 +101,7 @@ describe("useDashboardController", () => {
     const source = fakeEvents();
     const client = clientWith({
       summary: vi.fn(async (range, filters) => {
-        const input = filters.models.length > 0 ? 20 : filters.projects.length > 0 ? 30 : range === "today" ? 10 : 40;
+        const input = filters.models.length > 0 ? 20 : filters.projects.length > 0 ? 30 : range.key === "today" ? 10 : 40;
         return summary(range, 1, input);
       }),
     });
@@ -111,39 +111,39 @@ describe("useDashboardController", () => {
     const modelFilters: DashboardFilters = { models: ["gpt-a"], projects: [] };
     await act(async () => result.current.select_filters(modelFilters));
     await waitFor(() => expect(result.current.metrics?.input_tokens).toBe(20));
-    expect(result.current.range).toBe("today");
+    expect(result.current.range).toEqual({ key: "today" });
     expect(result.current.modelFilterActive).toBe(true);
     expect(result.current.projectFilterActive).toBe(false);
     expect(result.current.anyFilterActive).toBe(true);
 
-    await act(async () => result.current.select_range("yesterday"));
+    await act(async () => result.current.select_range({ key: "yesterday" }));
     await waitFor(() => expect(result.current.metrics?.input_tokens).toBe(20));
     expect(result.current.filters).toEqual(modelFilters);
-    expect(result.current.range).toBe("yesterday");
+    expect(result.current.range).toEqual({ key: "yesterday" });
 
     await act(async () => result.current.select_filters({ models: [], projects: [{ kind: "projectless" }] }));
     await waitFor(() => expect(result.current.metrics?.input_tokens).toBe(30));
-    expect(result.current.range).toBe("yesterday");
+    expect(result.current.range).toEqual({ key: "yesterday" });
     expect(result.current.projectFilterActive).toBe(true);
     expect(result.current.modelFilterActive).toBe(false);
 
     await act(async () => result.current.clear_filters());
     await waitFor(() => expect(result.current.metrics?.input_tokens).toBe(40));
-    expect(result.current.range).toBe("yesterday");
+    expect(result.current.range).toEqual({ key: "yesterday" });
     expect(result.current.anyFilterActive).toBe(false);
-    expect(client.summary).toHaveBeenLastCalledWith("yesterday", { models: [], projects: [] }, expect.any(AbortSignal));
+    expect(client.summary).toHaveBeenLastCalledWith({ key: "yesterday" }, { models: [], projects: [] }, expect.any(AbortSignal));
 
     unmount();
     const raceSource = fakeEvents();
     type SummaryRequest = {
-      range: RangeKey;
+      range: DashboardRange;
       filters: DashboardFilters;
       signal: AbortSignal | undefined;
       resolve: (value: SummaryResponse) => void;
     };
     const summaryRequests: SummaryRequest[] = [];
     const raceClient = clientWith({
-      summary: vi.fn((range: RangeKey, filters: DashboardFilters, signal?: AbortSignal) => {
+      summary: vi.fn((range: DashboardRange, filters: DashboardFilters, signal?: AbortSignal) => {
         let resolve!: (value: SummaryResponse) => void;
         const promise = new Promise<SummaryResponse>((resolvePromise) => {
           resolve = resolvePromise;
@@ -154,25 +154,25 @@ describe("useDashboardController", () => {
     });
     const raceHook = renderHook(() => useDashboardController({ client: raceClient, eventSourceFactory: () => raceSource }));
     await waitFor(() => expect(summaryRequests).toHaveLength(1));
-    summaryRequests[0].resolve(summary("today", 1, 10));
+    summaryRequests[0].resolve(summary({ key: "today" }, 1, 10));
     await waitFor(() => expect(raceHook.result.current.metrics?.input_tokens).toBe(10));
 
     await act(async () => raceHook.result.current.select_filters({ models: ["gpt-a"], projects: [] }));
     await waitFor(() => expect(summaryRequests).toHaveLength(2));
     expect(summaryRequests[0].signal?.aborted).toBe(true);
 
-    await act(async () => raceHook.result.current.select_range("yesterday"));
+    await act(async () => raceHook.result.current.select_range({ key: "yesterday" }));
     await waitFor(() => expect(summaryRequests).toHaveLength(3));
     expect(summaryRequests[1].signal?.aborted).toBe(true);
-    summaryRequests[1].resolve(summary("today", 1, 20));
-    summaryRequests[2].resolve(summary("yesterday", 1, 30));
+    summaryRequests[1].resolve(summary({ key: "today" }, 1, 20));
+    summaryRequests[2].resolve(summary({ key: "yesterday" }, 1, 30));
     await waitFor(() => expect(raceHook.result.current.metrics?.input_tokens).toBe(30));
 
     raceSource.onmessage?.({ data: JSON.stringify({ data_revision: 2, status_revision: 1 }) } as MessageEvent<string>);
     await waitFor(() => expect(summaryRequests).toHaveLength(4));
-    expect(summaryRequests[3].range).toBe("yesterday");
+    expect(summaryRequests[3].range).toEqual({ key: "yesterday" });
     expect(summaryRequests[3].filters).toEqual({ models: ["gpt-a"], projects: [] });
-    summaryRequests[3].resolve(summary("yesterday", 2, 40));
+    summaryRequests[3].resolve(summary({ key: "yesterday" }, 2, 40));
     await waitFor(() => expect(raceHook.result.current.metrics?.input_tokens).toBe(40));
     expect(raceClient.getSessionSnapshot).not.toHaveBeenCalled();
     raceHook.unmount();
@@ -210,7 +210,7 @@ describe("useDashboardController", () => {
     await waitFor(() => expect(result.current.filter_options).not.toBeNull());
     expect(optionCalls).toBe(1);
 
-    await act(async () => result.current.select_range("7d"));
+    await act(async () => result.current.select_range({ key: "7d" }));
     await act(async () => result.current.select_filters({ models: ["gpt-a"], projects: [{ kind: "projectless" }] }));
     await act(async () => result.current.clear_filters());
     expect(optionCalls).toBe(1);
@@ -238,15 +238,28 @@ describe("useDashboardController", () => {
     const client = clientWith();
     const { result } = renderHook(() => useDashboardController({ client, eventSourceFactory: fakeEvents }));
     await waitFor(() => expect(result.current.metrics?.input_tokens).toBe(10));
-    expect(result.current.range).toBe("today");
-    expect(client.summary).toHaveBeenCalledWith("today", { models: [], projects: [] }, expect.any(AbortSignal));
+    expect(result.current.range).toEqual({ key: "today" });
+    expect(client.summary).toHaveBeenCalledWith({ key: "today" }, { models: [], projects: [] }, expect.any(AbortSignal));
     expect(client.getStatus).toHaveBeenCalled();
     expect(client.getRevision).toHaveBeenCalled();
 
-    await act(async () => result.current.select_range("yesterday"));
+    await act(async () => result.current.select_range({ key: "yesterday" }));
     await waitFor(() => expect(result.current.metrics?.input_tokens).toBe(10));
-    expect(result.current.range).toBe("yesterday");
-    expect(client.summary).toHaveBeenCalledWith("yesterday", { models: [], projects: [] }, expect.any(AbortSignal));
+    expect(result.current.range).toEqual({ key: "yesterday" });
+    expect(client.summary).toHaveBeenCalledWith({ key: "yesterday" }, { models: [], projects: [] }, expect.any(AbortSignal));
+  });
+
+  it("T-022-A6 sends complete custom ranges while retaining active filters", async () => {
+    const client = clientWith();
+    const { result } = renderHook(() => useDashboardController({ client, eventSourceFactory: fakeEvents }));
+    await waitFor(() => expect(result.current.metrics?.input_tokens).toBe(10));
+    await act(async () => result.current.select_filters({ models: ["gpt-5"], projects: [] }));
+    await waitFor(() => expect(client.summary).toHaveBeenLastCalledWith({ key: "today" }, { models: ["gpt-5"], projects: [] }, expect.any(AbortSignal)));
+
+    const custom = { key: "custom" as const, from: "2026-08-01", to: "2026-08-03" };
+    await act(async () => result.current.select_range(custom));
+    await waitFor(() => expect(result.current.range).toEqual(custom));
+    expect(client.summary).toHaveBeenLastCalledWith(custom, { models: ["gpt-5"], projects: [] }, expect.any(AbortSignal));
   });
 
   it("does not let a late old range response overwrite the current range", async () => {
@@ -259,15 +272,15 @@ describe("useDashboardController", () => {
       resolveYesterday = resolve;
     });
     const client = clientWith({
-      summary: vi.fn((range) => (range === "today" ? today : yesterday)),
+      summary: vi.fn((range) => (range.key === "today" ? today : yesterday)),
     });
     const { result } = renderHook(() => useDashboardController({ client, eventSourceFactory: fakeEvents }));
-    await act(async () => result.current.select_range("yesterday"));
-    resolveYesterday(summary("yesterday", 2, 20));
+    await act(async () => result.current.select_range({ key: "yesterday" }));
+    resolveYesterday(summary({ key: "yesterday" }, 2, 20));
     await waitFor(() => expect(result.current.metrics?.input_tokens).toBe(20));
-    resolveToday(summary("today", 1, 10));
+    resolveToday(summary({ key: "today" }, 1, 10));
     await act(async () => undefined);
-    expect(result.current.range).toBe("yesterday");
+    expect(result.current.range).toEqual({ key: "yesterday" });
     expect(result.current.metrics?.input_tokens).toBe(20);
   });
 
@@ -674,7 +687,7 @@ describe("useDashboardController", () => {
     await waitFor(() => expect(result.current.metrics?.input_tokens).toBe(20));
     source.onmessage?.({ data: JSON.stringify({ data_revision: 3, status_revision: 1 }) } as MessageEvent<string>);
     await waitFor(() => expect(result.current.load_state).toBe("loading"));
-    resolveStale(summary("today", 1, 1));
+    resolveStale(summary({ key: "today" }, 1, 1));
     await waitFor(() => expect(result.current.load_state).toBe("ready"));
     expect(result.current.metrics?.input_tokens).toBe(20);
   });

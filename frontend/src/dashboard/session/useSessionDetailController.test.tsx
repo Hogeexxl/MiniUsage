@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { MiniUsageClient } from "../../data/miniUsageClient";
 import { createRevisionFeed, type RevisionEventSource } from "../../data/revisionFeed";
-import { MiniUsageClientError, type DashboardFilters, type RangeKey, type SessionDetailResponse, type SessionItemDto } from "../../data/types";
+import { MiniUsageClientError, type DashboardFilters, type DashboardRange, type SessionDetailResponse, type SessionItemDto } from "../../data/types";
 import { useSessionDetailController } from "./useSessionDetailController";
 
 const filters: DashboardFilters = { models: [], projects: [] };
@@ -141,7 +141,7 @@ describe("useSessionDetailController", () => {
         { kind: "unknown" },
       ],
     };
-    let activeRange: RangeKey = "today";
+    let activeRange: DashboardRange = { key: "today" };
     let activeFilters = baseFilters;
     const rowTwo = { ...row, root_session_id: "root-2" };
     const { result, rerender } = renderHook(() => useSessionDetailController(activeRange, activeFilters, { client, revisionFeed: feed, dataRevision: 1 }));
@@ -151,7 +151,7 @@ describe("useSessionDetailController", () => {
     await waitFor(() => expect(result.current.load_state).toBe("ready"));
     expect(client.getSessionDetail).toHaveBeenCalledTimes(1);
     expect(client.getSessionDetail).toHaveBeenLastCalledWith(expect.objectContaining({
-      range: "today",
+      range: { key: "today" },
       filters: {
         models: ["model-a", "model-b"],
         projects: [
@@ -176,20 +176,20 @@ describe("useSessionDetailController", () => {
     expect(client.getSessionDetail).toHaveBeenCalledTimes(1);
 
     await act(async () => result.current.close_detail());
-    activeRange = "7d";
+    activeRange = { key: "7d" };
     rerender();
     await act(async () => result.current.open_detail(row));
     await waitFor(() => expect(client.getSessionDetail).toHaveBeenCalledTimes(2));
-    expect(client.getSessionDetail).toHaveBeenLastCalledWith(expect.objectContaining({ range: "7d", root_session_id: "root-1" }));
+    expect(client.getSessionDetail).toHaveBeenLastCalledWith(expect.objectContaining({ range: { key: "7d" }, root_session_id: "root-1" }));
 
     await act(async () => result.current.close_detail());
-    activeRange = "today";
+    activeRange = { key: "today" };
     activeFilters = { models: ["model-a"], projects: [] };
     rerender();
     await act(async () => result.current.open_detail(row));
     await waitFor(() => expect(client.getSessionDetail).toHaveBeenCalledTimes(3));
     expect(client.getSessionDetail).toHaveBeenLastCalledWith(expect.objectContaining({
-      range: "today",
+      range: { key: "today" },
       filters: { models: ["model-a"], projects: [] },
       root_session_id: "root-1",
     }));
@@ -219,7 +219,7 @@ describe("useSessionDetailController", () => {
     }));
     const client = clientWith({ getSessionDetail });
     const { feed, source } = sourceAndFeed(client);
-    const { result } = renderHook(() => useSessionDetailController("today", filters, { client, revisionFeed: feed, dataRevision: 1 }));
+    const { result } = renderHook(() => useSessionDetailController({ key: "today" }, filters, { client, revisionFeed: feed, dataRevision: 1 }));
     await act(async () => result.current.open_detail(row));
     await waitFor(() => expect(getSessionDetail).toHaveBeenCalledTimes(1));
     source()?.onmessage?.({ data: JSON.stringify({ data_revision: 2, status_revision: 2 }) } as MessageEvent<string>);
@@ -239,7 +239,7 @@ describe("useSessionDetailController", () => {
       .mockResolvedValueOnce(detail(1, 222));
     const client = clientWith({ getSessionDetail });
     const { feed } = sourceAndFeed(client);
-    const { result } = renderHook(() => useSessionDetailController("today", filters, { client, revisionFeed: feed, dataRevision: 1 }));
+    const { result } = renderHook(() => useSessionDetailController({ key: "today" }, filters, { client, revisionFeed: feed, dataRevision: 1 }));
 
     await act(async () => result.current.open_detail(row));
     await waitFor(() => expect(result.current.load_state).toBe("error"));
@@ -263,7 +263,7 @@ describe("useSessionDetailController", () => {
     });
     const client = clientWith({ getSessionDetail });
     const { feed, source } = sourceAndFeed(client);
-    const { result } = renderHook(() => useSessionDetailController("today", filters, { client, revisionFeed: feed, dataRevision: 1 }));
+    const { result } = renderHook(() => useSessionDetailController({ key: "today" }, filters, { client, revisionFeed: feed, dataRevision: 1 }));
 
     await act(async () => result.current.open_detail(row));
     await waitFor(() => expect(result.current.load_state).toBe("ready"));
@@ -297,7 +297,7 @@ describe("useSessionDetailController", () => {
 
     const client = clientWith();
     const { feed } = sourceAndFeed(client);
-    const { result } = renderHook(() => useSessionDetailController("today", filters, { client, revisionFeed: feed, dataRevision: 1 }));
+    const { result } = renderHook(() => useSessionDetailController({ key: "today" }, filters, { client, revisionFeed: feed, dataRevision: 1 }));
     await act(async () => result.current.open_detail(row));
     await waitFor(() => expect(result.current.load_state).toBe("ready"));
 
@@ -315,7 +315,7 @@ describe("useSessionDetailController", () => {
     const onStaleRevision = vi.fn();
     const client = clientWith({ getSessionDetail: vi.fn(async () => { throw new MiniUsageClientError("STALE_DATA_REVISION", 409); }) });
     const { feed } = sourceAndFeed(client);
-    const { result } = renderHook(() => useSessionDetailController("today", filters, { client, revisionFeed: feed, dataRevision: 1, onStaleRevision }));
+    const { result } = renderHook(() => useSessionDetailController({ key: "today" }, filters, { client, revisionFeed: feed, dataRevision: 1, onStaleRevision }));
     await act(async () => result.current.select_session(row));
     await waitFor(() => expect(result.current.load_state).toBe("error"));
     expect(onStaleRevision).toHaveBeenCalledTimes(1);

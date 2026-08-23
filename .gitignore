@@ -14,3 +14,4 @@ frontend/dist/
 *.backup
 *.saved
 .DS_Store
+/RTK.md
