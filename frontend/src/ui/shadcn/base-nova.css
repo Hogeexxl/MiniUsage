@@ -106,7 +106,7 @@
 .cn-calendar .cn-calendar-range-end::after,
 .cn-calendar .cn-calendar-day-button[data-range-middle="true"],
 .cn-calendar .cn-calendar-day-button[data-range-middle="true"]:hover {
-  background-color: #f5f5f5;
+  background-color: #F0F0F2;
 }
 
 .dark .cn-calendar .cn-calendar-range-middle,
