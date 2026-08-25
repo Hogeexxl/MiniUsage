@@ -62,6 +62,7 @@ const quotaLoading: CodexQuotaResponse = {
   status: "loading",
   account_email: null,
   plan_type: null,
+  session: null,
   weekly: null,
   reset_credits_available: null,
   fetched_at_ms: null,
@@ -71,6 +72,7 @@ const quotaReady: CodexQuotaResponse = {
   status: "ready",
   account_email: "hoge@example.com",
   plan_type: "prolite",
+  session: null,
   weekly: {
     used_percent: 55,
     remaining_percent: 45,
@@ -113,6 +115,7 @@ function fakeClient(overrides: Partial<MiniUsageClient> = {}): MiniUsageClient {
       status: "unavailable" as const,
       account_email: null,
       plan_type: null,
+      session: null,
       weekly: null,
       reset_credits_available: null,
       fetched_at_ms: null,

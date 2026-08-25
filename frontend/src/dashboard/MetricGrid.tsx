@@ -15,7 +15,7 @@ type Focus = "input" | "output" | "reasoning" | null;
 type CacheFocus = "cached" | "input" | null;
 
 const CARD = "h-36 min-w-0 border border-border bg-card p-4 text-foreground";
-const TITLE = "text-xs font-medium leading-4 text-muted-foreground";
+const TITLE = "text-xs font-medium leading-4 text-foreground";
 const VALUE = "mt-2 text-[28px] font-semibold leading-8 tracking-tight text-foreground";
 const LEGEND = "h-4 text-xs leading-4 text-muted-foreground";
 
@@ -200,33 +200,58 @@ function CodexQuotaCard({ quota }: { quota: CodexQuotaResponse }) {
   const email = quota.account_email || "—";
   const resetCredits = quota.reset_credits_available === null ? "—" : `${quota.reset_credits_available} 次`;
   const remaining = Math.round(weekly.remaining_percent);
+  const header = (
+    <div className="flex min-w-0 items-center justify-between gap-2">
+      <div className={`${TITLE} min-w-0`}>剩余配额</div>
+      <Popover trigger="hover" side="bottom" align="end">
+        <PopoverTrigger>
+          <button type="button" aria-label={plan} className="inline-flex h-4 shrink-0 items-center justify-center rounded-full border border-foreground/40 px-1 text-center text-[10px] font-medium leading-[10px] whitespace-nowrap text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+            {plan}
+          </button>
+        </PopoverTrigger>
+        <PopoverContent className="w-max max-w-64 text-xs">
+          <div className="flex flex-col gap-1">
+            <div>{email}</div>
+            <div>重置卡：{resetCredits}</div>
+          </div>
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
 
   return (
     <TiltCard className={`${CARD} flex flex-col`}>
-      <div className="flex min-w-0 items-center justify-between gap-2">
-        <div className={`${TITLE} min-w-0`}>剩余配额</div>
-        <Popover trigger="hover" side="bottom" align="end">
-          <PopoverTrigger>
-            <button type="button" aria-label={plan} className="inline-flex h-4 shrink-0 items-center justify-center rounded-full border border-foreground/40 px-1 text-center text-[10px] font-medium leading-[10px] whitespace-nowrap text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
-              {plan}
-            </button>
-          </PopoverTrigger>
-          <PopoverContent className="w-max max-w-64 text-xs">
-            <div className="flex flex-col gap-1">
-              <div>{email}</div>
-              <div>重置卡：{resetCredits}</div>
+      {header}
+      {quota.session === null ? (
+        <>
+          <span className={VALUE} title={`${remaining}%`} aria-label={`${remaining}%`}>
+            <NumberTicker value={weekly.remaining_percent} blur format={(value) => `${value}%`} />
+          </span>
+          <div className="relative mt-1 h-[5px] overflow-hidden rounded-full bg-muted" aria-label="剩余与已使用配额">
+            <div className="absolute inset-y-0 left-0" style={{ width: `${weekly.remaining_percent}%`, backgroundColor: codexQuotaColor(weekly.remaining_percent) }} />
+            <div className="absolute inset-y-0 right-0" style={{ width: `${100 - weekly.remaining_percent}%`, backgroundColor: chartMuted }} />
+          </div>
+          <div className={`${LEGEND} mt-auto`}>下次重置 · {formatCodexResetTime(weekly.reset_at_ms)}</div>
+        </>
+      ) : (
+        <div className="mt-2 flex min-h-0 flex-1 flex-col justify-between">
+          {[{ label: "session", window: quota.session }, { label: "weekly", window: weekly }].map(({ label, window }) => (
+            <div key={label} className="flex min-w-0 flex-col gap-1">
+              <div className="flex min-w-0 items-center justify-between gap-2">
+                <span className="text-xs font-semibold leading-4 text-foreground">{label}</span>
+                <span className="text-xs font-semibold leading-4 text-foreground" title={`${Math.round(window.remaining_percent)}%`} aria-label={`${Math.round(window.remaining_percent)}%`}>
+                  <NumberTicker value={window.remaining_percent} blur format={(value) => `${value}%`} />
+                </span>
+              </div>
+              <div className="relative h-[4px] overflow-hidden rounded-full bg-muted" aria-label="剩余与已使用配额">
+                <div className="absolute inset-y-0 left-0" style={{ width: `${window.remaining_percent}%`, backgroundColor: codexQuotaColor(window.remaining_percent) }} />
+                <div className="absolute inset-y-0 right-0" style={{ width: `${100 - window.remaining_percent}%`, backgroundColor: chartMuted }} />
+              </div>
+              <div className={LEGEND}>下次重置 · {formatCodexResetTime(window.reset_at_ms)}</div>
             </div>
-          </PopoverContent>
-        </Popover>
-      </div>
-      <span className={VALUE} title={`${remaining}%`} aria-label={`${remaining}%`}>
-        <NumberTicker value={weekly.remaining_percent} blur format={(value) => `${value}%`} />
-      </span>
-      <div className="relative mt-1 h-[5px] overflow-hidden rounded-full bg-muted" aria-label="剩余与已使用配额">
-        <div className="absolute inset-y-0 left-0" style={{ width: `${weekly.remaining_percent}%`, backgroundColor: codexQuotaColor(weekly.remaining_percent) }} />
-        <div className="absolute inset-y-0 right-0" style={{ width: `${100 - weekly.remaining_percent}%`, backgroundColor: chartMuted }} />
-      </div>
-      <div className={`${LEGEND} mt-auto`}>下次重置 · {formatCodexResetTime(weekly.reset_at_ms)}</div>
+          ))}
+        </div>
+      )}
     </TiltCard>
   );
 }
@@ -245,6 +270,7 @@ const LOADING_QUOTA: CodexQuotaResponse = {
   status: "loading",
   account_email: null,
   plan_type: null,
+  session: null,
   weekly: null,
   reset_credits_available: null,
   fetched_at_ms: null,

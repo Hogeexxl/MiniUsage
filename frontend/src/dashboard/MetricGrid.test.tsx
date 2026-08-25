@@ -46,6 +46,7 @@ const readyQuota: CodexQuotaResponse = {
   status: "ready",
   account_email: "hoge@example.com",
   plan_type: "prolite",
+  session: null,
   weekly: {
     used_percent: 55,
     remaining_percent: 45,
@@ -54,6 +55,16 @@ const readyQuota: CodexQuotaResponse = {
   },
   reset_credits_available: 2,
   fetched_at_ms: Date.UTC(2026, 7, 1),
+};
+
+const dualQuota: CodexQuotaResponse = {
+  ...readyQuota,
+  session: {
+    used_percent: 12,
+    remaining_percent: 88,
+    limit_window_seconds: 18000,
+    reset_at_ms: Date.UTC(2026, 7, 2, 9, 10),
+  },
 };
 
 function cardByTitle(title: string): HTMLElement {
@@ -233,6 +244,7 @@ describe("MetricGrid v0.2.1", () => {
     expect(within(card).getByText(/下次重置 ·/)).toHaveTextContent(`下次重置 · ${formatCodexResetTime(readyQuota.weekly!.reset_at_ms)}`);
 
     const bar = within(card).getByLabelText("剩余与已使用配额");
+    expect(bar).toHaveClass("h-[5px]");
     expect(bar.children).toHaveLength(2);
     expect((bar.children[0] as HTMLElement).style.width).toBe("45%");
     expect((bar.children[0] as HTMLElement).style.backgroundColor).toBe(chartSeriesColor(5));
@@ -251,6 +263,46 @@ describe("MetricGrid v0.2.1", () => {
     const dialog = (await screen.findByText("hoge@example.com")).closest('[role="dialog"]');
     expect(dialog).toHaveTextContent("hoge@example.com");
     expect(dialog).toHaveTextContent("重置卡：2 次");
+  });
+
+  it("T-Q-SW-003 renders both quota windows with independent reset times and shared palette", async () => {
+    render(<MetricGrid usage={usage} modelFilterActive={false} quota={dualQuota} />);
+
+    const card = cardByTitle("剩余配额");
+    expect(within(card).getByText("session")).toBeInTheDocument();
+    expect(within(card).getByText("weekly")).toBeInTheDocument();
+    expect(within(card).getByLabelText("88%")).toBeInTheDocument();
+    expect(within(card).getByLabelText("45%")).toBeInTheDocument();
+    expect(within(card).getByText(`下次重置 · ${formatCodexResetTime(dualQuota.session!.reset_at_ms)}`)).toBeInTheDocument();
+    expect(within(card).getByText(`下次重置 · ${formatCodexResetTime(dualQuota.weekly!.reset_at_ms)}`)).toBeInTheDocument();
+
+    const bars = within(card).getAllByLabelText(/剩余与已使用配额/);
+    expect(bars).toHaveLength(2);
+    expect(bars[0]).toHaveClass("h-[4px]");
+    expect(bars[1]).toHaveClass("h-[4px]");
+    for (const [bar, quota] of [[bars[0], dualQuota.session], [bars[1], dualQuota.weekly]] as const) {
+      expect(bar.children).toHaveLength(2);
+      expect((bar.children[0] as HTMLElement).style.width).toBe(`${quota!.remaining_percent}%`);
+      expect((bar.children[0] as HTMLElement).style.backgroundColor).toBe(codexQuotaColor(quota!.remaining_percent));
+      expect((bar.children[1] as HTMLElement).style.backgroundColor).toBe(chartMuted);
+    }
+
+    const trigger = within(card).getByRole("button", { name: "Pro 5x" });
+    fireEvent.pointerEnter(trigger.parentElement!, { pointerId: 1, pointerType: "mouse", buttons: 0 });
+    const dialog = (await screen.findByText("hoge@example.com")).closest('[role="dialog"]');
+    expect(dialog).toHaveTextContent("hoge@example.com");
+    expect(dialog).toHaveTextContent("重置卡：2 次");
+  });
+
+  it("T-Q-SW-004 keeps the single weekly quota presentation when session is null", () => {
+    render(<MetricGrid usage={usage} modelFilterActive={false} quota={readyQuota} />);
+
+    const card = cardByTitle("剩余配额");
+    expect(within(card).queryByText("session")).not.toBeInTheDocument();
+    expect(within(card).getByLabelText("45%")).toBeInTheDocument();
+    expect(within(card).getByLabelText("剩余与已使用配额")).toHaveClass("h-[5px]");
+    expect(within(card).getByText(`下次重置 · ${formatCodexResetTime(readyQuota.weekly!.reset_at_ms)}`)).toBeInTheDocument();
+    expect(within(card).getByRole("button", { name: "Pro 5x" })).toBeInTheDocument();
   });
 
   it("T-Q-007 uses quota skeletons while loading and never fabricates zero for unavailable data", () => {

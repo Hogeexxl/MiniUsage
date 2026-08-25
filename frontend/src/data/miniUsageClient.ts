@@ -31,7 +31,7 @@ import {
   type SkillsUsageResponse,
   type DistributionUsageDto,
   type CodexQuotaResponse,
-  type CodexWeeklyQuotaDto,
+  type CodexQuotaWindowDto,
 } from "./types";
 
 const SAFE_INTEGER_MAX = Number.MAX_SAFE_INTEGER;
@@ -535,10 +535,10 @@ function quotaPercent(record: JsonRecord, key: string): number {
   return value;
 }
 
-function parseCodexWeeklyQuota(value: unknown): CodexWeeklyQuotaDto {
+function parseCodexQuotaWindow(value: unknown, expectedWindowSeconds: number): CodexQuotaWindowDto {
   const record = requiredRecord(value);
   const limitWindowSeconds = requiredSafeInteger(record, "limit_window_seconds");
-  if (limitWindowSeconds !== 604_800) throw new MiniUsageClientError("HTTP_ERROR", 200);
+  if (limitWindowSeconds !== expectedWindowSeconds) throw new MiniUsageClientError("HTTP_ERROR", 200);
   return {
     used_percent: quotaPercent(record, "used_percent"),
     remaining_percent: quotaPercent(record, "remaining_percent"),
@@ -554,10 +554,12 @@ function parseCodexQuota(value: unknown): CodexQuotaResponse {
     throw new MiniUsageClientError("HTTP_ERROR", 200);
   }
   const parsedStatus = status as CodexQuotaResponse["status"];
+  const sessionValue = record.session;
+  const session = sessionValue === null ? null : parseCodexQuotaWindow(sessionValue, 18_000);
   const weeklyValue = record.weekly;
-  const weekly = weeklyValue === null ? null : parseCodexWeeklyQuota(weeklyValue);
+  const weekly = weeklyValue === null ? null : parseCodexQuotaWindow(weeklyValue, 604_800);
   if (parsedStatus === "ready" && weekly === null) throw new MiniUsageClientError("HTTP_ERROR", 200);
-  if (parsedStatus !== "ready" && weekly !== null) throw new MiniUsageClientError("HTTP_ERROR", 200);
+  if (parsedStatus !== "ready" && (session !== null || weekly !== null)) throw new MiniUsageClientError("HTTP_ERROR", 200);
   if (parsedStatus === "loading" && (
     record.account_email !== null ||
     record.plan_type !== null ||
@@ -570,6 +572,7 @@ function parseCodexQuota(value: unknown): CodexQuotaResponse {
     status: parsedStatus,
     account_email: nullableString(record, "account_email"),
     plan_type: nullableString(record, "plan_type"),
+    session,
     weekly,
     reset_credits_available: nullableSafeInteger(record, "reset_credits_available"),
     fetched_at_ms: nullableSafeInteger(record, "fetched_at_ms"),

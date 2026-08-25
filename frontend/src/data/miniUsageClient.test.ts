@@ -59,13 +59,14 @@ const sessionItem = (root_session_id = "root-1") => ({
 afterEach(() => vi.restoreAllMocks());
 
 describe("miniUsageClient DTO seam", () => {
-  it("T-Q-005 parses the Codex weekly quota contract without dashboard query inputs", async () => {
+  it("T-Q-SW-002 parses weekly-only and session-plus-weekly quota contracts", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
         JSON.stringify({
           status: "ready",
           account_email: "hoge@example.com",
           plan_type: "prolite",
+          session: null,
           weekly: {
             used_percent: 55,
             remaining_percent: 45,
@@ -83,6 +84,7 @@ describe("miniUsageClient DTO seam", () => {
       status: "ready",
       account_email: "hoge@example.com",
       plan_type: "prolite",
+      session: null,
       weekly: {
         used_percent: 55,
         remaining_percent: 45,
@@ -97,15 +99,57 @@ describe("miniUsageClient DTO seam", () => {
       expect.objectContaining({ method: "GET", credentials: "same-origin" }),
     );
 
-    for (const weekly of [
-      { used_percent: 101, remaining_percent: 0, limit_window_seconds: 604800, reset_at_ms: null },
-      { used_percent: 55, remaining_percent: 45, limit_window_seconds: 18000, reset_at_ms: null },
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          status: "ready",
+          account_email: "hoge@example.com",
+          plan_type: "prolite",
+          session: {
+            used_percent: 12,
+            remaining_percent: 88,
+            limit_window_seconds: 18000,
+            reset_at_ms: 1_786_100_000_000,
+          },
+          weekly: {
+            used_percent: 55,
+            remaining_percent: 45,
+            limit_window_seconds: 604800,
+            reset_at_ms: 1_786_508_580_000,
+          },
+          reset_credits_available: 2,
+          fetched_at_ms: 1_786_076_580_000,
+        }),
+        { status: 200 },
+      ),
+    );
+    await expect(miniUsageClient.codexQuota()).resolves.toMatchObject({
+      session: {
+        used_percent: 12,
+        remaining_percent: 88,
+        limit_window_seconds: 18000,
+        reset_at_ms: 1_786_100_000_000,
+      },
+      weekly: {
+        used_percent: 55,
+        remaining_percent: 45,
+        limit_window_seconds: 604800,
+        reset_at_ms: 1_786_508_580_000,
+      },
+    });
+
+    for (const [session, weekly] of [
+      [null, { used_percent: 101, remaining_percent: 0, limit_window_seconds: 604800, reset_at_ms: null }],
+      [null, { used_percent: 55, remaining_percent: 45, limit_window_seconds: 18000, reset_at_ms: null }],
+      [{ used_percent: 12, remaining_percent: 88, limit_window_seconds: 604800, reset_at_ms: null }, { used_percent: 55, remaining_percent: 45, limit_window_seconds: 604800, reset_at_ms: null }],
+      [{ used_percent: 12, remaining_percent: 88, limit_window_seconds: 18000, reset_at_ms: null }, { used_percent: 55, remaining_percent: 45, limit_window_seconds: 18000, reset_at_ms: null }],
     ]) {
       fetchMock.mockResolvedValueOnce(
         new Response(JSON.stringify({
           status: "ready",
           account_email: null,
           plan_type: null,
+          session,
           weekly,
           reset_credits_available: null,
           fetched_at_ms: null,

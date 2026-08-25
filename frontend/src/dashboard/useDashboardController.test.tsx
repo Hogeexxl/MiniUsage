@@ -66,6 +66,7 @@ function clientWith(overrides: Partial<MiniUsageClient> = {}): MiniUsageClient {
       status: "unavailable" as const,
       account_email: null,
       plan_type: null,
+      session: null,
       weekly: null,
       reset_credits_available: null,
       fetched_at_ms: null,

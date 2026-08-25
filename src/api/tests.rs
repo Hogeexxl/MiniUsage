@@ -88,7 +88,8 @@ fn quota_fixture_provider() -> QuotaFixtureProvider {
         payload: ReadyPayload {
             account_email: Some("hoge@example.com".to_owned()),
             plan_type: Some("prolite".to_owned()),
-            weekly: crate::codex::quota::CodexWeeklyQuota {
+            session: None,
+            weekly: crate::codex::quota::CodexQuotaWindow {
                 used_percent: 55.0,
                 remaining_percent: 45.0,
                 limit_window_seconds: 604_800,

@@ -16,7 +16,7 @@ mod mapper;
 pub use client::CodexQuotaClient;
 #[cfg(test)]
 pub(crate) use client::QuotaFetchError;
-pub use mapper::CodexWeeklyQuota;
+pub use mapper::CodexQuotaWindow;
 
 pub const REFRESH_INTERVAL: Duration = Duration::from_secs(300);
 
@@ -34,7 +34,8 @@ pub struct CodexQuotaResponse {
     pub status: CodexQuotaStatus,
     pub account_email: Option<String>,
     pub plan_type: Option<String>,
-    pub weekly: Option<CodexWeeklyQuota>,
+    pub session: Option<CodexQuotaWindow>,
+    pub weekly: Option<CodexQuotaWindow>,
     pub reset_credits_available: Option<i64>,
     pub fetched_at_ms: Option<i64>,
 }
@@ -45,6 +46,7 @@ impl CodexQuotaResponse {
             status: CodexQuotaStatus::Loading,
             account_email: None,
             plan_type: None,
+            session: None,
             weekly: None,
             reset_credits_available: None,
             fetched_at_ms: None,
@@ -56,6 +58,7 @@ impl CodexQuotaResponse {
             status,
             account_email: None,
             plan_type: None,
+            session: None,
             weekly: None,
             reset_credits_available: None,
             fetched_at_ms: None,
@@ -67,7 +70,8 @@ impl CodexQuotaResponse {
 pub(crate) struct ReadyPayload {
     pub(crate) account_email: Option<String>,
     pub(crate) plan_type: Option<String>,
-    pub(crate) weekly: CodexWeeklyQuota,
+    pub(crate) session: Option<CodexQuotaWindow>,
+    pub(crate) weekly: CodexQuotaWindow,
     pub(crate) reset_credits_available: Option<i64>,
 }
 
@@ -90,6 +94,7 @@ impl QuotaProvider for CodexQuotaClient {
             Ok(ReadyPayload {
                 account_email: payload.account_email,
                 plan_type: payload.plan_type,
+                session: payload.session,
                 weekly: payload.weekly,
                 reset_credits_available: payload.reset_credits_available,
             })
@@ -238,6 +243,7 @@ impl CodexQuotaService {
                     status: CodexQuotaStatus::Ready,
                     account_email: payload.account_email,
                     plan_type: payload.plan_type,
+                    session: payload.session,
                     weekly: Some(payload.weekly),
                     reset_credits_available: payload.reset_credits_available,
                     fetched_at_ms: Some(fetched_at_ms),
@@ -324,7 +330,8 @@ mod tests {
         ReadyPayload {
             account_email: Some("hoge@example.com".to_owned()),
             plan_type: Some("prolite".to_owned()),
-            weekly: CodexWeeklyQuota {
+            session: None,
+            weekly: CodexQuotaWindow {
                 used_percent: 55.0,
                 remaining_percent: 45.0,
                 limit_window_seconds: 604_800,
@@ -395,6 +402,7 @@ mod tests {
             status: CodexQuotaStatus::Ready,
             account_email: Some("hoge@example.com".to_owned()),
             plan_type: Some("prolite".to_owned()),
+            session: None,
             weekly: Some(payload().weekly),
             reset_credits_available: Some(2),
             fetched_at_ms: Some(1_700_000_000_000),

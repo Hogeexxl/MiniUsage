@@ -6,7 +6,7 @@ use serde_json::Value;
 
 use super::{
     auth::{self, AuthFile, AuthReadError, AuthWriteError},
-    mapper::{self, CodexWeeklyQuota, MapperError},
+    mapper::{self, CodexQuotaWindow, MapperError},
 };
 
 pub(crate) const USAGE_URL: &str = "https://chatgpt.com/backend-api/wham/usage";
@@ -29,7 +29,8 @@ pub struct CodexQuotaClient {
 pub(crate) struct QuotaPayload {
     pub account_email: Option<String>,
     pub plan_type: Option<String>,
-    pub weekly: CodexWeeklyQuota,
+    pub session: Option<CodexQuotaWindow>,
+    pub weekly: CodexQuotaWindow,
     pub reset_credits_available: Option<i64>,
 }
 
@@ -172,6 +173,7 @@ impl CodexQuotaClient {
                     return Ok(QuotaPayload {
                         account_email: auth.credentials().email().map(str::to_owned),
                         plan_type: mapped.plan_type,
+                        session: mapped.session,
                         weekly: mapped.weekly,
                         reset_credits_available: mapped.reset_credits_available,
                     });

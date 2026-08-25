@@ -208,6 +208,7 @@ async function routeStableDashboardData(page: Page) {
     status: "ready",
     account_email: "hoge@example.com",
     plan_type: "prolite",
+    session: null,
     weekly: {
       used_percent: 55,
       remaining_percent: 45,

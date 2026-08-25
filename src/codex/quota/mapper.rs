@@ -6,7 +6,7 @@ const SESSION_WINDOW_SECONDS: u64 = 18_000;
 const WEEKLY_WINDOW_SECONDS: u64 = 604_800;
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize)]
-pub struct CodexWeeklyQuota {
+pub struct CodexQuotaWindow {
     pub used_percent: f64,
     pub remaining_percent: f64,
     pub limit_window_seconds: u64,
@@ -15,7 +15,8 @@ pub struct CodexWeeklyQuota {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct MappedUsage {
-    pub weekly: CodexWeeklyQuota,
+    pub session: Option<CodexQuotaWindow>,
+    pub weekly: CodexQuotaWindow,
     pub plan_type: Option<String>,
     pub reset_credits_available: Option<i64>,
 }
@@ -72,14 +73,19 @@ pub(crate) fn map_usage(
         rate_limit.get("secondary_window"),
         WindowPosition::Secondary,
     );
-    let weekly = [primary, secondary]
-        .into_iter()
+    let windows = [primary, secondary];
+    let session = windows
+        .iter()
+        .flatten()
+        .find(|window| window.kind == WindowKind::Session)
+        .map(|window| map_window(window, headers, now_ms))
+        .transpose()?;
+    let weekly = windows
+        .iter()
         .flatten()
         .find(|window| window.kind == WindowKind::Weekly)
         .ok_or(MapperError)?;
-
-    let used_percent = used_percent(weekly.body, weekly.position, headers)?;
-    let reset_at_ms = reset_at_ms(weekly.body, now_ms)?;
+    let weekly = map_window(weekly, headers, now_ms)?;
     let plan_type = match root.get("plan_type") {
         None | Some(Value::Null) => None,
         Some(Value::String(value)) => Some(value.clone()),
@@ -92,14 +98,29 @@ pub(crate) fn map_usage(
         .and_then(reset_credit_count);
 
     Ok(MappedUsage {
-        weekly: CodexWeeklyQuota {
-            used_percent,
-            remaining_percent: 100.0 - used_percent,
-            limit_window_seconds: WEEKLY_WINDOW_SECONDS,
-            reset_at_ms,
-        },
+        session,
+        weekly,
         plan_type,
         reset_credits_available,
+    })
+}
+
+fn map_window(
+    window: &Window<'_>,
+    headers: &HeaderMap,
+    now_ms: i64,
+) -> Result<CodexQuotaWindow, MapperError> {
+    let used_percent = used_percent(window.body, window.position, headers)?;
+    let reset_at_ms = reset_at_ms(window.body, now_ms)?;
+    let limit_window_seconds = match window.kind {
+        WindowKind::Session => SESSION_WINDOW_SECONDS,
+        WindowKind::Weekly => WEEKLY_WINDOW_SECONDS,
+    };
+    Ok(CodexQuotaWindow {
+        used_percent,
+        remaining_percent: 100.0 - used_percent,
+        limit_window_seconds,
+        reset_at_ms,
     })
 }
 
@@ -202,7 +223,7 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn t_q_001_weekly_mapper_preserves_duration_reset_plan_and_credits() {
+    fn t_q_sw_001_mapper_preserves_session_and_weekly_windows() {
         let body = json!({
             "plan_type": "prolite",
             "rate_limit": {
@@ -214,16 +235,26 @@ mod tests {
                 "secondary_window": {
                     "used_percent": 55,
                     "limit_window_seconds": WEEKLY_WINDOW_SECONDS,
-                    "reset_at": 1_786_508_580
+                    "reset_at": 1_786_508_700
                 }
             },
             "rate_limit_reset_credits": {"available_count": 2}
         });
         let mapped = map_usage(&body, &HeaderMap::new(), 1_700_000_000_000).unwrap();
+        assert_eq!(
+            mapped.session.as_ref().unwrap().limit_window_seconds,
+            SESSION_WINDOW_SECONDS
+        );
+        assert_eq!(mapped.session.as_ref().unwrap().used_percent, 12.0);
+        assert_eq!(mapped.session.as_ref().unwrap().remaining_percent, 88.0);
+        assert_eq!(
+            mapped.session.as_ref().unwrap().reset_at_ms,
+            Some(1_786_508_580_000)
+        );
         assert_eq!(mapped.weekly.limit_window_seconds, WEEKLY_WINDOW_SECONDS);
         assert_eq!(mapped.weekly.used_percent, 55.0);
         assert_eq!(mapped.weekly.remaining_percent, 45.0);
-        assert_eq!(mapped.weekly.reset_at_ms, Some(1_786_508_580_000));
+        assert_eq!(mapped.weekly.reset_at_ms, Some(1_786_508_700_000));
         assert_eq!(mapped.plan_type.as_deref(), Some("prolite"));
         assert_eq!(mapped.reset_credits_available, Some(2));
     }
@@ -244,6 +275,7 @@ mod tests {
             HeaderValue::from_static("55.5"),
         );
         let mapped = map_usage(&body, &headers, 1_700_000_000_000).unwrap();
+        assert!(mapped.session.is_none());
         assert_eq!(mapped.weekly.used_percent, 55.5);
         assert_eq!(mapped.weekly.reset_at_ms, Some(1_700_000_120_000));
     }
