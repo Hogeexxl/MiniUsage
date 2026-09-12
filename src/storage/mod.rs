@@ -1161,12 +1161,12 @@ mod tests {
         assert_eq!(
             costs,
             (
-                Some(5_725_000),
+                Some(4_380_000),
                 None,
                 Some(229_000),
                 Some("codex-auto-review".to_owned()),
                 1,
-                3,
+                4,
                 before_revision + 1,
                 parser_version_before,
             )

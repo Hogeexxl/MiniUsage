@@ -1407,7 +1407,7 @@ mod tests {
     fn t_mu03_b04_source_commit_persists_known_and_unknown_costs() {
         let (_, _, _, _, known) =
             source_commit(source_dto("gpt-5.6-sol", EventKind::Normal)).unwrap();
-        assert_eq!(known.events[0].estimated_cost_nanos_usd, Some(5_725_000));
+        assert_eq!(known.events[0].estimated_cost_nanos_usd, Some(4_380_000));
 
         let (_, _, _, _, unknown) =
             source_commit(source_dto("unknown-model", EventKind::Recovered)).unwrap();

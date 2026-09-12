@@ -558,8 +558,22 @@ async fn t_mu04_f01_single_fixture_closes_scanner_db_aggregate_api_contract() {
         .iter()
         .next()
         .unwrap_or_else(|| panic!("subagent detail missing: {detail_json:?}"));
-    assert_eq!(api_subagent["usage"]["estimated_cost"], 0.29);
-    assert_eq!(api_subagent["usage"]["estimated_cost_status"], "complete");
+    let model_usage = api_subagent["model_usage"]
+        .as_array()
+        .expect("subagent model usage");
+    assert_eq!(model_usage.len(), 2);
+    let sol = model_usage
+        .iter()
+        .find(|block| block["model"] == "gpt-5.6-sol" && block["reasoning_effort"] == "medium")
+        .expect("gpt-5.6-sol medium model usage");
+    assert_eq!(sol["usage"]["estimated_cost"], 0.28);
+    assert_eq!(sol["usage"]["estimated_cost_status"], "complete");
+    let review = model_usage
+        .iter()
+        .find(|block| block["model"] == "codex-auto-review" && block["reasoning_effort"] == "high")
+        .expect("codex-auto-review high model usage");
+    assert_eq!(review["usage"]["estimated_cost"], 0.01);
+    assert_eq!(review["usage"]["estimated_cost_status"], "complete");
     scanner.shutdown().expect("stop F01 scanner");
 }
 
