@@ -296,22 +296,26 @@
         "parent_thread_id": "00000000-03e8-7000-8000-000000000101",
         "root_session_id": "00000000-03e8-7000-8000-000000000101",
         "title": "Gate b rereview",
-        "model": "gpt-5.6-luna",
-        "reasoning_effort": "high",
-        "reasoning_effort_mixed": false,
         "last_activity_at_ms": 1786154409000,
-        "usage": {
-          "input_tokens": 100000,
-          "cached_tokens": 0,
-          "cache_write_tokens": 0,
-          "uncached_input_tokens": 100000,
-          "output_tokens": 0,
-          "reasoning_tokens": 0,
-          "other_output_tokens": 0,
-          "total_tokens": 100000,
-          "cache_hit_rate": 0,
-          "estimated_cost": 0.02
-        }
+        "model_usage": [
+          {
+            "model": "gpt-5.6-luna",
+            "reasoning_effort": "high",
+            "last_activity_at_ms": 1786154409000,
+            "usage": {
+              "input_tokens": 100000,
+              "cached_tokens": 0,
+              "cache_write_tokens": 0,
+              "uncached_input_tokens": 100000,
+              "output_tokens": 0,
+              "reasoning_tokens": 0,
+              "other_output_tokens": 0,
+              "total_tokens": 100000,
+              "cache_hit_rate": 0,
+              "estimated_cost": 0.02
+            }
+          }
+        ]
       }
     ]
   }

@@ -16,7 +16,7 @@ use super::DiagnosticSeverity;
 ///
 /// This is the only production authority for the metadata parser version;
 /// persisted checkpoints and facts carry the version they were produced with.
-pub const METADATA_PARSER_VERSION: i64 = 4;
+pub const METADATA_PARSER_VERSION: i64 = 5;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EnvelopeKind {
@@ -117,6 +117,7 @@ pub struct RolloutThreadFact {
     pub cwd: Option<Candidate<CwdProvenance>>,
     pub created_at_ms: Option<i64>,
     pub latest_context_model: Option<String>,
+    pub latest_context_turn_id: Option<String>,
     pub latest_context_at_ms: Option<i64>,
     pub latest_context_record_offset: Option<u64>,
     pub parent_thread_id_hint: Option<Candidate<ParentHintProvenance>>,
@@ -124,6 +125,7 @@ pub struct RolloutThreadFact {
     pub agent_path: Option<Candidate<AgentPathProvenance>>,
     pub ownership_boundary: OwnershipBoundary,
     pub has_conflict: bool,
+    pub relationship_conflict: bool,
 }
 
 impl RolloutThreadFact {
@@ -134,6 +136,7 @@ impl RolloutThreadFact {
             cwd: None,
             created_at_ms: None,
             latest_context_model: None,
+            latest_context_turn_id: None,
             latest_context_at_ms: None,
             latest_context_record_offset: None,
             parent_thread_id_hint: None,
@@ -145,6 +148,7 @@ impl RolloutThreadFact {
                 confidence: OwnershipConfidence::Confirmed,
             },
             has_conflict: false,
+            relationship_conflict: false,
         }
     }
 
@@ -200,7 +204,7 @@ impl RolloutThreadFact {
         } else {
             DomainOwnershipConfidence::Unresolved
         };
-        let fact_quality_status = if self.has_conflict {
+        let fact_quality_status = if self.has_conflict || self.relationship_conflict {
             DomainFactQualityStatus::Conflict
         } else if continuation_state == DomainContinuationState::Unstable {
             DomainFactQualityStatus::Partial
@@ -271,6 +275,7 @@ impl RolloutThreadFact {
                 .transpose()?,
             created_at_ms: self.created_at_ms,
             latest_context_model: self.latest_context_model.clone(),
+            latest_context_turn_id: self.latest_context_turn_id.clone(),
             latest_context_at_ms: self.latest_context_at_ms,
             parent_thread_id_hint: parent.as_ref().map(|value| value.0.clone()),
             parent_hint_provenance: parent.as_ref().map(|value| value.1),
@@ -302,6 +307,7 @@ impl RolloutThreadFact {
                 .transpose()?,
             ownership_confidence,
             fact_quality_status,
+            relationship_conflict: self.relationship_conflict,
             updated_at_ms,
         };
         fact.validate()?;
@@ -423,6 +429,7 @@ impl RolloutThreadFact {
             cwd,
             created_at_ms: fact.created_at_ms,
             latest_context_model: fact.latest_context_model.clone(),
+            latest_context_turn_id: fact.latest_context_turn_id.clone(),
             latest_context_at_ms: fact.latest_context_at_ms,
             latest_context_record_offset,
             parent_thread_id_hint,
@@ -446,6 +453,7 @@ impl RolloutThreadFact {
                 fact.fact_quality_status,
                 crate::domain::FactQualityStatus::Conflict
             ),
+            relationship_conflict: fact.relationship_conflict,
         };
         Ok(value)
     }
@@ -1279,7 +1287,7 @@ fn apply_session_meta(
             },
         )
     {
-        mark_candidate_conflict(
+        mark_relationship_conflict(
             fact,
             diagnostics,
             source_file_id,
@@ -1298,7 +1306,7 @@ fn apply_session_meta(
             },
         )
     {
-        mark_candidate_conflict(
+        mark_relationship_conflict(
             fact,
             diagnostics,
             source_file_id,
@@ -1318,7 +1326,7 @@ fn apply_session_meta(
             },
         )
     {
-        mark_candidate_conflict(
+        mark_relationship_conflict(
             fact,
             diagnostics,
             source_file_id,
@@ -1340,7 +1348,13 @@ fn apply_session_meta(
                 AgentRoleProvenance::SessionMetaRole => 1,
             },
         ) {
-            mark_candidate_conflict(fact, diagnostics, source_file_id, offset, "agent_role_hint");
+            mark_relationship_conflict(
+                fact,
+                diagnostics,
+                source_file_id,
+                offset,
+                "agent_role_hint",
+            );
         }
     } else if let Some(agent_role) = allowed.agent_role
         && merge_candidate(
@@ -1356,7 +1370,7 @@ fn apply_session_meta(
             },
         )
     {
-        mark_candidate_conflict(fact, diagnostics, source_file_id, offset, "agent_role_hint");
+        mark_relationship_conflict(fact, diagnostics, source_file_id, offset, "agent_role_hint");
     }
 
     if let Some(agent_path) = allowed.agent_path
@@ -1411,35 +1425,52 @@ fn apply_turn_context(
     let Some(model) = allowed.model else {
         return;
     };
-    let replace = match (
+    let incoming_order = latest_context_order_ms(allowed.turn_id.as_deref(), allowed.timestamp_ms);
+    let existing_order = latest_context_order_ms(
+        fact.latest_context_turn_id.as_deref(),
         fact.latest_context_at_ms,
-        allowed.timestamp_ms,
-        fact.latest_context_record_offset,
-    ) {
-        (None, Some(_), _) => true,
-        (Some(existing), Some(incoming), Some(existing_offset)) if incoming == existing => {
-            if fact.latest_context_model.as_deref() != Some(model.as_str()) {
-                fact.has_conflict = true;
-                diagnostics.push(safe_diagnostic(
-                    DiagnosticCode::CandidateConflict,
-                    DiagnosticSeverity::Conflict,
-                    source_file_id,
-                    offset,
-                    Some(fact.owning_thread_id.clone()),
-                    "model",
-                ));
-            }
-            offset > existing_offset
-        }
-        (Some(existing), Some(incoming), _) => incoming > existing,
-        (None, None, None) => true,
-        _ => false,
+    );
+    let same_turn = fact.latest_context_turn_id.as_deref() == allowed.turn_id.as_deref()
+        && allowed.turn_id.is_some();
+    if same_turn && fact.latest_context_model.as_deref() != Some(model.as_str()) {
+        fact.has_conflict = true;
+        diagnostics.push(safe_diagnostic(
+            DiagnosticCode::CandidateConflict,
+            DiagnosticSeverity::Conflict,
+            source_file_id,
+            offset,
+            Some(fact.owning_thread_id.clone()),
+            "model",
+        ));
+    }
+    let replace = match (incoming_order, existing_order) {
+        (Some(incoming), Some(existing)) if incoming != existing => incoming > existing,
+        (Some(_), None) => true,
+        (None, Some(_)) => false,
+        _ => fact
+            .latest_context_record_offset
+            .is_none_or(|existing_offset| offset > existing_offset),
     };
     if replace {
         fact.latest_context_model = Some(model);
+        fact.latest_context_turn_id = allowed.turn_id;
         fact.latest_context_at_ms = allowed.timestamp_ms;
         fact.latest_context_record_offset = Some(offset);
     }
+}
+
+/// Select the timestamp used to order the latest model observation. UUIDv7
+/// turn ids carry a stable event timestamp; legacy/non-v7 ids fall back to
+/// the envelope timestamp retained alongside the model.
+pub(crate) fn latest_context_order_ms(
+    turn_id: Option<&str>,
+    envelope_timestamp_ms: Option<i64>,
+) -> Option<i64> {
+    turn_id
+        .and_then(|value| Uuid::parse_str(value).ok())
+        .filter(|uuid| uuid.get_version_num() == 7)
+        .map(|uuid| uuid7_timestamp_ms(&uuid) as i64)
+        .or(envelope_timestamp_ms)
 }
 
 fn merge_candidate<P: Copy + Eq>(
@@ -1543,6 +1574,17 @@ fn mark_candidate_conflict(
         Some(fact.owning_thread_id.clone()),
         field,
     ));
+}
+
+fn mark_relationship_conflict(
+    fact: &mut RolloutThreadFact,
+    diagnostics: &mut Vec<RolloutDiagnostic>,
+    source_file_id: i64,
+    offset: u64,
+    field: &'static str,
+) {
+    fact.relationship_conflict = true;
+    mark_candidate_conflict(fact, diagnostics, source_file_id, offset, field);
 }
 
 fn safe_diagnostic(
@@ -1815,6 +1857,7 @@ mod tests {
         assert_eq!(role.value, "subagent");
         assert_eq!(role.provenance, AgentRoleProvenance::SubagentSource);
         assert!(!fact.has_conflict);
+        assert!(!fact.relationship_conflict);
         let safe = fact
             .to_safe_fact(
                 1,
@@ -1889,6 +1932,7 @@ mod tests {
             ParentHintProvenance::SessionMetaParent
         );
         assert!(fact.has_conflict);
+        assert!(fact.relationship_conflict);
     }
 
     #[test]
@@ -1916,6 +1960,7 @@ mod tests {
             ParentHintProvenance::SessionMetaParent
         );
         assert!(fact.has_conflict);
+        assert!(fact.relationship_conflict);
     }
 
     #[test]
@@ -1948,6 +1993,7 @@ mod tests {
         assert_eq!(parent.value, direct);
         assert_eq!(parent.provenance, ParentHintProvenance::SessionMetaParent);
         assert!(fact.has_conflict);
+        assert!(fact.relationship_conflict);
         assert_eq!(
             result
                 .diagnostics
@@ -1982,6 +2028,7 @@ mod tests {
         let fact = result.fact.unwrap();
         assert_eq!(fact.parent_thread_id_hint.unwrap().value, first);
         assert!(fact.has_conflict);
+        assert!(fact.relationship_conflict);
     }
 
     #[test]
@@ -2244,8 +2291,9 @@ mod tests {
         assert_eq!(result.records[0].ownership, RecordOwnership::Owning);
         let fact = result.fact.unwrap();
         assert_eq!(fact.latest_context_model.as_deref(), Some("new-model"));
+        assert_eq!(fact.latest_context_turn_id.as_deref(), Some(turn.as_str()));
         assert_eq!(fact.latest_context_record_offset, Some(100));
-        assert!(fact.has_conflict);
+        assert!(!fact.has_conflict);
     }
 
     #[test]
@@ -2325,7 +2373,7 @@ mod tests {
     }
 
     #[test]
-    fn multiple_turn_models_choose_latest_and_equal_time_later_offset_conflicts() {
+    fn multiple_turn_models_choose_latest_turn_and_equal_time_later_offset_without_conflict() {
         let owning = uuid7(2_000, 1);
         let turns = [uuid7(2_100, 2), uuid7(2_200, 3), uuid7(2_300, 4)];
         let records = vec![
@@ -2358,7 +2406,35 @@ mod tests {
             fact.latest_context_record_offset,
             Some(result.records[3].start_offset)
         );
+        assert!(!fact.has_conflict);
+        assert!(!result.diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == DiagnosticCode::CandidateConflict
+                && diagnostic.field == Some("model")
+        }));
+    }
+
+    #[test]
+    fn same_turn_model_conflict_is_quality_only_and_later_offset_wins() {
+        let owning = uuid7(2_000, 1);
+        let turn = uuid7(2_100, 2);
+        let records = vec![
+            format!(r#"{{"type":"session_meta","payload":{{"id":"{owning}"}}}}"#),
+            format!(
+                r#"{{"timestamp":"1970-01-01T00:00:02Z","type":"turn_context","payload":{{"turn_id":"{turn}","model":"gpt-5.6-luna"}}}}"#
+            ),
+            format!(
+                r#"{{"timestamp":"1970-01-01T00:00:02Z","type":"turn_context","payload":{{"turn_id":"{turn}","model":"gpt-5.6-sol"}}}}"#
+            ),
+        ];
+        let result = RolloutMetadataParser::parse_chunk(
+            context(0, &owning, ResumeState::AwaitOwningMeta, None),
+            lines(&records, 0),
+        );
+        let fact = result.fact.unwrap();
+        assert_eq!(fact.latest_context_model.as_deref(), Some("gpt-5.6-sol"));
+        assert_eq!(fact.latest_context_turn_id.as_deref(), Some(turn.as_str()));
         assert!(fact.has_conflict);
+        assert!(!fact.relationship_conflict);
         assert!(result.diagnostics.iter().any(|diagnostic| {
             diagnostic.code == DiagnosticCode::CandidateConflict
                 && diagnostic.field == Some("model")

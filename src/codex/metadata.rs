@@ -19,7 +19,7 @@ use super::{
     GlobalStateSnapshot, GlobalStateStatus,
     rollout::{
         AgentRoleProvenance, CwdProvenance, OwnershipConfidence, ParentHintProvenance,
-        RolloutThreadFact, normalize_agent_path,
+        RolloutThreadFact, latest_context_order_ms, normalize_agent_path,
     },
     session_index::SessionNameSnapshot,
     state_index::{StateSnapshot, StateThreadFact},
@@ -409,7 +409,6 @@ impl Resolver {
                 .unwrap_or_default();
             for fact in &rollout_facts {
                 if fact.has_conflict {
-                    relationships.get_mut(&thread_id).unwrap().conflict = true;
                     self.diagnostic(
                         MetadataDiagnosticCode::FieldConflict,
                         MetadataDiagnosticSeverity::Conflict,
@@ -418,6 +417,9 @@ impl Resolver {
                         None,
                         MetadataSourceKind::Rollout,
                     );
+                }
+                if fact.relationship_conflict {
+                    relationships.get_mut(&thread_id).unwrap().conflict = true;
                 }
                 if let Some(parent) = &fact.parent_thread_id_hint {
                     match parent.provenance {
@@ -658,7 +660,9 @@ impl Resolver {
             && self.input.session_name_snapshot.status.is_complete()
             && !self.blocked_threads.contains(thread_id);
 
-        let mut has_conflict = relationship.conflict || cycle_nodes.contains(thread_id);
+        let mut has_conflict = relationship.conflict
+            || cycle_nodes.contains(thread_id)
+            || rollouts.iter().any(|fact| fact.has_conflict);
         let mut has_partial = !source_view_complete
             || role.is_none()
             || role == Some(AgentRole::Unknown)
@@ -760,46 +764,57 @@ impl Resolver {
         patch.full_resolution = source_view_complete;
         patch.metadata_quality_status = quality;
 
-        match relationship.parent {
-            ParentChoice::Confirmed(parent) => {
-                set_optional(
-                    &mut patch.parent_thread_id,
-                    existing
-                        .as_ref()
-                        .and_then(|row| row.parent_thread_id.as_ref()),
-                    Some(parent),
-                );
+        let relationship_resolved = matches!(root_state, RootState::Resolved)
+            && match (&relationship.parent, role) {
+                (ParentChoice::NoneConfirmed, Some(AgentRole::Main)) => true,
+                (ParentChoice::Confirmed(_), Some(AgentRole::Subagent)) => true,
+                _ => false,
+            };
+        if relationship_resolved {
+            match (relationship.parent, role) {
+                (ParentChoice::NoneConfirmed, Some(AgentRole::Main)) => {
+                    clear_optional_if_present(
+                        &mut patch.parent_thread_id,
+                        existing
+                            .as_ref()
+                            .and_then(|row| row.parent_thread_id.as_ref()),
+                    );
+                    set_required_role(
+                        &mut patch.agent_role,
+                        existing.as_ref().map(|row| row.agent_role),
+                        Some(AgentRole::Main),
+                    );
+                    set_optional(
+                        &mut patch.root_session_id,
+                        existing
+                            .as_ref()
+                            .and_then(|row| row.root_session_id.as_ref()),
+                        Some(thread_id.to_owned()),
+                    );
+                }
+                (ParentChoice::Confirmed(parent), Some(AgentRole::Subagent)) => {
+                    set_optional(
+                        &mut patch.parent_thread_id,
+                        existing
+                            .as_ref()
+                            .and_then(|row| row.parent_thread_id.as_ref()),
+                        Some(parent),
+                    );
+                    set_required_role(
+                        &mut patch.agent_role,
+                        existing.as_ref().map(|row| row.agent_role),
+                        Some(AgentRole::Subagent),
+                    );
+                    set_optional(
+                        &mut patch.root_session_id,
+                        existing
+                            .as_ref()
+                            .and_then(|row| row.root_session_id.as_ref()),
+                        root,
+                    );
+                }
+                _ => {}
             }
-            ParentChoice::NoneConfirmed if source_view_complete => {
-                clear_optional_if_present(
-                    &mut patch.parent_thread_id,
-                    existing
-                        .as_ref()
-                        .and_then(|row| row.parent_thread_id.as_ref()),
-                );
-            }
-            ParentChoice::NoneConfirmed | ParentChoice::Unresolved => {}
-        }
-
-        set_required_role(
-            &mut patch.agent_role,
-            existing.as_ref().map(|row| row.agent_role),
-            role,
-        );
-        set_optional(
-            &mut patch.root_session_id,
-            existing
-                .as_ref()
-                .and_then(|row| row.root_session_id.as_ref()),
-            root,
-        );
-        if roots.get(thread_id).is_some_and(|(root, _)| root.is_none()) && source_view_complete {
-            clear_optional_if_present(
-                &mut patch.root_session_id,
-                existing
-                    .as_ref()
-                    .and_then(|row| row.root_session_id.as_ref()),
-            );
         }
 
         set_optional(
@@ -1097,7 +1112,11 @@ fn select_rollout_model(facts: &[RolloutThreadFact]) -> (Option<String>, bool) {
         .filter_map(|fact| {
             fact.latest_context_model.as_ref().map(|model| {
                 (
-                    fact.latest_context_at_ms,
+                    fact.latest_context_turn_id.clone(),
+                    latest_context_order_ms(
+                        fact.latest_context_turn_id.as_deref(),
+                        fact.latest_context_at_ms,
+                    ),
                     fact.latest_context_record_offset,
                     fact.source_file_id,
                     model.clone(),
@@ -1107,20 +1126,22 @@ fn select_rollout_model(facts: &[RolloutThreadFact]) -> (Option<String>, bool) {
         .collect::<Vec<_>>();
     candidates.sort_by(|left, right| {
         right
-            .0
-            .cmp(&left.0)
-            .then(right.1.cmp(&left.1))
-            .then(left.2.cmp(&right.2))
+            .1
+            .cmp(&left.1)
+            .then(right.2.cmp(&left.2))
             .then(left.3.cmp(&right.3))
+            .then(left.4.cmp(&right.4))
     });
     let Some(selected) = candidates.first() else {
         return (None, false);
     };
     let conflict = candidates
         .iter()
-        .filter(|candidate| candidate.0 == selected.0)
-        .any(|candidate| candidate.3 != selected.3);
-    (Some(selected.3.clone()), conflict)
+        .filter(|candidate| {
+            candidate.0 == selected.0 && (candidate.0.is_some() || candidate.1 == selected.1)
+        })
+        .any(|candidate| candidate.4 != selected.4);
+    (Some(selected.4.clone()), conflict)
 }
 
 fn select_physical_source(sources: &[SourceFileState]) -> Option<(SourceArea, String)> {
@@ -1291,6 +1312,7 @@ mod tests {
             cwd: None,
             created_at_ms: Some(11),
             latest_context_model: None,
+            latest_context_turn_id: None,
             latest_context_at_ms: None,
             latest_context_record_offset: None,
             parent_thread_id_hint: None,
@@ -1302,6 +1324,7 @@ mod tests {
                 confidence: OwnershipConfidence::Confirmed,
             },
             has_conflict: false,
+            relationship_conflict: false,
         }
     }
 
@@ -1565,7 +1588,12 @@ mod tests {
             existing_threads: vec![existing_titled, existing("untitled")],
             resolved_at_ms: 100,
         });
-        assert_eq!(patch(&result, "titled").title, Patch::Keep);
+        assert!(
+            result
+                .patches
+                .iter()
+                .all(|patch| patch.thread_id != "titled")
+        );
         assert_eq!(
             patch(&result, "untitled").title,
             Patch::Set("Gate b rereview".to_owned())
@@ -1652,16 +1680,11 @@ mod tests {
             resolved_at_ms: 100,
         });
 
-        assert_eq!(
-            patch(&result, "missing-child").agent_role,
-            Patch::Set(AgentRole::Subagent)
-        );
+        assert_eq!(patch(&result, "missing-child").agent_role, Patch::Keep);
         for id in ["multi", "cycle-a", "cycle-b", "unknown"] {
-            assert_eq!(
-                patch(&result, id).agent_role,
-                Patch::Set(AgentRole::Unknown)
-            );
-            assert!(!matches!(patch(&result, id).root_session_id, Patch::Set(_)));
+            assert_eq!(patch(&result, id).agent_role, Patch::Keep);
+            assert_eq!(patch(&result, id).parent_thread_id, Patch::Keep);
+            assert_eq!(patch(&result, id).root_session_id, Patch::Keep);
         }
         assert!(
             result
@@ -1733,14 +1756,9 @@ mod tests {
             existing_threads: vec![existing("child")],
             resolved_at_ms: 100,
         });
-        assert_eq!(
-            patch(&before, "child").parent_thread_id,
-            Patch::Set("parent".to_owned())
-        );
-        assert!(!matches!(
-            patch(&before, "child").root_session_id,
-            Patch::Set(_)
-        ));
+        assert_eq!(patch(&before, "child").parent_thread_id, Patch::Keep);
+        assert_eq!(patch(&before, "child").agent_role, Patch::Keep);
+        assert_eq!(patch(&before, "child").root_session_id, Patch::Keep);
 
         let after = ThreadMetadataResolver::resolve(ResolutionInput {
             state_snapshot: state(
@@ -1787,10 +1805,8 @@ mod tests {
         });
 
         let child = patch(&result, "child");
-        assert_eq!(
-            child.parent_thread_id,
-            Patch::Set("state-parent".to_owned())
-        );
+        assert_eq!(child.parent_thread_id, Patch::Keep);
+        assert_eq!(child.root_session_id, Patch::Keep);
         assert_eq!(child.agent_role, Patch::Keep);
         assert_eq!(
             child.metadata_quality_status,
@@ -1913,10 +1929,9 @@ mod tests {
             ],
             resolved_at_ms: 100,
         });
-        assert_eq!(
-            patch(&result, "child").parent_thread_id,
-            Patch::Set("state-parent".to_owned())
-        );
+        assert_eq!(patch(&result, "child").parent_thread_id, Patch::Keep);
+        assert_eq!(patch(&result, "child").agent_role, Patch::Keep);
+        assert_eq!(patch(&result, "child").root_session_id, Patch::Keep);
         assert_eq!(
             patch(&result, "child").metadata_quality_status,
             MetadataQualityStatus::Conflict
@@ -1925,6 +1940,54 @@ mod tests {
             diagnostic.thread_id.as_deref() == Some("child")
                 && diagnostic.code == MetadataDiagnosticCode::ParentConflict
         }));
+    }
+
+    #[test]
+    fn metadata_only_conflict_keeps_existing_relationship_trio() {
+        let mut child = rollout(1, "child");
+        child.parent_thread_id_hint = Some(Candidate {
+            value: "root".to_owned(),
+            provenance: ParentHintProvenance::SessionMetaParent,
+            record_offset: 1,
+        });
+        child.agent_role_hint = Some(Candidate {
+            value: "subagent".to_owned(),
+            provenance: AgentRoleProvenance::SubagentSource,
+            record_offset: 1,
+        });
+        child.latest_context_model = Some("gpt-5.6-sol".to_owned());
+        child.latest_context_turn_id = Some("00000000-0000-7000-8000-000000000010".to_owned());
+        child.latest_context_at_ms = Some(10);
+        child.latest_context_record_offset = Some(2);
+        child.has_conflict = true;
+
+        let result = ThreadMetadataResolver::resolve(ResolutionInput {
+            state_snapshot: state(
+                vec![state_thread("root"), state_thread("child")],
+                vec![("root", "child")],
+            ),
+            session_name_snapshot: sessions(Vec::new()),
+            global_state_snapshot: global_state(),
+            rollout_facts: vec![child],
+            source_file_observations: Vec::new(),
+            existing_threads: vec![existing_main("root"), {
+                let mut existing = existing("child");
+                existing.parent_thread_id = Some("root".to_owned());
+                existing.root_session_id = Some("root".to_owned());
+                existing.agent_role = AgentRole::Subagent;
+                existing
+            }],
+            resolved_at_ms: 100,
+        });
+
+        let patch = patch(&result, "child");
+        assert_eq!(patch.parent_thread_id, Patch::Keep);
+        assert_eq!(patch.agent_role, Patch::Keep);
+        assert_eq!(patch.root_session_id, Patch::Keep);
+        assert_eq!(
+            patch.metadata_quality_status,
+            MetadataQualityStatus::Conflict
+        );
     }
 
     #[test]
@@ -1940,8 +2003,9 @@ mod tests {
         });
 
         let self_patch = patch(&result, "self");
-        assert_eq!(self_patch.agent_role, Patch::Set(AgentRole::Unknown));
-        assert!(!matches!(self_patch.root_session_id, Patch::Set(_)));
+        assert_eq!(self_patch.agent_role, Patch::Keep);
+        assert_eq!(self_patch.parent_thread_id, Patch::Keep);
+        assert_eq!(self_patch.root_session_id, Patch::Keep);
         assert_eq!(
             self_patch.metadata_quality_status,
             MetadataQualityStatus::Conflict
@@ -2118,10 +2182,9 @@ mod tests {
             merged.project_path,
             Patch::Set(fixture_path("chosen/project"))
         );
-        assert_eq!(
-            merged.parent_thread_id,
-            Patch::Set("direct-parent".to_owned())
-        );
+        assert_eq!(merged.parent_thread_id, Patch::Keep);
+        assert_eq!(merged.agent_role, Patch::Keep);
+        assert_eq!(merged.root_session_id, Patch::Keep);
         assert_eq!(
             merged.metadata_quality_status,
             MetadataQualityStatus::Conflict

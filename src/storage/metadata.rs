@@ -442,7 +442,8 @@ fn read_fact(
                 agent_role_provenance, agent_role_record_offset,
                 agent_path, agent_path_provenance, agent_path_record_offset,
                 replay_start_offset, owning_records_start_offset,
-                ownership_confidence, fact_quality_status, updated_at_ms
+                ownership_confidence, fact_quality_status, updated_at_ms,
+                latest_context_turn_id, relationship_conflict
              FROM rollout_metadata_facts WHERE source_file_id = ?1",
             [source_file_id],
             |row| {
@@ -479,6 +480,16 @@ fn read_fact(
                 let quality: String = row.get(24)?;
                 let quality = FactQualityStatus::try_from(quality.as_str())
                     .map_err(super::to_domain_sql_error)?;
+                let relationship_conflict: i64 = row.get(27)?;
+                let relationship_conflict = match relationship_conflict {
+                    0 => false,
+                    1 => true,
+                    other => {
+                        return Err(rusqlite::Error::InvalidParameterName(format!(
+                            "invalid relationship_conflict value {other}"
+                        )));
+                    }
+                };
                 let fact = RolloutMetadataFact {
                     source_file_id: row.get(0)?,
                     file_generation: row.get(1)?,
@@ -492,6 +503,7 @@ fn read_fact(
                     created_at_ms: row.get(9)?,
                     latest_context_model: row.get(10)?,
                     latest_context_at_ms: row.get(11)?,
+                    latest_context_turn_id: row.get(26)?,
                     parent_thread_id_hint: row.get(12)?,
                     parent_hint_provenance: parent_provenance,
                     parent_hint_record_offset: row.get(14)?,
@@ -506,6 +518,7 @@ fn read_fact(
                     ownership_confidence: ownership,
                     fact_quality_status: quality,
                     updated_at_ms: row.get(25)?,
+                    relationship_conflict,
                 };
                 fact.validate().map_err(super::to_domain_sql_error)?;
                 Ok(fact)
@@ -672,11 +685,12 @@ fn write_fact(transaction: &Transaction<'_>, fact: &RolloutMetadataFact) -> Stor
             agent_role_provenance, agent_role_record_offset,
             agent_path, agent_path_provenance, agent_path_record_offset,
             replay_start_offset, owning_records_start_offset,
-            ownership_confidence, fact_quality_status, updated_at_ms
+            ownership_confidence, fact_quality_status, updated_at_ms,
+            latest_context_turn_id, relationship_conflict
          ) VALUES (
             ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12,
             ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23,
-            ?24, ?25, ?26
+            ?24, ?25, ?26, ?27, ?28
          )
          ON CONFLICT(source_file_id) DO UPDATE SET
             file_generation = excluded.file_generation,
@@ -703,7 +717,9 @@ fn write_fact(transaction: &Transaction<'_>, fact: &RolloutMetadataFact) -> Stor
             owning_records_start_offset = excluded.owning_records_start_offset,
             ownership_confidence = excluded.ownership_confidence,
             fact_quality_status = excluded.fact_quality_status,
-            updated_at_ms = excluded.updated_at_ms",
+            updated_at_ms = excluded.updated_at_ms,
+            latest_context_turn_id = excluded.latest_context_turn_id,
+            relationship_conflict = excluded.relationship_conflict",
         params![
             fact.source_file_id,
             fact.file_generation,
@@ -732,6 +748,12 @@ fn write_fact(transaction: &Transaction<'_>, fact: &RolloutMetadataFact) -> Stor
             fact.ownership_confidence.as_str(),
             fact.fact_quality_status.as_str(),
             fact.updated_at_ms,
+            fact.latest_context_turn_id,
+            if fact.relationship_conflict {
+                1_i64
+            } else {
+                0_i64
+            },
         ],
     )?;
     Ok(())
@@ -1039,7 +1061,7 @@ mod tests {
     use super::*;
     use crate::domain::{
         CheckpointProcessingStatus, FactQualityStatus, MetadataCheckpointAdvance,
-        OwnershipConfidence, ProjectKind, ScanStartEvent, ScanTrigger,
+        OwnershipConfidence, ProjectKind, SafeFactState, ScanStartEvent, ScanTrigger,
     };
     use crate::storage::{LedgerOptions, SourceBindingStatus};
 
@@ -1079,6 +1101,7 @@ mod tests {
             cwd_record_offset: None,
             created_at_ms: None,
             latest_context_model: None,
+            latest_context_turn_id: None,
             latest_context_at_ms: None,
             parent_thread_id_hint: None,
             parent_hint_provenance: None,
@@ -1093,6 +1116,7 @@ mod tests {
             owning_records_start_offset: None,
             ownership_confidence: OwnershipConfidence::Confirmed,
             fact_quality_status: FactQualityStatus::Complete,
+            relationship_conflict: false,
             updated_at_ms: 10,
         }
     }
@@ -1327,6 +1351,52 @@ mod tests {
             )
             .unwrap();
         assert_eq!(title, "A title");
+    }
+
+    #[test]
+    fn metadata_fact_ordering_and_relationship_conflict_round_trip() {
+        let (db, home) = temp_paths("fact-ordering");
+        let ledger = Ledger::open(LedgerOptions::new(&db, &home)).unwrap();
+        insert_source(&ledger);
+
+        let mut fact = source_fact_for(1, 1, 10, "thread");
+        fact.latest_context_model = Some("gpt-5.6-sol".to_owned());
+        fact.latest_context_turn_id = Some("00000000-0000-7000-8000-000000000001".to_owned());
+        fact.latest_context_at_ms = Some(42);
+        fact.fact_quality_status = FactQualityStatus::Conflict;
+        fact.relationship_conflict = true;
+        let source = MetadataSourceCommit::new(
+            1,
+            1,
+            None,
+            "thread",
+            fact,
+            MetadataCheckpointAdvance {
+                parser_version: 1,
+                committed_offset: 10,
+                guard_hash: Some(vec![1]),
+                processing_status: CheckpointProcessingStatus::Ready,
+                last_successful_scan_at_ms: Some(10),
+                last_error_code: None,
+            },
+        )
+        .unwrap();
+        let group = MetadataThreadCommit::new("thread", None, vec![source]).unwrap();
+        ledger
+            .commit_metadata(MetadataCommitBatch::new(vec![group]).unwrap())
+            .unwrap();
+
+        let state = ledger.load_metadata_scan_state([1]).unwrap();
+        let SafeFactState::Matching(fact) = &state.entries[0].safe_fact else {
+            panic!("metadata fact should match after round trip");
+        };
+        assert_eq!(
+            fact.latest_context_turn_id.as_deref(),
+            Some("00000000-0000-7000-8000-000000000001")
+        );
+        assert_eq!(fact.latest_context_model.as_deref(), Some("gpt-5.6-sol"));
+        assert!(fact.relationship_conflict);
+        assert_eq!(fact.fact_quality_status, FactQualityStatus::Conflict);
     }
 
     #[test]

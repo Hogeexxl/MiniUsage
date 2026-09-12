@@ -1737,12 +1737,16 @@ async fn t_mu03_f01_real_structure_cost_effort_closes_db_aggregate_detail_chain(
         aggregate.subagents[0].title.as_deref(),
         Some("Gate b rereview")
     );
+    assert_eq!(aggregate.subagents[0].model_usage.len(), 1);
+    assert_eq!(aggregate.subagents[0].model_usage[0].model, "gpt-5.6-luna");
     assert_eq!(
-        aggregate.subagents[0].reasoning_effort,
-        mini_usage::usage::aggregate::ReasoningEffortSummary::Single("high".to_owned())
+        aggregate.subagents[0].model_usage[0]
+            .reasoning_effort
+            .as_deref(),
+        Some("high")
     );
     assert!(
-        aggregate.subagents[0]
+        aggregate.subagents[0].model_usage[0]
             .usage
             .estimated_cost_nanos_usd
             .is_some()
@@ -1782,17 +1786,18 @@ async fn t_mu03_f01_real_structure_cost_effort_closes_db_aggregate_detail_chain(
     let expected_subagent = &expected_detail["subagents"].as_array().unwrap()[0];
     assert_eq!(subagent["thread_id"], child_id);
     assert_eq!(subagent["title"], expected_subagent["title"]);
-    assert_eq!(subagent["model"], expected_subagent["model"]);
-    assert_eq!(
-        subagent["reasoning_effort"],
-        expected_subagent["reasoning_effort"]
-    );
-    assert!(!subagent["reasoning_effort_mixed"].as_bool().unwrap());
-    assert_eq!(
-        subagent["usage"]["estimated_cost"],
-        expected_subagent["usage"]["estimated_cost"]
-    );
-    assert!(subagent["usage"]["estimated_cost"].is_number());
+    let subagent_blocks = subagent["model_usage"].as_array().unwrap();
+    let expected_subagent_blocks = expected_subagent["model_usage"].as_array().unwrap();
+    assert_eq!(subagent_blocks.len(), expected_subagent_blocks.len());
+    for (block, expected) in subagent_blocks.iter().zip(expected_subagent_blocks) {
+        assert_eq!(block["model"], expected["model"]);
+        assert_eq!(block["reasoning_effort"], expected["reasoning_effort"]);
+        assert_eq!(
+            block["usage"]["estimated_cost"],
+            expected["usage"]["estimated_cost"]
+        );
+        assert!(block["usage"]["estimated_cost"].is_number());
+    }
     scanner.shutdown().unwrap();
 }
 

@@ -21,7 +21,7 @@ pub use aggregate::{
     MainSessionDetail, ModelFilterOption, ModelUsageRow, ModelUsageRows, ProjectFilterOption,
     SessionCursor, SessionDetail, SessionPageRequest, SessionSnapshot, SessionSortField,
     SessionSortIndexItem, SessionSortOrder, SessionUsagePage, SessionUsageRow, SubagentDetail,
-    SummaryQuery, TimeRange, TokenTotals, UsageFilter, UsageSummary,
+    SubagentModelUsage, SummaryQuery, TimeRange, TokenTotals, UsageFilter, UsageSummary,
 };
 pub use pipeline::{
     CheckpointExpectation, ClassifiedOversizedUsageLine, ClassifiedUsageItem, ClassifiedUsageLine,

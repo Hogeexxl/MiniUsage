@@ -1006,6 +1006,7 @@ mod tests {
             cwd_record_offset: None,
             created_at_ms: None,
             latest_context_model: None,
+            latest_context_turn_id: None,
             latest_context_at_ms: None,
             parent_thread_id_hint: None,
             parent_hint_provenance: None,
@@ -1020,6 +1021,7 @@ mod tests {
             owning_records_start_offset: Some(0),
             ownership_confidence: DomainOwnershipConfidence::Confirmed,
             fact_quality_status: FactQualityStatus::Complete,
+            relationship_conflict: false,
             updated_at_ms: 10,
         }
     }

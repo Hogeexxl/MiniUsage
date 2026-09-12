@@ -398,6 +398,16 @@ function parseMainModelUsage(value: unknown): SessionDetailResponse["main"]["mod
   };
 }
 
+function parseSubagentModelUsage(value: unknown): SessionDetailResponse["subagents"][number]["model_usage"][number] {
+  const record = requiredRecord(value);
+  return {
+    model: requiredString(record, "model"),
+    reasoning_effort: nullableString(record, "reasoning_effort"),
+    last_activity_at_ms: requiredSafeInteger(record, "last_activity_at_ms"),
+    usage: parseTokenUsage(record.usage),
+  };
+}
+
 function parseSessionDetail(value: unknown): SessionDetailResponse {
   const record = requiredRecord(value);
   const mainRecord = requiredRecord(record.main);
@@ -427,16 +437,17 @@ function parseSessionDetail(value: unknown): SessionDetailResponse {
     },
     subagents: subagentsValue.map((value) => {
       const subagent = requiredRecord(value);
+      const modelUsageValue = subagent.model_usage;
+      if (!Array.isArray(modelUsageValue)) {
+        throw new MiniUsageClientError("HTTP_ERROR", 200);
+      }
       return {
         thread_id: requiredString(subagent, "thread_id"),
         parent_thread_id: nullableString(subagent, "parent_thread_id"),
         root_session_id: requiredString(subagent, "root_session_id"),
         title: nullableString(subagent, "title"),
-        model: requiredString(subagent, "model"),
-        reasoning_effort: nullableString(subagent, "reasoning_effort"),
-        reasoning_effort_mixed: requiredBoolean(subagent, "reasoning_effort_mixed"),
         last_activity_at_ms: requiredSafeInteger(subagent, "last_activity_at_ms"),
-        usage: parseTokenUsage(subagent.usage),
+        model_usage: modelUsageValue.map(parseSubagentModelUsage),
       };
     }),
   };

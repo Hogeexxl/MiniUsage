@@ -408,21 +408,20 @@ pub struct MainModelUsage {
     pub usage: TokenTotals,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ReasoningEffortSummary {
-    Unknown,
-    Single(String),
-    Mixed,
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub struct SubagentDetail {
     pub thread_id: String,
     pub parent_thread_id: Option<String>,
     pub root_session_id: String,
     pub title: Option<String>,
+    pub last_activity_at_ms: i64,
+    pub model_usage: Vec<SubagentModelUsage>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct SubagentModelUsage {
     pub model: String,
-    pub reasoning_effort: ReasoningEffortSummary,
+    pub reasoning_effort: Option<String>,
     pub last_activity_at_ms: i64,
     pub usage: TokenTotals,
 }
@@ -893,8 +892,8 @@ impl<'connection> AggregateReader<'connection> {
     }
 
     /// Detail aggregation is deliberately performed from one grouped usage
-    /// query.  Rust then partitions those groups into Main model blocks and
-    /// one aggregate block per Subagent, avoiding per-thread/model SQL.
+    /// query. Rust then partitions those groups into Main model blocks and
+    /// per-model/effort blocks within each Subagent, avoiding per-thread/model SQL.
     pub fn session_detail(
         &self,
         range: TimeRange,
@@ -922,7 +921,8 @@ impl<'connection> AggregateReader<'connection> {
                         COALESCE(SUM(CASE WHEN cache_write_tokens IS NULL THEN 1 ELSE 0 END),0),
                         SUM(estimated_cost_nanos_usd),
                         COALESCE(SUM(CASE WHEN estimated_cost_nanos_usd IS NULL THEN 1 ELSE 0 END),0),
-                        COUNT(*), reasoning_effort
+                        COUNT(*), reasoning_effort,
+                        MAX(file_generation), MAX(source_file_id), MAX(source_end_offset)
                  FROM usage_events
                  WHERE ledger_epoch=?1 AND root_session_id=?2
                    AND occurred_at_ms>=?3 AND occurred_at_ms<?4
@@ -992,13 +992,36 @@ impl<'connection> AggregateReader<'connection> {
 
         let mut inclusive_usage = main_usage.clone();
         let mut subagents = Vec::new();
-        for (thread_id, groups) in by_thread {
-            let first = groups.first().ok_or(AggregateError::InvariantViolation)?;
+        for (thread_id, mut groups) in by_thread {
+            groups.sort_by(|left, right| {
+                right
+                    .last_activity_at_ms
+                    .cmp(&left.last_activity_at_ms)
+                    .then_with(|| right.file_generation.cmp(&left.file_generation))
+                    .then_with(|| right.source_file_id.cmp(&left.source_file_id))
+                    .then_with(|| right.source_end_offset.cmp(&left.source_end_offset))
+                    .then_with(|| left.model.cmp(&right.model))
+                    .then_with(|| match (&left.reasoning_effort, &right.reasoning_effort) {
+                        (None, None) => std::cmp::Ordering::Equal,
+                        (None, Some(_)) => std::cmp::Ordering::Less,
+                        (Some(_), None) => std::cmp::Ordering::Greater,
+                        (Some(left), Some(right)) => left.cmp(right),
+                    })
+            });
+            let model_usage = groups
+                .iter()
+                .map(|group| SubagentModelUsage {
+                    model: group.model.clone(),
+                    reasoning_effort: group.reasoning_effort.clone(),
+                    last_activity_at_ms: group.last_activity_at_ms,
+                    usage: group.totals.clone(),
+                })
+                .collect::<Vec<_>>();
             let mut usage = TokenTotals::zero();
-            for group in &groups {
-                usage.add_assign(&group.totals)?;
-                inclusive_usage.add_assign(&group.totals)?;
+            for block in &model_usage {
+                usage.add_assign(&block.usage)?;
             }
+            inclusive_usage.add_assign(&usage)?;
             let (parent_thread_id, title) =
                 metadata.get(&thread_id).cloned().unwrap_or((None, None));
             subagents.push(SubagentDetail {
@@ -1006,14 +1029,11 @@ impl<'connection> AggregateReader<'connection> {
                 parent_thread_id,
                 root_session_id: root_session_id.to_owned(),
                 title,
-                model: first.model.clone(),
-                reasoning_effort: reasoning_effort_summary(&groups),
-                last_activity_at_ms: groups
-                    .iter()
-                    .map(|group| group.last_activity_at_ms)
-                    .max()
+                last_activity_at_ms: model_usage
+                    .first()
+                    .map(|block| block.last_activity_at_ms)
                     .ok_or(AggregateError::InvariantViolation)?,
-                usage,
+                model_usage,
             });
         }
         subagents.sort_by(|left, right| {
@@ -1629,33 +1649,6 @@ fn same_totals(left: &TokenTotals, right: &TokenTotals) -> bool {
         && left.cost_completeness == right.cost_completeness
 }
 
-fn reasoning_effort_summary(groups: &[DetailAggregateRow]) -> ReasoningEffortSummary {
-    let mut known: Option<&str> = None;
-    let mut saw_unknown = false;
-    for group in groups {
-        match group.reasoning_effort.as_deref() {
-            Some(effort) => {
-                if known.is_some_and(|previous| previous != effort) {
-                    return ReasoningEffortSummary::Mixed;
-                }
-                known = Some(effort);
-            }
-            None => saw_unknown = true,
-        }
-    }
-    if saw_unknown {
-        if known.is_some() {
-            ReasoningEffortSummary::Mixed
-        } else {
-            ReasoningEffortSummary::Unknown
-        }
-    } else {
-        known
-            .map(|effort| ReasoningEffortSummary::Single(effort.to_owned()))
-            .unwrap_or(ReasoningEffortSummary::Unknown)
-    }
-}
-
 #[derive(Clone, Debug)]
 struct QuarantinedRoot {
     root_session_id: String,
@@ -1806,6 +1799,9 @@ struct DetailAggregateRow {
     model: String,
     reasoning_effort: Option<String>,
     last_activity_at_ms: i64,
+    file_generation: i64,
+    source_file_id: i64,
+    source_end_offset: i64,
     totals: TokenTotals,
 }
 
@@ -1852,6 +1848,9 @@ fn detail_row(row: &Row<'_>) -> rusqlite::Result<DetailAggregateRow> {
         model: row.get(1)?,
         reasoning_effort: row.get(13)?,
         last_activity_at_ms: row.get(2)?,
+        file_generation: row.get(14)?,
+        source_file_id: row.get(15)?,
+        source_end_offset: row.get(16)?,
         totals,
     })
 }
@@ -1995,7 +1994,9 @@ mod tests {
                     input_tokens INTEGER NOT NULL, cached_tokens INTEGER NOT NULL,
                     cache_write_tokens INTEGER, output_tokens INTEGER NOT NULL,
                     reasoning_tokens INTEGER NOT NULL, total_tokens INTEGER NOT NULL,
-                    reasoning_effort TEXT, estimated_cost_nanos_usd INTEGER
+                    reasoning_effort TEXT, estimated_cost_nanos_usd INTEGER,
+                    source_file_id INTEGER, file_generation INTEGER,
+                    source_start_offset INTEGER, source_end_offset INTEGER
                  );
                  CREATE TABLE IF NOT EXISTS usage_session_quarantine (
                     ledger_epoch INTEGER NOT NULL, root_session_id TEXT NOT NULL,
@@ -2086,8 +2087,9 @@ mod tests {
                 "INSERT INTO usage_events(
                     ledger_epoch,event_id,occurred_at_ms,thread_id,root_session_id,model,
                     input_tokens,cached_tokens,cache_write_tokens,output_tokens,reasoning_tokens,
-                    total_tokens,reasoning_effort,estimated_cost_nanos_usd
-                 ) VALUES (7,?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?6+?9,NULL,NULL)",
+                    total_tokens,reasoning_effort,estimated_cost_nanos_usd,
+                    source_file_id,file_generation,source_start_offset,source_end_offset
+                 ) VALUES (7,?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?6+?9,NULL,NULL,1,1,?2,?2+1)",
                 params![
                     event_id,
                     occurred_at_ms,
@@ -2246,7 +2248,9 @@ mod tests {
                     input_tokens INTEGER NOT NULL, cached_tokens INTEGER NOT NULL,
                     cache_write_tokens INTEGER, output_tokens INTEGER NOT NULL,
                     reasoning_tokens INTEGER NOT NULL, total_tokens INTEGER NOT NULL,
-                    reasoning_effort TEXT, estimated_cost_nanos_usd INTEGER
+                    reasoning_effort TEXT, estimated_cost_nanos_usd INTEGER,
+                    source_file_id INTEGER, file_generation INTEGER,
+                    source_start_offset INTEGER, source_end_offset INTEGER
                  );
                  INSERT INTO app_meta(id, usage_active_epoch) VALUES (1, 7);
                  INSERT INTO threads(thread_id,title,project_name,project_path,project_kind) VALUES
@@ -2374,7 +2378,9 @@ mod tests {
                     input_tokens INTEGER NOT NULL, cached_tokens INTEGER NOT NULL,
                     cache_write_tokens INTEGER, output_tokens INTEGER NOT NULL,
                     reasoning_tokens INTEGER NOT NULL, total_tokens INTEGER NOT NULL,
-                    reasoning_effort TEXT, estimated_cost_nanos_usd INTEGER
+                    reasoning_effort TEXT, estimated_cost_nanos_usd INTEGER,
+                    source_file_id INTEGER, file_generation INTEGER,
+                    source_start_offset INTEGER, source_end_offset INTEGER
                  );
                  INSERT INTO app_meta(id, usage_active_epoch) VALUES (1, 7);
                  INSERT INTO threads(thread_id,parent_thread_id,root_session_id,agent_role,title,project_name,project_path,project_kind) VALUES
@@ -2399,8 +2405,9 @@ mod tests {
                     "INSERT INTO usage_events(
                         ledger_epoch,event_id,occurred_at_ms,thread_id,root_session_id,model,
                         input_tokens,cached_tokens,cache_write_tokens,output_tokens,reasoning_tokens,
-                        total_tokens,reasoning_effort,estimated_cost_nanos_usd
-                     ) VALUES (7,?1,?2,?3,'root',?4,10,2,1,3,1,13,?5,?6)",
+                        total_tokens,reasoning_effort,estimated_cost_nanos_usd,
+                        source_file_id,file_generation,source_start_offset,source_end_offset
+                     ) VALUES (7,?1,?2,?3,'root',?4,10,2,1,3,1,13,?5,?6,1,1,?2,?2+1)",
                     params![event_id, occurred_at_ms, thread_id, model, effort, cost],
                 )
                 .unwrap();
@@ -2495,7 +2502,7 @@ mod tests {
                     primary_error_code TEXT NOT NULL, last_activity_at_ms INTEGER NOT NULL,
                     first_seen_at_ms INTEGER NOT NULL, updated_at_ms INTEGER NOT NULL
                  );
-                 CREATE TABLE usage_events (ledger_epoch INTEGER,event_id TEXT,occurred_at_ms INTEGER,thread_id TEXT,root_session_id TEXT,model TEXT,input_tokens INTEGER,cached_tokens INTEGER,cache_write_tokens INTEGER,output_tokens INTEGER,reasoning_tokens INTEGER,total_tokens INTEGER,reasoning_effort TEXT,estimated_cost_nanos_usd INTEGER);
+                 CREATE TABLE usage_events (ledger_epoch INTEGER,event_id TEXT,occurred_at_ms INTEGER,thread_id TEXT,root_session_id TEXT,model TEXT,input_tokens INTEGER,cached_tokens INTEGER,cache_write_tokens INTEGER,output_tokens INTEGER,reasoning_tokens INTEGER,total_tokens INTEGER,reasoning_effort TEXT,estimated_cost_nanos_usd INTEGER,source_file_id INTEGER,file_generation INTEGER,source_start_offset INTEGER,source_end_offset INTEGER);
              INSERT INTO app_meta VALUES (1,7);
              INSERT INTO usage_events(
                  ledger_epoch,event_id,occurred_at_ms,thread_id,root_session_id,model,
@@ -2622,6 +2629,196 @@ mod tests {
     }
 
     #[test]
+    fn t_mu03_c06_subagent_model_usage_keeps_model_effort_groups_isolated() {
+        let connection = Connection::open_in_memory().unwrap();
+        connection
+            .execute_batch(
+                "CREATE TABLE app_meta (id INTEGER PRIMARY KEY, usage_active_epoch INTEGER NOT NULL);
+                 CREATE TABLE threads (
+                    thread_id TEXT PRIMARY KEY, parent_thread_id TEXT, root_session_id TEXT,
+                    agent_role TEXT NOT NULL, title TEXT, project_name TEXT, project_path TEXT,
+                    project_kind TEXT NOT NULL
+                 );
+                 CREATE TABLE usage_events (
+                    ledger_epoch INTEGER NOT NULL, event_id TEXT NOT NULL,
+                    occurred_at_ms INTEGER NOT NULL, thread_id TEXT NOT NULL,
+                    root_session_id TEXT NOT NULL, turn_key TEXT, model TEXT NOT NULL,
+                    input_tokens INTEGER NOT NULL, cached_tokens INTEGER NOT NULL,
+                    cache_write_tokens INTEGER, output_tokens INTEGER NOT NULL,
+                    reasoning_tokens INTEGER NOT NULL, total_tokens INTEGER NOT NULL,
+                    reasoning_effort TEXT, estimated_cost_nanos_usd INTEGER,
+                    source_file_id INTEGER, file_generation INTEGER,
+                    source_start_offset INTEGER, source_end_offset INTEGER
+                 );
+                 INSERT INTO app_meta(id, usage_active_epoch) VALUES (1, 7);
+                 INSERT INTO threads(
+                    thread_id,parent_thread_id,root_session_id,agent_role,title,project_name,project_path,project_kind
+                 ) VALUES
+                    ('root',NULL,'root','main','Root',NULL,NULL,'project'),
+                    ('child','root','root','subagent','Child',NULL,NULL,'project');",
+            )
+            .unwrap();
+        let insert = |event_id: &str,
+                      occurred_at_ms: i64,
+                      thread_id: &str,
+                      model: &str,
+                      effort: &str,
+                      input_tokens: i64,
+                      cached_tokens: i64,
+                      cache_write_tokens: i64,
+                      output_tokens: i64,
+                      reasoning_tokens: i64,
+                      cost: i64,
+                      source_end_offset: i64| {
+            connection
+                .execute(
+                    "INSERT INTO usage_events(
+                        ledger_epoch,event_id,occurred_at_ms,thread_id,root_session_id,turn_key,model,
+                        input_tokens,cached_tokens,cache_write_tokens,output_tokens,reasoning_tokens,
+                        total_tokens,reasoning_effort,estimated_cost_nanos_usd,
+                        source_file_id,file_generation,source_start_offset,source_end_offset
+                     ) VALUES (7,?1,?2,?3,'root',NULL,?4,?5,?6,?7,?8,?9,?5+?8,?10,?11,1,1,?12-1,?12)",
+                    params![
+                        event_id,
+                        occurred_at_ms,
+                        thread_id,
+                        model,
+                        input_tokens,
+                        cached_tokens,
+                        cache_write_tokens,
+                        output_tokens,
+                        reasoning_tokens,
+                        effort,
+                        cost,
+                        source_end_offset,
+                    ],
+                )
+                .unwrap();
+        };
+        insert(
+            "root-event",
+            0,
+            "root",
+            "root-model",
+            "max",
+            10,
+            0,
+            0,
+            10,
+            0,
+            100,
+            1,
+        );
+        insert("luna-max", 5, "child", "Luna", "max", 1, 1, 0, 1, 0, 10, 10);
+        insert(
+            "sol-medium-1",
+            5,
+            "child",
+            "Sol",
+            "medium",
+            2,
+            0,
+            1,
+            2,
+            1,
+            20,
+            20,
+        );
+        insert(
+            "luna-high",
+            5,
+            "child",
+            "Luna",
+            "high",
+            3,
+            1,
+            1,
+            3,
+            1,
+            30,
+            30,
+        );
+        insert(
+            "sol-medium-2",
+            5,
+            "child",
+            "Sol",
+            "medium",
+            4,
+            2,
+            1,
+            4,
+            2,
+            40,
+            40,
+        );
+        insert("sol-high", 5, "child", "Sol", "high", 5, 3, 1, 5, 2, 50, 50);
+
+        let detail = AggregateReader::new(&connection)
+            .session_detail(
+                TimeRange::new(0, 10).unwrap(),
+                &UsageFilter::default(),
+                "root",
+            )
+            .unwrap();
+        let child = &detail.subagents[0];
+        assert_eq!(child.model_usage.len(), 4);
+        assert_eq!(
+            child
+                .model_usage
+                .iter()
+                .map(|block| (block.model.as_str(), block.reasoning_effort.as_deref()))
+                .collect::<Vec<_>>(),
+            vec![
+                ("Sol", Some("high")),
+                ("Sol", Some("medium")),
+                ("Luna", Some("high")),
+                ("Luna", Some("max")),
+            ]
+        );
+        assert_eq!(child.model_usage[0].last_activity_at_ms, 5);
+        assert_eq!(child.model_usage[1].last_activity_at_ms, 5);
+        assert_eq!(child.model_usage[2].last_activity_at_ms, 5);
+        assert_eq!(child.model_usage[3].last_activity_at_ms, 5);
+        assert_eq!(child.model_usage[0].usage.input_tokens, 5);
+        assert_eq!(
+            child.model_usage[0].usage.estimated_cost_nanos_usd,
+            Some(50)
+        );
+        assert_eq!(child.model_usage[1].usage.input_tokens, 6);
+        assert_eq!(child.model_usage[1].usage.output_tokens, 6);
+        assert_eq!(
+            child.model_usage[1].usage.estimated_cost_nanos_usd,
+            Some(60)
+        );
+        assert_eq!(child.model_usage[2].usage.input_tokens, 3);
+        assert_eq!(
+            child.model_usage[2].usage.estimated_cost_nanos_usd,
+            Some(30)
+        );
+        assert_eq!(child.model_usage[3].usage.input_tokens, 1);
+        assert_eq!(
+            child.model_usage[3].usage.estimated_cost_nanos_usd,
+            Some(10)
+        );
+
+        let mut summed = TokenTotals::zero();
+        for block in &child.model_usage {
+            summed.add_assign(&block.usage).unwrap();
+        }
+        assert_eq!(summed.input_tokens, 15);
+        assert_eq!(summed.cached_tokens, 7);
+        assert_eq!(summed.cache_write_tokens, Some(4));
+        assert_eq!(summed.output_tokens, 15);
+        assert_eq!(summed.reasoning_tokens, 6);
+        assert_eq!(summed.total_tokens, 30);
+        assert_eq!(summed.estimated_cost_nanos_usd, Some(150));
+        assert_eq!(detail.main.inclusive_usage.input_tokens, 25);
+        assert_eq!(detail.main.inclusive_usage.output_tokens, 25);
+        assert_eq!(detail.main.inclusive_usage.total_tokens, 50);
+    }
+
+    #[test]
     fn t_mu04_c01_token_totals_cost_completeness_state_machine() {
         fn with_cost(cost: Option<i64>, completeness: CostCompleteness) -> TokenTotals {
             let mut totals = TokenTotals::zero();
@@ -2736,19 +2933,24 @@ mod tests {
             CostCompleteness::Unknown
         );
         assert_eq!(detail.subagents.len(), 1);
-        assert_eq!(detail.subagents[0].model, "m-child");
         assert_eq!(
-            detail.subagents[0].reasoning_effort,
-            ReasoningEffortSummary::Mixed
+            detail.subagents[0]
+                .model_usage
+                .iter()
+                .map(|block| (block.model.as_str(), block.reasoning_effort.as_deref()))
+                .collect::<Vec<_>>(),
+            vec![
+                ("m-child", None),
+                ("m-child", Some("medium")),
+                ("m-child", Some("high")),
+            ]
         );
-        assert_eq!(
-            detail.subagents[0].usage.estimated_cost_nanos_usd,
-            Some(1_100)
-        );
-        assert_eq!(
-            detail.subagents[0].usage.cost_completeness,
-            CostCompleteness::Partial
-        );
+        let mut child_usage = TokenTotals::zero();
+        for block in &detail.subagents[0].model_usage {
+            child_usage.add_assign(&block.usage).unwrap();
+        }
+        assert_eq!(child_usage.estimated_cost_nanos_usd, Some(1_100));
+        assert_eq!(child_usage.cost_completeness, CostCompleteness::Partial);
     }
 
     #[test]
@@ -2832,10 +3034,14 @@ mod tests {
             ),
             (Some(2_100), CostCompleteness::Partial)
         );
+        let mut child_usage = TokenTotals::zero();
+        for block in &detail.subagents[0].model_usage {
+            child_usage.add_assign(&block.usage).unwrap();
+        }
         assert_eq!(
             (
-                detail.subagents[0].usage.estimated_cost_nanos_usd,
-                detail.subagents[0].usage.cost_completeness
+                child_usage.estimated_cost_nanos_usd,
+                child_usage.cost_completeness
             ),
             (Some(1_100), CostCompleteness::Partial)
         );

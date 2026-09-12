@@ -1351,6 +1351,7 @@ pub struct RolloutMetadataFact {
     pub cwd_record_offset: Option<i64>,
     pub created_at_ms: Option<i64>,
     pub latest_context_model: Option<String>,
+    pub latest_context_turn_id: Option<String>,
     pub latest_context_at_ms: Option<i64>,
     pub parent_thread_id_hint: Option<String>,
     pub parent_hint_provenance: Option<ParentHintProvenance>,
@@ -1365,6 +1366,7 @@ pub struct RolloutMetadataFact {
     pub owning_records_start_offset: Option<i64>,
     pub ownership_confidence: OwnershipConfidence,
     pub fact_quality_status: FactQualityStatus,
+    pub relationship_conflict: bool,
     pub updated_at_ms: i64,
 }
 
@@ -1418,6 +1420,9 @@ impl RolloutMetadataFact {
         if let Some(model) = self.latest_context_model.as_deref() {
             non_empty(model, "latest_context_model")?;
         }
+        if let Some(turn_id) = self.latest_context_turn_id.as_deref() {
+            non_empty(turn_id, "latest_context_turn_id")?;
+        }
         if let Some(parent) = self.parent_thread_id_hint.as_deref() {
             non_empty(parent, "parent_thread_id_hint")?;
         }
@@ -1426,6 +1431,11 @@ impl RolloutMetadataFact {
         }
         if let Some(agent_path) = self.agent_path.as_deref() {
             non_empty(agent_path, "agent_path")?;
+        }
+        if self.relationship_conflict && self.fact_quality_status != FactQualityStatus::Conflict {
+            return Err(DomainError::InvariantViolation {
+                invariant: "relationship conflict requires conflict fact quality",
+            });
         }
         if matches!(
             self.continuation_state,
@@ -2685,6 +2695,7 @@ mod tests {
             cwd_record_offset: None,
             created_at_ms: None,
             latest_context_model: None,
+            latest_context_turn_id: None,
             latest_context_at_ms: None,
             parent_thread_id_hint: None,
             parent_hint_provenance: None,
@@ -2699,6 +2710,7 @@ mod tests {
             owning_records_start_offset: None,
             ownership_confidence: OwnershipConfidence::Unresolved,
             fact_quality_status: FactQualityStatus::Partial,
+            relationship_conflict: false,
             updated_at_ms: 1,
         };
         assert!(fact.validate().is_err());
@@ -2718,6 +2730,7 @@ mod tests {
             cwd_record_offset: None,
             created_at_ms: None,
             latest_context_model: None,
+            latest_context_turn_id: None,
             latest_context_at_ms: None,
             parent_thread_id_hint: None,
             parent_hint_provenance: None,
@@ -2732,6 +2745,7 @@ mod tests {
             owning_records_start_offset: None,
             ownership_confidence: OwnershipConfidence::Unresolved,
             fact_quality_status: FactQualityStatus::Partial,
+            relationship_conflict: false,
             updated_at_ms: 1,
         };
         valid.validate().unwrap();

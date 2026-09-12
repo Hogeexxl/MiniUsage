@@ -938,6 +938,7 @@ mod tests {
             cwd: None,
             created_at_ms: None,
             latest_context_model: None,
+            latest_context_turn_id: None,
             latest_context_at_ms: None,
             latest_context_record_offset: None,
             parent_thread_id_hint: Some(Candidate {
@@ -957,6 +958,7 @@ mod tests {
                 confidence: OwnershipConfidence::Confirmed,
             },
             has_conflict: false,
+            relationship_conflict: false,
         };
         let result = ThreadMetadataResolver::resolve(ResolutionInput {
             state_snapshot: snapshot,

@@ -678,7 +678,8 @@ fn query_metadata_fact(
                     agent_role_provenance, agent_role_record_offset,
                     agent_path, agent_path_provenance, agent_path_record_offset,
                     replay_start_offset, owning_records_start_offset,
-                    ownership_confidence, fact_quality_status, updated_at_ms
+                    ownership_confidence, fact_quality_status, updated_at_ms,
+                    latest_context_turn_id, relationship_conflict
              FROM rollout_metadata_facts WHERE source_file_id = ?1",
             [source_file_id],
             |row| {
@@ -689,6 +690,16 @@ fn query_metadata_fact(
                 let agent_path_provenance: Option<String> = row.get(19)?;
                 let ownership_confidence: String = row.get(23)?;
                 let fact_quality_status: String = row.get(24)?;
+                let relationship_conflict: i64 = row.get(27)?;
+                let relationship_conflict = match relationship_conflict {
+                    0 => false,
+                    1 => true,
+                    other => {
+                        return Err(rusqlite::Error::InvalidParameterName(format!(
+                            "invalid relationship_conflict value {other}"
+                        )));
+                    }
+                };
                 let value = RolloutMetadataFact {
                     source_file_id: row.get(0)?,
                     file_generation: row.get(1)?,
@@ -707,6 +718,7 @@ fn query_metadata_fact(
                     created_at_ms: row.get(9)?,
                     latest_context_model: row.get(10)?,
                     latest_context_at_ms: row.get(11)?,
+                    latest_context_turn_id: row.get(26)?,
                     parent_thread_id_hint: row.get(12)?,
                     parent_hint_provenance: parent_hint_provenance
                         .as_deref()
@@ -737,6 +749,7 @@ fn query_metadata_fact(
                     fact_quality_status: FactQualityStatus::try_from(fact_quality_status.as_str())
                         .map_err(domain_sql_error)?,
                     updated_at_ms: row.get(25)?,
+                    relationship_conflict,
                 };
                 Ok(value)
             },

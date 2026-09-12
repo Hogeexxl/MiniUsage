@@ -76,21 +76,31 @@ function MainReceipt({ item }: { item: MainModelUsageDto }) {
 
 function SubagentReceipt({ item, timezone }: { item: SubagentDetailDto; timezone: string }) {
   const time = formatSessionTimeWithSeconds(item.last_activity_at_ms, timezone);
-  const model = formatModelWithReasoningEffort(item.model, item.reasoning_effort, item.reasoning_effort_mixed);
   return (
     <div>
       <dl className="grid grid-cols-[72px_minmax(0,1fr)] items-baseline gap-x-4 gap-y-2 text-sm">
         <dt className="text-muted-foreground">Thread ID</dt>
         <dd className="whitespace-nowrap text-right tabular-nums text-foreground">{item.thread_id}</dd>
-        <dt className="text-muted-foreground">Model</dt>
-        <dd className="min-w-0 truncate text-right text-foreground" title={model}>{model}</dd>
         <dt className="text-muted-foreground">Last Active</dt>
         <dd className="text-right tabular-nums text-foreground" title={time.title}>{time.text}</dd>
       </dl>
-      <div className="my-4">
-        <ReceiptDivider />
-      </div>
-      <UsageReceipt usage={item.usage} />
+      {item.model_usage.map((modelUsage, index) => {
+        const model = formatModelWithReasoningEffort(modelUsage.model, modelUsage.reasoning_effort, false);
+        return (
+          <div key={`${modelUsage.model}:${modelUsage.reasoning_effort ?? "unknown"}:${index}`}>
+            <div className="my-4">
+              <ReceiptDivider />
+            </div>
+            <dl className="grid grid-cols-[72px_minmax(0,1fr)] items-baseline gap-x-4 gap-y-2 text-sm">
+              <dt className="text-muted-foreground">Model</dt>
+              <dd className="min-w-0 truncate text-right text-foreground" title={model}>{model}</dd>
+            </dl>
+            <div className="mt-4">
+              <UsageReceipt usage={modelUsage.usage} />
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

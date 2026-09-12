@@ -16,8 +16,8 @@ use crate::{
     usage::{
         aggregate::{
             AggregateError, CostCompleteness, FilterOptions, ModelUsageRow, ProjectFilterOption,
-            ReasoningEffortSummary, SessionDataStatus, SessionDetail, SessionSortField,
-            SessionSortIndexItem, SessionSortOrder, SessionUsageRow, TokenTotals, UsageFilter,
+            SessionDataStatus, SessionDetail, SessionSortField, SessionSortIndexItem,
+            SessionSortOrder, SessionUsageRow, SubagentModelUsage, TokenTotals, UsageFilter,
             UsageSummary,
         },
         analytics::{
@@ -252,9 +252,14 @@ pub struct SubagentDetailDto {
     pub parent_thread_id: Option<String>,
     pub root_session_id: String,
     pub title: Option<String>,
+    pub last_activity_at_ms: i64,
+    pub model_usage: Vec<SubagentModelUsageDto>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct SubagentModelUsageDto {
     pub model: String,
     pub reasoning_effort: Option<String>,
-    pub reasoning_effort_mixed: bool,
     pub last_activity_at_ms: i64,
     pub usage: TokenUsageDto,
 }
@@ -960,21 +965,18 @@ fn map_detail(
         .into_iter()
         .map(|subagent| {
             ensure_safe(subagent.last_activity_at_ms)?;
-            let (reasoning_effort, reasoning_effort_mixed) = match subagent.reasoning_effort {
-                ReasoningEffortSummary::Unknown => (None, false),
-                ReasoningEffortSummary::Single(effort) => (Some(effort), false),
-                ReasoningEffortSummary::Mixed => (None, true),
-            };
+            let model_usage = subagent
+                .model_usage
+                .into_iter()
+                .map(map_subagent_model_usage)
+                .collect::<Result<Vec<_>, ApiError>>()?;
             Ok(SubagentDetailDto {
                 thread_id: subagent.thread_id,
                 parent_thread_id: subagent.parent_thread_id,
                 root_session_id: subagent.root_session_id,
                 title: subagent.title,
-                model: subagent.model,
-                reasoning_effort,
-                reasoning_effort_mixed,
                 last_activity_at_ms: subagent.last_activity_at_ms,
-                usage: map_totals(subagent.usage)?,
+                model_usage,
             })
         })
         .collect::<Result<Vec<_>, ApiError>>()?;
@@ -994,6 +996,16 @@ fn map_detail(
             inclusive_usage: map_totals(main.inclusive_usage)?,
         },
         subagents,
+    })
+}
+
+fn map_subagent_model_usage(model: SubagentModelUsage) -> Result<SubagentModelUsageDto, ApiError> {
+    ensure_safe(model.last_activity_at_ms)?;
+    Ok(SubagentModelUsageDto {
+        model: model.model,
+        reasoning_effort: model.reasoning_effort,
+        last_activity_at_ms: model.last_activity_at_ms,
+        usage: map_totals(model.usage)?,
     })
 }
 
@@ -1566,6 +1578,76 @@ mod tests {
                 }
             ),
             Err(ApiError::QueryOverflow)
+        );
+    }
+
+    #[test]
+    fn t_s05_006_subagent_model_usage_dto_has_exact_block_shape() {
+        let range = utc_range(RangeKey::Today);
+        let usage = totals(Some(3), 10, 4);
+        let response = session_detail_response(
+            &range,
+            SessionDetailSnapshot {
+                data_revision: 9,
+                active_epoch: 2,
+                value: SessionDetail {
+                    root_session_id: "root".into(),
+                    last_activity_at_ms: 20,
+                    main: crate::usage::aggregate::MainSessionDetail {
+                        title: Some("Root".into()),
+                        thread_id: "root".into(),
+                        root_session_id: "root".into(),
+                        models_used: vec!["main-model".into()],
+                        model_usage: Vec::new(),
+                        self_usage: usage.clone(),
+                        subagent_count: 1,
+                        inclusive_usage: usage.clone(),
+                    },
+                    subagents: vec![crate::usage::aggregate::SubagentDetail {
+                        thread_id: "child".into(),
+                        parent_thread_id: Some("root".into()),
+                        root_session_id: "root".into(),
+                        title: Some("Child".into()),
+                        last_activity_at_ms: 19,
+                        model_usage: vec![SubagentModelUsage {
+                            model: "child-model".into(),
+                            reasoning_effort: Some("high".into()),
+                            last_activity_at_ms: 19,
+                            usage,
+                        }],
+                    }],
+                },
+            },
+        )
+        .unwrap();
+        let subagent = serde_json::to_value(&response.subagents[0]).unwrap();
+        assert_eq!(
+            subagent,
+            serde_json::json!({
+                "thread_id": "child",
+                "parent_thread_id": "root",
+                "root_session_id": "root",
+                "title": "Child",
+                "last_activity_at_ms": 19,
+                "model_usage": [{
+                    "model": "child-model",
+                    "reasoning_effort": "high",
+                    "last_activity_at_ms": 19,
+                    "usage": {
+                        "input_tokens": 10,
+                        "cached_tokens": 4,
+                        "cache_write_tokens": 3,
+                        "uncached_input_tokens": 3,
+                        "output_tokens": 2,
+                        "reasoning_tokens": 1,
+                        "other_output_tokens": 1,
+                        "total_tokens": 12,
+                        "cache_hit_rate": 0.4,
+                        "estimated_cost": null,
+                        "estimated_cost_status": "unknown"
+                    }
+                }]
+            })
         );
     }
 

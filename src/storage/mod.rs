@@ -857,7 +857,7 @@ mod tests {
         let root = TempDir::new();
         let ledger = Ledger::open(options(&root)).unwrap();
         assert!(ledger.database_path().exists());
-        assert_eq!(ledger.schema_version().unwrap(), 9);
+        assert_eq!(ledger.schema_version().unwrap(), 10);
         assert_eq!(
             ledger.pragma_state().unwrap(),
             PragmaState {
@@ -883,7 +883,7 @@ mod tests {
         drop(first);
         let second = Ledger::open(opts).unwrap();
         assert_eq!(second.expected_codex_home_fingerprint(), fingerprint);
-        assert_eq!(second.schema_version().unwrap(), 9);
+        assert_eq!(second.schema_version().unwrap(), 10);
         assert_eq!(second.app_state().unwrap().status_revision, 0);
     }
 
@@ -989,7 +989,7 @@ mod tests {
         let before = fs::read(&db).unwrap();
         let error = Ledger::open(LedgerOptions::new(&db, root.path().join("codex"))).unwrap_err();
         assert_eq!(error.kind(), StorageErrorKind::SchemaTooNew);
-        assert_eq!(error.schema_versions(), Some((99, 9)));
+        assert_eq!(error.schema_versions(), Some((99, 10)));
         assert_eq!(fs::read(&db).unwrap(), before);
     }
 

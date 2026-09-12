@@ -217,11 +217,13 @@ export type SubagentDetailDto = {
   parent_thread_id: string | null;
   root_session_id: string;
   title: string | null;
-  model: string;
-  reasoning_effort: string | null;
-  reasoning_effort_mixed: boolean;
   last_activity_at_ms: number;
-  usage: UsageDto;
+  model_usage: Array<{
+    model: string;
+    reasoning_effort: string | null;
+    last_activity_at_ms: number;
+    usage: UsageDto;
+  }>;
 };
 
 export type SessionDetailResponse = {

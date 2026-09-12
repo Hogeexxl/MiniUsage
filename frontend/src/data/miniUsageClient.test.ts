@@ -453,24 +453,34 @@ describe("miniUsageClient DTO seam", () => {
           parent_thread_id: null,
           root_session_id: "root-1",
           title: null,
-          model: "o4-mini",
-          reasoning_effort: null,
-          reasoning_effort_mixed: true,
           last_activity_at_ms: 1_700_000_000_000,
-          usage: {
-            ...sessionUsage,
-            cache_write_tokens: 0,
-            estimated_cost: 1.25,
-            estimated_cost_status: "complete",
-            reasoning_tokens: 9,
-          },
+          model_usage: [{
+            model: "o4-mini",
+            reasoning_effort: null,
+            last_activity_at_ms: 1_700_000_000_000,
+            usage: {
+              ...sessionUsage,
+              cache_write_tokens: 0,
+              estimated_cost: 1.25,
+              estimated_cost_status: "complete",
+              reasoning_tokens: 9,
+            },
+          }],
         }],
       }), { status: 200 }),
     );
     await expect(miniUsageClient.getSessionDetail({ range: { key: "today" }, filters: emptyFilters, root_session_id: "root-1", expected_data_revision: 4 })).resolves.toMatchObject({
       last_activity_at_ms: 1_700_000_000_000,
       main: { model_usage: [{ model: "gpt-5", reasoning_effort: "high" }], self_usage: sessionUsage, inclusive_usage: sessionUsage },
-      subagents: [{ parent_thread_id: null, model: "o4-mini", reasoning_effort: null, reasoning_effort_mixed: true, usage: { reasoning_tokens: 9, cache_write_tokens: 0, estimated_cost: 1.25 } }],
+      subagents: [{
+        parent_thread_id: null,
+        model_usage: [{
+          model: "o4-mini",
+          reasoning_effort: null,
+          last_activity_at_ms: 1_700_000_000_000,
+          usage: { reasoning_tokens: 9, cache_write_tokens: 0, estimated_cost: 1.25 },
+        }],
+      }],
     });
     expect(fetchMock).toHaveBeenLastCalledWith(
       "/api/usage/sessions/root-1/detail?range=today&expected_data_revision=4",
@@ -570,11 +580,13 @@ describe("miniUsageClient DTO seam", () => {
             parent_thread_id: null,
             root_session_id: "root-1",
             title: null,
-            model: "o4-mini",
-            reasoning_effort: null,
-            reasoning_effort_mixed: true,
             last_activity_at_ms: 1_700_000_000_000,
-            usage: detailUsage,
+            model_usage: [{
+              model: "o4-mini",
+              reasoning_effort: null,
+              last_activity_at_ms: 1_700_000_000_000,
+              usage: detailUsage,
+            }],
           }],
         }),
         { status: 200 },
@@ -588,7 +600,7 @@ describe("miniUsageClient DTO seam", () => {
         self_usage: detailUsage,
         inclusive_usage: detailUsage,
       },
-      subagents: [{ usage: detailUsage }],
+      subagents: [{ model_usage: [{ usage: detailUsage }] }],
     });
   });
 

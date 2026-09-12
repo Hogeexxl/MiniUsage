@@ -19,6 +19,33 @@ const usage: UsageDto = {
   estimated_cost_status: "complete",
 };
 
+const subagentModelUsage = [
+  {
+    model: "Sol",
+    reasoning_effort: "high",
+    last_activity_at_ms: Date.UTC(2026, 7, 12, 7, 40),
+    usage: { ...usage, total_tokens: 101, input_tokens: 70, output_tokens: 31, estimated_cost: 0.11 },
+  },
+  {
+    model: "Sol",
+    reasoning_effort: "medium",
+    last_activity_at_ms: Date.UTC(2026, 7, 12, 7, 30),
+    usage: { ...usage, total_tokens: 202, input_tokens: 140, output_tokens: 62, estimated_cost: 0.22 },
+  },
+  {
+    model: "Luna",
+    reasoning_effort: "high",
+    last_activity_at_ms: Date.UTC(2026, 7, 12, 7, 20),
+    usage: { ...usage, total_tokens: 303, input_tokens: 210, output_tokens: 93, estimated_cost: 0.33 },
+  },
+  {
+    model: "Luna",
+    reasoning_effort: "max",
+    last_activity_at_ms: Date.UTC(2026, 7, 12, 7, 10),
+    usage: { ...usage, total_tokens: 404, input_tokens: 280, output_tokens: 124, estimated_cost: 0.44 },
+  },
+];
+
 const detail: SessionDetailResponse = {
   range: { key: "today", start_ms: 1, end_ms: 2, timezone: "Asia/Shanghai" },
   data_revision: 3,
@@ -43,22 +70,16 @@ const detail: SessionDetailResponse = {
       parent_thread_id: "root-session-full-id",
       root_session_id: "root-session-full-id",
       title: "Recent subagent",
-      model: "gpt-5",
-      reasoning_effort: "high",
-      reasoning_effort_mixed: false,
       last_activity_at_ms: Date.UTC(2026, 7, 12, 7),
-      usage,
+      model_usage: subagentModelUsage,
     },
     {
       thread_id: "subagent-old-full-id",
       parent_thread_id: "root-session-full-id",
       root_session_id: "root-session-full-id",
       title: "Old subagent",
-      model: "o4-mini",
-      reasoning_effort: null,
-      reasoning_effort_mixed: true,
       last_activity_at_ms: Date.UTC(2026, 7, 11, 7),
-      usage,
+      model_usage: [],
     },
   ],
 };
@@ -242,12 +263,12 @@ describe("SessionDetailDrawer v0.2.0", () => {
     expect(usageReceipt).not.toHaveTextContent("1234");
   });
 
-  it("keeps Subagent trigger title-only and exposes identity metadata plus fixed receipt order after expansion", () => {
+  it("renders ordered Subagent model usage blocks with basic identity metadata", () => {
     render(<SessionDetailDrawer view={view()} timezone="Asia/Shanghai" />);
 
     const trigger = screen.getByRole("button", { name: "Recent subagent" });
     expect(trigger).not.toHaveTextContent("subagent-recent-full-id");
-    expect(trigger).not.toHaveTextContent("gpt-5 (high)");
+    expect(trigger).not.toHaveTextContent("Sol (high)");
 
     fireEvent.click(trigger);
     const region = screen.getByRole("region", { name: "Recent subagent" });
@@ -259,30 +280,55 @@ describe("SessionDetailDrawer v0.2.0", () => {
     expect(threadId).not.toHaveClass("truncate");
     expect(threadId).not.toHaveAttribute("aria-describedby");
     expect(threadId).not.toHaveAttribute("title");
-    expect(region).toHaveTextContent("Model");
-    expect(region).toHaveTextContent("gpt-5 (high)");
     expect(region).toHaveTextContent("Last Active");
+    expect(Array.from(metadata.querySelectorAll("dt"), (node) => node.textContent)).toEqual(["Thread ID", "Last Active"]);
+    expect(metadata).not.toHaveTextContent("Model");
 
     const lastActive = Array.from(metadata.querySelectorAll("dt"))
       .find((node) => node.textContent === "Last Active")?.nextElementSibling as HTMLElement;
     expect(lastActive).toHaveTextContent(/\d{2}:\d{2}:\d{2}/);
     expect(lastActive).toHaveAttribute("title", expect.stringMatching(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/));
 
-    const usageReceipt = region.querySelector("dl:last-child") as HTMLElement;
-    const labels = Array.from(usageReceipt.querySelectorAll("dt"), (node) => node.textContent);
-    expect(labels).toEqual([
-      "Total Tokens",
-      "Input",
-      "Output",
-      "Reasoning",
-      "Cache Read",
-      "Cache Write",
-      "Cache Hit Rate",
-      "Estimated Cost",
+    const modelLabels = Array.from(region.querySelectorAll("dt"))
+      .filter((node) => node.textContent === "Model")
+      .map((node) => node.nextElementSibling?.textContent);
+    expect(modelLabels).toEqual(["Sol (high)", "Sol (medium)", "Luna (high)", "Luna (max)"]);
+
+    const usageReceipts = Array.from(region.querySelectorAll("dl"))
+      .filter((node) => node.querySelector("dt")?.textContent === "Total Tokens") as HTMLElement[];
+    expect(usageReceipts).toHaveLength(4);
+    expect(usageReceipts.map((receipt) => receipt.querySelector("dt")?.nextElementSibling?.textContent)).toEqual([
+      "101",
+      "202",
+      "303",
+      "404",
     ]);
-    expect(usageReceipt).toHaveTextContent("1,801");
-    expect(usageReceipt).toHaveTextContent("1,234");
-    expect(usageReceipt).toHaveTextContent("$0.50");
+  });
+
+  it("keeps duplicate Subagent titles distinct by thread ID", () => {
+    const duplicateTitleDetail: SessionDetailResponse = {
+      ...detail,
+      subagents: detail.subagents.map((item) => ({ ...item, title: "Same subagent title" })),
+    };
+    render(
+      <SessionDetailDrawer
+        view={view({ detail: duplicateTitleDetail })}
+        timezone="Asia/Shanghai"
+      />,
+    );
+
+    const triggers = screen.getAllByRole("button", { name: "Same subagent title" });
+    expect(triggers).toHaveLength(2);
+    expect(triggers[0]).toHaveAttribute("aria-controls");
+    expect(triggers[1]).toHaveAttribute("aria-controls");
+    expect(triggers[0].getAttribute("aria-controls")).not.toBe(triggers[1].getAttribute("aria-controls"));
+
+    fireEvent.click(triggers[0]);
+    expect(triggers[0]).toHaveAttribute("aria-expanded", "true");
+    expect(triggers[1]).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(triggers[1]);
+    expect(triggers[0]).toHaveAttribute("aria-expanded", "false");
+    expect(triggers[1]).toHaveAttribute("aria-expanded", "true");
   });
 
   it("preserves rendered detail during refresh and reports refresh failure through toast", async () => {
