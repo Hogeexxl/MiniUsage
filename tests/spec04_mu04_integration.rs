@@ -31,6 +31,8 @@ const ROOT_TURN: &str = "00000000-05dc-7000-8000-000000000103";
 const CHILD_REPLAY_TURN: &str = "00000000-05dc-7000-8000-000000000104";
 const CHILD_SOL_TURN: &str = "00000000-0bb8-7000-8000-000000000105";
 const CHILD_REVIEW_TURN: &str = "00000000-0fa0-7000-8000-000000000106";
+const RESERVE_TURN: &str = "00000000-1388-7000-8000-000000000107";
+const TARGET_PRICING_CATALOG_VERSION: i64 = 4;
 
 struct TempRoot(PathBuf);
 
@@ -222,6 +224,35 @@ fn f02_records() -> FixtureRecords {
             ),
             token(100_000, 60_000, "2026-08-08T03:00:07Z"),
         ],
+    }
+}
+
+fn reserve_records() -> FixtureRecords {
+    FixtureRecords {
+        main: vec![
+            json!({
+                "type": "session_meta",
+                "timestamp": "2026-08-08T04:00:00Z",
+                "payload": {"id": ROOT, "cwd": "/work/root", "agent_role": "main"}
+            }),
+            turn_context(
+                RESERVE_TURN,
+                "gpt-reserve",
+                "medium",
+                "2026-08-08T04:00:01Z",
+            ),
+            token(40_000, 40_000, "2026-08-08T04:00:02Z"),
+        ],
+        child: vec![json!({
+            "type": "session_meta",
+            "timestamp": "2026-08-08T04:00:03Z",
+            "payload": {
+                "id": CHILD,
+                "cwd": "/work/child",
+                "parent_thread_id": ROOT,
+                "source": {"subagent": {"other": "fixture"}}
+            }
+        })],
     }
 }
 
@@ -458,7 +489,7 @@ async fn t_mu04_f01_single_fixture_closes_scanner_db_aggregate_api_contract() {
         .summary(SummaryQuery::new(range, UsageFilter::default()))
         .expect("aggregate summary");
     assert_eq!(aggregate.totals.total_tokens, 135_000);
-    assert_eq!(aggregate.totals.estimated_cost_nanos_usd, Some(410_000_000));
+    assert_eq!(aggregate.totals.estimated_cost_nanos_usd, Some(330_000_000));
     let session = usage
         .sessions(range, SessionPageRequest::new(10))
         .expect("aggregate sessions")
@@ -469,7 +500,7 @@ async fn t_mu04_f01_single_fixture_closes_scanner_db_aggregate_api_contract() {
     assert_eq!(session.inclusive_usage.total_tokens, 135_000);
     assert_eq!(
         session.inclusive_usage.estimated_cost_nanos_usd,
-        Some(410_000_000)
+        Some(330_000_000)
     );
     let detail = usage
         .session_detail_snapshot(range, UsageFilter::default(), None, ROOT.to_owned())
@@ -478,7 +509,7 @@ async fn t_mu04_f01_single_fixture_closes_scanner_db_aggregate_api_contract() {
     assert_eq!(detail.main.inclusive_usage.total_tokens, 135_000);
     assert_eq!(
         detail.main.inclusive_usage.estimated_cost_nanos_usd,
-        Some(410_000_000)
+        Some(330_000_000)
     );
 
     let app = fixture.router(Arc::clone(&ledger), scanner.clone());
@@ -486,7 +517,7 @@ async fn t_mu04_f01_single_fixture_closes_scanner_db_aggregate_api_contract() {
     assert_eq!(summary_response.status(), StatusCode::OK);
     let summary = json_body(summary_response).await;
     assert_eq!(summary["usage"]["total_tokens"], 135_000);
-    assert_eq!(summary["usage"]["estimated_cost"], 0.41);
+    assert_eq!(summary["usage"]["estimated_cost"], 0.33);
     assert_eq!(summary["usage"]["estimated_cost_status"], "partial");
 
     let sessions_response = call(&app, Method::GET, "/api/usage/sessions?range=year").await;
@@ -499,7 +530,7 @@ async fn t_mu04_f01_single_fixture_closes_scanner_db_aggregate_api_contract() {
         .find(|item| item["root_session_id"] == ROOT)
         .expect("root session API item");
     assert_eq!(session_json["inclusive_usage"]["total_tokens"], 135_000);
-    assert_eq!(session_json["inclusive_usage"]["estimated_cost"], 0.41);
+    assert_eq!(session_json["inclusive_usage"]["estimated_cost"], 0.33);
     assert_eq!(
         session_json["inclusive_usage"]["estimated_cost_status"],
         "partial"
@@ -515,7 +546,7 @@ async fn t_mu04_f01_single_fixture_closes_scanner_db_aggregate_api_contract() {
     let detail_json = json_body(detail_response).await;
     assert_eq!(
         detail_json["main"]["inclusive_usage"]["estimated_cost"],
-        0.41
+        0.33
     );
     assert_eq!(
         detail_json["main"]["inclusive_usage"]["estimated_cost_status"],
@@ -527,7 +558,7 @@ async fn t_mu04_f01_single_fixture_closes_scanner_db_aggregate_api_contract() {
         .iter()
         .next()
         .unwrap_or_else(|| panic!("subagent detail missing: {detail_json:?}"));
-    assert_eq!(api_subagent["usage"]["estimated_cost"], 0.36);
+    assert_eq!(api_subagent["usage"]["estimated_cost"], 0.29);
     assert_eq!(api_subagent["usage"]["estimated_cost_status"], "complete");
     scanner.shutdown().expect("stop F01 scanner");
 }
@@ -569,6 +600,8 @@ fn t_mu04_f02_parser4_pricing1_reprice_and_shadow_rebuild_stay_independent() {
 
     // Simulate a real parser-v4 active epoch with one lost context while the
     // alias row itself remains available to the independent pricing refresh.
+    // The pricing value 1 is intentionally stale for this parser/price
+    // independence scenario.
     connection
         .execute(
             "UPDATE app_meta SET usage_parser_version=4,
@@ -636,7 +669,10 @@ fn t_mu04_f02_parser4_pricing1_reprice_and_shadow_rebuild_stay_independent() {
             },
         )
         .expect("read reopened versions");
-    assert_eq!(versions, (4, 1, 3, old_epoch, None));
+    assert_eq!(
+        versions,
+        (4, 1, TARGET_PRICING_CATALOG_VERSION, old_epoch, None)
+    );
     let alias_cost: Option<i64> = connection
         .query_row(
             "SELECT estimated_cost_nanos_usd FROM usage_events
@@ -689,7 +725,12 @@ fn t_mu04_f02_parser4_pricing1_reprice_and_shadow_rebuild_stay_independent() {
         .expect("read final versions");
     assert_eq!(
         final_versions,
-        (mini_usage::usage::USAGE_PARSER_VERSION, None, 1, 3)
+        (
+            mini_usage::usage::USAGE_PARSER_VERSION,
+            None,
+            1,
+            TARGET_PRICING_CATALOG_VERSION,
+        )
     );
     let events = active_event_rows(&connection, new_epoch);
     assert_eq!(events.len(), old_event_count as usize);
@@ -700,7 +741,7 @@ fn t_mu04_f02_parser4_pricing1_reprice_and_shadow_rebuild_stay_independent() {
             .iter()
             .map(|row| row.3.expect("known rebuilt cost"))
             .sum::<i64>(),
-        708_000_000
+        568_000_000
     );
     assert!(events.iter().any(|(model, effort, total, _)| {
         model == "codex-auto-review" && effort.as_deref() == Some("medium") && *total == 40_000
@@ -733,4 +774,134 @@ fn t_mu04_f02_parser4_pricing1_reprice_and_shadow_rebuild_stay_independent() {
     rebuild_scanner
         .shutdown()
         .expect("stop rebuilt F02 scanner");
+}
+
+#[test]
+fn t_mu04_f03_reserve_historical_reprice_preserves_identity_and_epoch() {
+    let fixture = Fixture::new("f03-reserve-reprice", reserve_records());
+    let ledger = fixture.ledger();
+    let scanner = fixture.scanner(Arc::clone(&ledger));
+    wait_scan(&ledger, None);
+    assert_eq!(
+        ledger
+            .app_state()
+            .expect("read initial Reserve scan state")
+            .scan
+            .last_finished_scan_result,
+        Some(ScanResult::Completed)
+    );
+    scanner.shutdown().expect("stop initial Reserve scanner");
+    drop(ledger);
+
+    let connection = Connection::open(&fixture.db).expect("open Reserve database");
+    let old_epoch = active_epoch(&connection);
+    let reserve_event: (String, i64, i64, Option<i64>, i64, Option<i64>) = connection
+        .query_row(
+            "SELECT model,input_tokens,cached_tokens,cache_write_tokens,
+                    output_tokens,estimated_cost_nanos_usd
+             FROM usage_events WHERE ledger_epoch=?1",
+            [old_epoch],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                ))
+            },
+        )
+        .expect("read initial Reserve event");
+    assert_eq!(
+        reserve_event,
+        (
+            "gpt-reserve".to_owned(),
+            40_000,
+            0,
+            Some(0),
+            0,
+            Some(8_000_000),
+        )
+    );
+
+    // Simulate an old catalog while parser and canonical versions remain
+    // current, then clear the derived cost for the historical Reserve row.
+    connection
+        .execute(
+            "UPDATE app_meta SET cost_algorithm_version=1,
+             pricing_catalog_version=3 WHERE id=1",
+            [],
+        )
+        .expect("mark old Reserve pricing catalog");
+    connection
+        .execute(
+            "UPDATE usage_events SET estimated_cost_nanos_usd=NULL
+             WHERE ledger_epoch=?1 AND model='gpt-reserve'",
+            [old_epoch],
+        )
+        .expect("clear old Reserve event cost");
+    drop(connection);
+
+    let reopened = fixture.ledger();
+    let connection = Connection::open(&fixture.db).expect("reopen Reserve database");
+    let versions: (i64, i64, i64, i64, Option<i64>) = connection
+        .query_row(
+            "SELECT cost_algorithm_version,pricing_catalog_version,
+                    usage_active_epoch,usage_parser_version,usage_build_epoch
+             FROM app_meta WHERE id=1",
+            [],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                ))
+            },
+        )
+        .expect("read repriced Reserve versions");
+    assert_eq!(
+        versions,
+        (
+            1,
+            TARGET_PRICING_CATALOG_VERSION,
+            old_epoch,
+            mini_usage::usage::USAGE_PARSER_VERSION,
+            None,
+        )
+    );
+
+    let repriced_event: (String, i64, i64, Option<i64>, i64, Option<i64>) = connection
+        .query_row(
+            "SELECT model,input_tokens,cached_tokens,cache_write_tokens,
+                    output_tokens,estimated_cost_nanos_usd
+             FROM usage_events WHERE ledger_epoch=?1",
+            [old_epoch],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                ))
+            },
+        )
+        .expect("read repriced Reserve event");
+    assert_eq!(
+        repriced_event,
+        (
+            "gpt-reserve".to_owned(),
+            40_000,
+            0,
+            Some(0),
+            0,
+            Some(8_000_000),
+        )
+    );
+    drop(connection);
+    drop(reopened);
 }

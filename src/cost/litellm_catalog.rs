@@ -1,8 +1,11 @@
 // Generated from LiteLLM model_prices_and_context_window.json; do not edit by hand.
 // LITELLM_SNAPSHOT_SCHEMA_VERSION: litellm-token-pricing-projection-v1
-// LITELLM_SNAPSHOT_SOURCE_URL: https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json
-// LITELLM_SNAPSHOT_RETRIEVED_AT: 2026-08-21T07:36:11Z
-// LITELLM_SNAPSHOT_SHA256: 0e8d23239c2768bd096249dae81c631f940fa99c81b5206af15a822e07cf7d3d
+// LITELLM_SNAPSHOT_SOURCE_URL: https://raw.githubusercontent.com/BerriAI/litellm/eeb7732fc11fd47762ca84cc3fb7cc74235d7097/model_prices_and_context_window.json
+// LITELLM_SNAPSHOT_RETRIEVED_AT: 2026-09-12
+// LITELLM_SNAPSHOT_SHA256: f68d88c12610ea31ab355a1293fde55aeed6fa78a1f4b182c67be47d80b1d202
+// LITELLM_SNAPSHOT_SOURCE_REF: eeb7732fc11fd47762ca84cc3fb7cc74235d7097
+// LITELLM_SNAPSHOT_VERIFIED_AT: 2026-09-12
+// LITELLM_SNAPSHOT_SCOPE: this round updates only four target models (gpt-6-astra, gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna)
 
 pub const LITELLM_SNAPSHOT_MODEL_IDS: &[&str] = &[
     "chat-latest",
@@ -88,6 +91,7 @@ pub const LITELLM_SNAPSHOT_MODEL_IDS: &[&str] = &[
     "gpt-5.6-luna",
     "gpt-5.6-sol",
     "gpt-5.6-terra",
+    "gpt-6-astra",
     "o1",
     "o1-2024-12-17",
     "o1-pro",
@@ -106,9 +110,9 @@ pub const SNAPSHOT_GPT_5_6_SOL_PRICING: ModelPricing = ModelPricing {
     canonical_model_id: "gpt-5.6-sol",
     effective_from_ms: i64::MIN,
     effective_to_ms: None,
-    short_context: TokenRates::new(5000, 500, Some(6250), 30000),
+    short_context: TokenRates::new(4000, 400, Some(5000), 20000),
     long_context: Some(LongContextPolicy::new(
-        272_000, TokenRates::new(10000, 1000, Some(12500), 45000),
+        272_000, TokenRates::new(8000, 800, Some(10000), 30000),
     )),
 };
 
@@ -119,6 +123,16 @@ pub const SNAPSHOT_GPT_5_6_TERRA_PRICING: ModelPricing = ModelPricing {
     short_context: TokenRates::new(2000, 200, Some(2500), 12000),
     long_context: Some(LongContextPolicy::new(
         272_000, TokenRates::new(4000, 400, Some(5000), 18000),
+    )),
+};
+
+pub const SNAPSHOT_GPT_6_ASTRA_PRICING: ModelPricing = ModelPricing {
+    canonical_model_id: "gpt-6-astra",
+    effective_from_ms: i64::MIN,
+    effective_to_ms: None,
+    short_context: TokenRates::new(10000, 1000, Some(12500), 50000),
+    long_context: Some(LongContextPolicy::new(
+        272_000, TokenRates::new(20000, 2000, Some(25000), 75000),
     )),
 };
 
@@ -552,6 +566,7 @@ pub const LITELLM_OPENAI_PRICING_CATALOG: &[ModelPricing] = &[
     SNAPSHOT_GPT_5_6_LUNA_PRICING,
     SNAPSHOT_GPT_5_6_SOL_PRICING,
     SNAPSHOT_GPT_5_6_TERRA_PRICING,
+    SNAPSHOT_GPT_6_ASTRA_PRICING,
     ModelPricing {
         canonical_model_id: "o1",
         effective_from_ms: i64::MIN,
@@ -610,4 +625,4 @@ pub const LITELLM_OPENAI_PRICING_CATALOG: &[ModelPricing] = &[
     },
 ];
 
-// Projection counts: 95 model IDs, 67 priced entries.
+// Local projection counts after this round: 96 model IDs, 68 priced entries.

@@ -3528,6 +3528,19 @@ mod tests {
             1,
             0,
         );
+        insert_event(
+            &connection,
+            "reserve-model",
+            260,
+            "root-a",
+            "root-a",
+            "gpt-reserve",
+            1,
+            0,
+            Some(0),
+            1,
+            0,
+        );
 
         let transaction = connection
             .transaction_with_behavior(TransactionBehavior::Deferred)
@@ -3538,6 +3551,12 @@ mod tests {
                 .models
                 .iter()
                 .any(|option| { option.model == "gpt-5.6-luna" && option.provider == "openai" })
+        );
+        assert!(
+            options
+                .models
+                .iter()
+                .any(|option| { option.model == "gpt-reserve" && option.provider == "openai" })
         );
         transaction.commit().unwrap();
     }

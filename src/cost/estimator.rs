@@ -181,7 +181,20 @@ fn to_non_negative_i64(value: i128) -> Result<i64, CostEstimationError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cost::pricing::{BundledPricingRepository, GPT_5_6_SOL_PRICING, TokenRates};
+    use crate::cost::pricing::{
+        BundledPricingRepository, LongContextPolicy, ModelPricing, TokenRates,
+    };
+
+    const TEST_STANDARD_PRICING: ModelPricing = ModelPricing {
+        canonical_model_id: "test-standard",
+        effective_from_ms: i64::MIN,
+        effective_to_ms: None,
+        short_context: TokenRates::new(5_000, 500, Some(6_250), 30_000),
+        long_context: Some(LongContextPolicy::new(
+            272_000,
+            TokenRates::new(10_000, 1_000, Some(12_500), 45_000),
+        )),
+    };
 
     fn usage(
         input_tokens: i64,
@@ -206,7 +219,7 @@ mod tests {
         let with_write = usage(1_000, 200, Some(100), 50, 20);
         let with_write_outcome = CostEstimator::estimate(
             &with_write,
-            &GPT_5_6_SOL_PRICING,
+            &TEST_STANDARD_PRICING,
             UsageCostGranularity::RequestScoped,
         )
         .unwrap();
@@ -222,7 +235,7 @@ mod tests {
         let without_write = usage(1_000, 200, None, 50, 20);
         let without_write_outcome = CostEstimator::estimate(
             &without_write,
-            &GPT_5_6_SOL_PRICING,
+            &TEST_STANDARD_PRICING,
             UsageCostGranularity::RequestScoped,
         )
         .unwrap();
@@ -239,13 +252,13 @@ mod tests {
         let no_reasoning = usage(1_000, 200, Some(100), 50, 0);
         let no_reasoning_outcome = CostEstimator::estimate(
             &no_reasoning,
-            &GPT_5_6_SOL_PRICING,
+            &TEST_STANDARD_PRICING,
             UsageCostGranularity::RequestScoped,
         )
         .unwrap();
         assert_eq!(with_write_outcome, no_reasoning_outcome);
 
-        let mut missing_write_rate = GPT_5_6_SOL_PRICING;
+        let mut missing_write_rate = TEST_STANDARD_PRICING;
         missing_write_rate.short_context.cache_write_nanos_per_token = None;
         let missing = CostEstimator::estimate(
             &with_write,
@@ -271,7 +284,7 @@ mod tests {
 
         let overflowing_pricing = ModelPricing {
             short_context: TokenRates::new(i64::MAX, 0, Some(0), 0),
-            ..GPT_5_6_SOL_PRICING
+            ..TEST_STANDARD_PRICING
         };
         let overflowing_usage = usage(2, 0, Some(0), 0, 0);
         assert_eq!(
@@ -289,13 +302,13 @@ mod tests {
         let short = usage(272_000, 0, Some(0), 0, 0);
         let short_request = CostEstimator::estimate(
             &short,
-            &GPT_5_6_SOL_PRICING,
+            &TEST_STANDARD_PRICING,
             UsageCostGranularity::RequestScoped,
         )
         .unwrap();
         let short_compensation = CostEstimator::estimate(
             &short,
-            &GPT_5_6_SOL_PRICING,
+            &TEST_STANDARD_PRICING,
             UsageCostGranularity::AggregateCompensation,
         )
         .unwrap();
@@ -309,7 +322,7 @@ mod tests {
         let long = usage(272_001, 0, Some(0), 0, 0);
         let long_request = CostEstimator::estimate(
             &long,
-            &GPT_5_6_SOL_PRICING,
+            &TEST_STANDARD_PRICING,
             UsageCostGranularity::RequestScoped,
         )
         .unwrap();
@@ -320,7 +333,7 @@ mod tests {
 
         let long_compensation = CostEstimator::estimate(
             &long,
-            &GPT_5_6_SOL_PRICING,
+            &TEST_STANDARD_PRICING,
             UsageCostGranularity::AggregateCompensation,
         )
         .unwrap();

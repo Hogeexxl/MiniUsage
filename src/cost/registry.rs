@@ -38,6 +38,12 @@ impl ModelRegistry {
 
     pub fn resolve<'model>(&self, raw_model_id: &'model str) -> ModelResolution<'model> {
         match raw_model_id {
+            "gpt-reserve" => ModelResolution {
+                provider: ModelProvider::OpenAI,
+                canonical_model_id: "gpt-reserve",
+                pricing_provider: Some(ModelProvider::OpenAI),
+                pricing_target: Some("gpt-5.6-luna"),
+            },
             "codex-auto-review" => ModelResolution {
                 provider: ModelProvider::OpenAI,
                 canonical_model_id: "gpt-5.6-luna",
@@ -151,5 +157,15 @@ mod tests {
             assert_eq!(resolution.canonical_model_id, model);
             assert_eq!(resolution.pricing_target, None);
         }
+    }
+
+    #[test]
+    fn reserve_resolves_to_openai_with_luna_pricing_without_changing_identity() {
+        let resolution = ModelRegistry::new().resolve("gpt-reserve");
+
+        assert_eq!(resolution.provider, ModelProvider::OpenAI);
+        assert_eq!(resolution.canonical_model_id, "gpt-reserve");
+        assert_eq!(resolution.pricing_provider, Some(ModelProvider::OpenAI));
+        assert_eq!(resolution.pricing_target, Some("gpt-5.6-luna"));
     }
 }

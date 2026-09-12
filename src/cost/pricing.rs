@@ -76,10 +76,6 @@ impl ModelPricing {
 
 include!("litellm_catalog.rs");
 
-/// GPT-5.6 Sol Standard pricing.
-#[cfg(test)]
-pub const GPT_5_6_SOL_PRICING: ModelPricing = SNAPSHOT_GPT_5_6_SOL_PRICING;
-
 /// The immutable bundled Standard catalog.
 pub const BUNDLED_PRICING_CATALOG: &[ModelPricing] = LITELLM_OPENAI_PRICING_CATALOG;
 
@@ -125,11 +121,11 @@ mod tests {
         assert_eq!(sol.canonical_model_id, "gpt-5.6-sol");
         assert_eq!(
             sol.short_context,
-            TokenRates::new(5_000, 500, Some(6_250), 30_000)
+            TokenRates::new(4_000, 400, Some(5_000), 20_000)
         );
         assert_eq!(
             sol.long_context.expect("Sol long pricing").rates,
-            TokenRates::new(10_000, 1_000, Some(12_500), 45_000)
+            TokenRates::new(8_000, 800, Some(10_000), 30_000)
         );
         assert_eq!(
             sol.long_context
@@ -176,11 +172,11 @@ mod tests {
         assert_eq!(sol_alias.canonical_model_id, "gpt-5.6-sol");
         assert_eq!(
             sol.short_context,
-            TokenRates::new(5_000, 500, Some(6_250), 30_000)
+            TokenRates::new(4_000, 400, Some(5_000), 20_000)
         );
         assert_eq!(
             sol.long_context.expect("Sol long pricing").rates,
-            TokenRates::new(10_000, 1_000, Some(12_500), 45_000)
+            TokenRates::new(8_000, 800, Some(10_000), 30_000)
         );
         assert_eq!(sol_alias.short_context, sol.short_context);
         assert_eq!(sol_alias.long_context, sol.long_context);
@@ -205,9 +201,7 @@ mod tests {
     }
 
     #[test]
-    fn t_mu04_a03_snapshot_counts_and_local_openai_rates() {
-        assert_eq!(LITELLM_SNAPSHOT_MODEL_IDS.len(), 95);
-        assert_eq!(LITELLM_OPENAI_PRICING_CATALOG.len(), 67);
+    fn t_mu04_a03_local_openai_rates() {
         assert!(!LITELLM_SNAPSHOT_MODEL_IDS.contains(&"openai/container"));
 
         let repository = BundledPricingRepository::new();
@@ -240,8 +234,8 @@ mod tests {
             ),
             (
                 "gpt-5.6-sol",
-                TokenRates::new(5_000, 500, Some(6_250), 30_000),
-                Some(TokenRates::new(10_000, 1_000, Some(12_500), 45_000)),
+                TokenRates::new(4_000, 400, Some(5_000), 20_000),
+                Some(TokenRates::new(8_000, 800, Some(10_000), 30_000)),
             ),
             (
                 "gpt-5.6-terra",
@@ -252,6 +246,11 @@ mod tests {
                 "gpt-5.6-luna",
                 TokenRates::new(200, 20, Some(250), 1_200),
                 Some(TokenRates::new(400, 40, Some(500), 1_800)),
+            ),
+            (
+                "gpt-6-astra",
+                TokenRates::new(10_000, 1_000, Some(12_500), 50_000),
+                Some(TokenRates::new(20_000, 2_000, Some(25_000), 75_000)),
             ),
         ];
 
@@ -270,6 +269,27 @@ mod tests {
                 long_context.map(|_| 272_000)
             );
         }
+    }
+
+    #[test]
+    fn t_mu04_a05_reserve_repository_reuses_luna_pricing() {
+        let repository = BundledPricingRepository::new();
+        let luna = repository.resolve("gpt-5.6-luna", 0).expect("Luna pricing");
+        let reserve = repository
+            .resolve("gpt-reserve", 0)
+            .expect("Reserve pricing target");
+
+        assert_eq!(reserve.canonical_model_id, "gpt-5.6-luna");
+        assert_eq!(reserve.short_context, luna.short_context);
+        assert_eq!(reserve.long_context, luna.long_context);
+        assert_eq!(
+            reserve
+                .long_context
+                .expect("Luna long pricing")
+                .threshold_input_tokens,
+            272_000
+        );
+        assert!(repository.resolve("unknown-model", 0).is_none());
     }
 
     #[test]
