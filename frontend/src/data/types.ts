@@ -43,6 +43,7 @@ export type SessionHealthDto = {
 export type SummaryUsageDto = UsageDto & {
   session_count: number;
   cost_incomplete_session_count: number;
+  complete_session_cost_per_million_tokens: number | null;
   session_health: SessionHealthDto;
 };
 

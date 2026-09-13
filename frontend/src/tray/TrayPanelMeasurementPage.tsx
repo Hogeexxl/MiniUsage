@@ -46,6 +46,7 @@ const ZERO_USAGE: SummaryUsageDto = {
   estimated_cost_status: "unknown",
   session_count: 0,
   cost_incomplete_session_count: 0,
+  complete_session_cost_per_million_tokens: null,
   session_health: {
     total_sessions: 0,
     complete_sessions: 0,
@@ -66,6 +67,7 @@ const LARGE_USAGE: SummaryUsageDto = {
   estimated_cost: 123_456.78,
   estimated_cost_status: "complete",
   session_count: 999_999,
+  complete_session_cost_per_million_tokens: 12.3456,
   session_health: {
     total_sessions: 999_999,
     complete_sessions: 999_999,

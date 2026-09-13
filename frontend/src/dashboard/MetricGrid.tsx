@@ -8,7 +8,7 @@ import { EASE_OUT } from "../ui/lib/ease";
 import { NumberTicker } from "../ui/beui/number-ticker";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/beui/popover";
 import { TiltCard } from "../ui/beui/tilt-card";
-import { formatCodexPlanType, formatCodexResetTime, formatCostFull, formatIntegerFull, formatRatio, type FormattedValue } from "./format";
+import { formatCodexPlanType, formatCodexResetTime, formatCostFull, formatCostPerMillionTokens, formatIntegerFull, formatRatio, type FormattedValue } from "./format";
 
 type MetricGridProps = { usage: SummaryUsageDto | null; modelFilterActive: boolean; quota?: CodexQuotaResponse };
 type Focus = "input" | "output" | "reasoning" | null;
@@ -148,30 +148,41 @@ function SessionCountMetric({ usage }: { usage: SummaryUsageDto }) {
 
 export function EstimatedCostMetric({ usage, glare = true }: { usage: SummaryUsageDto; glare?: boolean }) {
   const total = usage.session_health.total_sessions;
-  const complete = total - usage.cost_incomplete_session_count;
-  const message = usage.estimated_cost_status === "partial" ? "有部分费用不完整" : "当前费用无法完整估算";
+  const incomplete = usage.cost_incomplete_session_count;
+  const complete = total - incomplete;
+  const hasIncomplete = incomplete > 0;
+  const costPerMillionTokens = formatCostPerMillionTokens(usage.complete_session_cost_per_million_tokens);
 
   return (
     <TiltCard glare={glare} className={`${CARD} flex flex-col`}>
       <div className="flex items-center justify-between gap-2">
         <div className={TITLE}>预估费用</div>
-        {usage.estimated_cost_status !== "complete" ? (
-          <Popover side="bottom" align="end">
-            <PopoverTrigger>
-              <button type="button" aria-label="预估费用完整性提示" className="inline-flex items-center justify-center text-destructive outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
-                <CircleAlert className="h-4 w-4" />
-              </button>
-            </PopoverTrigger>
-            <PopoverContent className="w-max max-w-64 text-xs">{message}</PopoverContent>
-          </Popover>
-        ) : null}
+        <Popover trigger="hover" side="bottom" align="end">
+          <PopoverTrigger>
+            <button
+              type="button"
+              aria-label="预估费用完整性提示"
+              className={`inline-flex items-center justify-center ${hasIncomplete ? "text-warning" : "text-foreground"} outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`}
+            >
+              <CircleAlert className="h-4 w-4" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent inverseTheme className="w-max max-w-64 text-xs">
+            <div className="flex flex-col gap-1">
+              <div>{complete}/{total} 个会话完整计价</div>
+              {hasIncomplete ? <div>{incomplete} 个会话计价不完整</div> : null}
+            </div>
+          </PopoverContent>
+        </Popover>
       </div>
       {usage.estimated_cost === null ? (
         <div className={VALUE}>—</div>
       ) : (
         <CompactTicker value={usage.estimated_cost} tickerValue={Math.round(usage.estimated_cost * 100)} formatter={formatCostFull} tickerFormatter={(next) => formatCostFull(next / 100).text} />
       )}
-      <div className={`${LEGEND} mt-auto`}>{complete} / {total} 会话完整计价</div>
+      <div className={`${LEGEND} mt-auto`} title={costPerMillionTokens.title} aria-label={costPerMillionTokens.accessibleName}>
+        {costPerMillionTokens.text}
+      </div>
     </TiltCard>
   );
 }
@@ -209,7 +220,7 @@ export function CodexQuotaCard({ quota, glare = true }: { quota: CodexQuotaRespo
             {plan}
           </button>
         </PopoverTrigger>
-        <PopoverContent className="w-max max-w-64 text-xs">
+        <PopoverContent inverseTheme className="w-max max-w-64 text-xs">
           <div className="flex flex-col gap-1">
             <div>{email}</div>
             <div>重置卡：{resetCredits}</div>

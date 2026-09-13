@@ -22,6 +22,7 @@ const usage: SummaryUsageDto = {
   estimated_cost_status: "unknown",
   session_count: 1,
   cost_incomplete_session_count: 1,
+  complete_session_cost_per_million_tokens: null,
   session_health: {
     total_sessions: 1,
     complete_sessions: 1,
