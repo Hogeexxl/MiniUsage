@@ -764,47 +764,45 @@ impl Resolver {
         patch.full_resolution = source_view_complete;
         patch.metadata_quality_status = quality;
 
-        let relationship_resolved = matches!(root_state, RootState::Resolved)
-            && match (&relationship.parent, role) {
-                (ParentChoice::NoneConfirmed, Some(AgentRole::Main)) => true,
-                (ParentChoice::Confirmed(_), Some(AgentRole::Subagent)) => true,
-                _ => false,
-            };
-        if relationship_resolved {
-            match (relationship.parent, role) {
-                (ParentChoice::NoneConfirmed, Some(AgentRole::Main)) => {
-                    clear_optional_if_present(
-                        &mut patch.parent_thread_id,
-                        existing
-                            .as_ref()
-                            .and_then(|row| row.parent_thread_id.as_ref()),
-                    );
-                    set_required_role(
-                        &mut patch.agent_role,
-                        existing.as_ref().map(|row| row.agent_role),
-                        Some(AgentRole::Main),
-                    );
-                    set_optional(
-                        &mut patch.root_session_id,
-                        existing
-                            .as_ref()
-                            .and_then(|row| row.root_session_id.as_ref()),
-                        Some(thread_id.to_owned()),
-                    );
-                }
-                (ParentChoice::Confirmed(parent), Some(AgentRole::Subagent)) => {
-                    set_optional(
-                        &mut patch.parent_thread_id,
-                        existing
-                            .as_ref()
-                            .and_then(|row| row.parent_thread_id.as_ref()),
-                        Some(parent),
-                    );
-                    set_required_role(
-                        &mut patch.agent_role,
-                        existing.as_ref().map(|row| row.agent_role),
-                        Some(AgentRole::Subagent),
-                    );
+        match (relationship.parent, role) {
+            (ParentChoice::NoneConfirmed, Some(AgentRole::Main))
+                if matches!(root_state, RootState::Resolved) =>
+            {
+                clear_optional_if_present(
+                    &mut patch.parent_thread_id,
+                    existing
+                        .as_ref()
+                        .and_then(|row| row.parent_thread_id.as_ref()),
+                );
+                set_required_role(
+                    &mut patch.agent_role,
+                    existing.as_ref().map(|row| row.agent_role),
+                    Some(AgentRole::Main),
+                );
+                set_optional(
+                    &mut patch.root_session_id,
+                    existing
+                        .as_ref()
+                        .and_then(|row| row.root_session_id.as_ref()),
+                    Some(thread_id.to_owned()),
+                );
+            }
+            (ParentChoice::Confirmed(parent), Some(AgentRole::Subagent))
+                if matches!(root_state, RootState::Resolved | RootState::Unknown) =>
+            {
+                set_optional(
+                    &mut patch.parent_thread_id,
+                    existing
+                        .as_ref()
+                        .and_then(|row| row.parent_thread_id.as_ref()),
+                    Some(parent),
+                );
+                set_required_role(
+                    &mut patch.agent_role,
+                    existing.as_ref().map(|row| row.agent_role),
+                    Some(AgentRole::Subagent),
+                );
+                if matches!(root_state, RootState::Resolved) {
                     set_optional(
                         &mut patch.root_session_id,
                         existing
@@ -813,8 +811,8 @@ impl Resolver {
                         root,
                     );
                 }
-                _ => {}
             }
+            _ => {}
         }
 
         set_optional(
@@ -1734,6 +1732,55 @@ mod tests {
         );
         assert!(result.patches.iter().all(|patch| {
             patch.thread_id != "no-evidence"
+                || (patch.agent_role != Patch::Set(AgentRole::Main)
+                    && !matches!(patch.root_session_id, Patch::Set(_)))
+        }));
+    }
+
+    #[test]
+    fn confirmed_rollout_parent_updates_direct_relationship_when_root_is_unknown() {
+        let mut child = rollout(1, "child");
+        child.parent_thread_id_hint = Some(Candidate {
+            value: "parent".to_owned(),
+            provenance: ParentHintProvenance::SubagentSource,
+            record_offset: 1,
+        });
+        child.agent_role_hint = Some(Candidate {
+            value: "subagent".to_owned(),
+            provenance: AgentRoleProvenance::SubagentSource,
+            record_offset: 1,
+        });
+
+        let mut state_snapshot =
+            state(vec![state_thread("parent"), state_thread("child")], Vec::new());
+        state_snapshot.spawn_edges_status = StateSourceStatus::Unavailable;
+
+        let result = ThreadMetadataResolver::resolve(ResolutionInput {
+            state_snapshot,
+            session_name_snapshot: sessions(Vec::new()),
+            global_state_snapshot: global_state(),
+            rollout_facts: vec![child],
+            source_file_observations: Vec::new(),
+            existing_threads: vec![existing("parent"), existing("child")],
+            resolved_at_ms: 100,
+        });
+
+        let child = patch(&result, "child");
+        assert_eq!(
+            child.parent_thread_id,
+            Patch::Set("parent".to_owned())
+        );
+        assert_eq!(
+            child.agent_role,
+            Patch::Set(AgentRole::Subagent)
+        );
+        assert_eq!(child.root_session_id, Patch::Keep);
+        assert_eq!(
+            child.metadata_quality_status,
+            MetadataQualityStatus::Partial
+        );
+        assert!(result.patches.iter().all(|patch| {
+            patch.thread_id != "parent"
                 || (patch.agent_role != Patch::Set(AgentRole::Main)
                     && !matches!(patch.root_session_id, Patch::Set(_)))
         }));
