@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { MiniUsageClient } from "../data/miniUsageClient";
@@ -123,17 +123,30 @@ describe("TrayPanelPage", () => {
 
     await waitFor(() => expect(screen.getByText("总 Token")).toBeInTheDocument());
     expect(screen.getAllByRole("tab")).toHaveLength(3);
+    expect(screen.getByText("缓存命中")).toBeInTheDocument();
+    expect(screen.getByText("预估费用")).toBeInTheDocument();
     expect(screen.getByText("剩余配额")).toBeInTheDocument();
-    expect(screen.getByText(/^上次同步：/)).toBeInTheDocument();
 
     const dashboard = screen.getByRole("button", { name: "打开 Dashboard" });
+    const syncTime = screen.getByText(/^上次同步：/);
     const refresh = screen.getByRole("button", { name: "刷新" });
     const stopButton = screen.getByRole("button", { name: "停止服务" });
+    const toolbar = dashboard.parentElement as HTMLElement;
+    const grid = screen.getByLabelText("KPI 指标");
+    expect(grid).toHaveClass("grid", "grid-cols-[304px_304px]", "gap-4");
+    expect(grid.children).toHaveLength(4);
+    for (const [index, title] of ["总 Token", "预估费用", "缓存命中", "剩余配额"].entries()) {
+      expect(within(grid.children[index] as HTMLElement).getByText(title)).toBeInTheDocument();
+      expect(grid.children[index]).toHaveClass("h-36");
+    }
     expect(dashboard).toHaveClass("border", "bg-card", "h-8");
     expect(refresh).toHaveClass("h-8", "w-8");
     expect(stopButton).toHaveClass("border-destructive/35", "text-destructive", "h-8", "w-8");
     expect(screen.getByRole("tablist").closest(".p-4")).toHaveClass("gap-4");
-    expect(dashboard.parentElement).toHaveClass("gap-4");
+    expect(toolbar).toHaveClass("gap-4");
+    expect(syncTime).toHaveClass("ml-auto");
+    expect(Array.from(toolbar.children)).toEqual([dashboard, syncTime, refresh, stopButton]);
+    expect(screen.getAllByText(/^上次同步：/)).toHaveLength(1);
 
     fireEvent.click(refresh);
     expect(client.refresh).toHaveBeenCalledTimes(1);
@@ -275,5 +288,8 @@ describe("TrayPanelPage", () => {
     expect(screen.getByRole("button", { name: "刷新" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "停止服务" })).toBeInTheDocument();
     expect(screen.queryByText("总 Token")).not.toBeInTheDocument();
+    const grid = screen.getByLabelText("KPI 加载中");
+    expect(grid.children).toHaveLength(4);
+    for (const card of Array.from(grid.children)) expect(card).toHaveClass("h-36");
   });
 });

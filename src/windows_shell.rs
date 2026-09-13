@@ -23,8 +23,8 @@ use windows_sys::Win32::{
 };
 use wry::{NewWindowResponse, WebContext, WebView, WebViewBuilder};
 
-const PANEL_WIDTH_LOGICAL: i32 = 341;
-const PANEL_HEIGHT_LOGICAL: i32 = 568;
+const PANEL_WIDTH_LOGICAL: i32 = 656;
+const PANEL_HEIGHT_LOGICAL: i32 = -1;
 const POPUP_GAP_PHYSICAL: i32 = 8;
 #[cfg(debug_assertions)]
 const PANEL_MEASUREMENT_HOST_HEIGHT_LOGICAL: i32 = 900;
@@ -905,8 +905,8 @@ mod tests {
                     right: 1920,
                     bottom: 1040,
                 },
-                popup: PhysicalSize::new(341, 400),
-                expected: PhysicalPosition::new(1579, 632),
+                popup: PhysicalSize::new(656, 400),
+                expected: PhysicalPosition::new(1264, 632),
             },
             Case {
                 anchor: PhysicalRect {
@@ -922,8 +922,8 @@ mod tests {
                     right: 1920,
                     bottom: 1080,
                 },
-                popup: PhysicalSize::new(341, 400),
-                expected: PhysicalPosition::new(650, 48),
+                popup: PhysicalSize::new(656, 400),
+                expected: PhysicalPosition::new(492, 48),
             },
             Case {
                 anchor: PhysicalRect {
@@ -939,7 +939,7 @@ mod tests {
                     right: 1920,
                     bottom: 1080,
                 },
-                popup: PhysicalSize::new(341, 400),
+                popup: PhysicalSize::new(656, 400),
                 expected: PhysicalPosition::new(48, 320),
             },
             Case {
@@ -956,8 +956,8 @@ mod tests {
                     right: 1880,
                     bottom: 1080,
                 },
-                popup: PhysicalSize::new(341, 400),
-                expected: PhysicalPosition::new(1531, 320),
+                popup: PhysicalSize::new(656, 400),
+                expected: PhysicalPosition::new(1216, 320),
             },
             Case {
                 anchor: PhysicalRect {
@@ -978,7 +978,7 @@ mod tests {
                     right: 0,
                     bottom: 984,
                 },
-                popup: PhysicalSize::new(426, 500),
+                popup: PhysicalSize::new(820, 500),
                 expected: PhysicalPosition::new(-1280, 484),
             },
         ];
@@ -1009,14 +1009,14 @@ mod tests {
                     right: 300,
                     bottom: 300,
                 },
-                PhysicalSize::new(341, 400),
+                PhysicalSize::new(656, 400),
             )
             .is_err()
         );
 
-        let logical = LogicalSize::new(341.0, 400.0);
+        let logical = LogicalSize::new(656.0, 400.0);
         let physical: PhysicalSize<u32> = logical.to_physical(1.25);
-        assert_eq!(physical.width, 426);
+        assert_eq!(physical.width, 820);
         assert_eq!(physical.height, 500);
     }
 

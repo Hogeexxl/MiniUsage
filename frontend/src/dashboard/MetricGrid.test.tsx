@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { SummaryUsageDto } from "../data/types";
 import { chartMuted, chartSeriesColor } from "./charts/chartPalette";
 import type { CodexQuotaResponse } from "../data/types";
-import { codexQuotaColor, MetricGrid } from "./MetricGrid";
+import { CacheHitMetric, codexQuotaColor, EstimatedCostMetric, MetricGrid } from "./MetricGrid";
 import { formatCodexPlanType, formatCodexResetTime } from "./format";
 
 const usage: SummaryUsageDto = {
@@ -84,6 +84,11 @@ function widths(segments: HTMLElement[]): string[] {
 }
 
 describe("MetricGrid v0.2.1", () => {
+  it("exports the shared tray metric components without changing dashboard behavior", () => {
+    expect(CacheHitMetric).toEqual(expect.any(Function));
+    expect(EstimatedCostMetric).toEqual(expect.any(Function));
+  });
+
   it("[T-S03-001] renders five KPI cards and all required titles without a model filter", () => {
     render(<MetricGrid usage={usage} modelFilterActive={false} quota={readyQuota} />);
 

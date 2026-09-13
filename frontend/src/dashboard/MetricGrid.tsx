@@ -104,7 +104,7 @@ export function TotalTokenMetric({ usage }: { usage: SummaryUsageDto }) {
   );
 }
 
-function CacheHitMetric({ usage }: { usage: SummaryUsageDto }) {
+export function CacheHitMetric({ usage }: { usage: SummaryUsageDto }) {
   const reduce = useReducedMotion();
   const [focus, setFocus] = useState<CacheFocus>(null);
   const input = usage.input_tokens;
@@ -146,7 +146,7 @@ function SessionCountMetric({ usage }: { usage: SummaryUsageDto }) {
   );
 }
 
-function EstimatedCostMetric({ usage }: { usage: SummaryUsageDto }) {
+export function EstimatedCostMetric({ usage }: { usage: SummaryUsageDto }) {
   const total = usage.session_health.total_sessions;
   const complete = total - usage.cost_incomplete_session_count;
   const message = usage.estimated_cost_status === "partial" ? "有部分费用不完整" : "当前费用无法完整估算";
