@@ -20,7 +20,7 @@ use windows_sys::Win32::{
     Foundation::{HWND, POINT, RECT},
     Graphics::Gdi::{GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromPoint},
     UI::WindowsAndMessaging::{
-        GetForegroundWindow, GetGUIThreadInfo, GUITHREADINFO, IsChild, MB_ICONERROR, MB_OK,
+        GUITHREADINFO, GetForegroundWindow, GetGUIThreadInfo, IsChild, MB_ICONERROR, MB_OK,
         MessageBoxW,
     },
 };
@@ -745,16 +745,14 @@ fn foreground_focus_hwnd() -> Option<HWND> {
 
 fn popup_contains_keyboard_focus(window: &Window) -> bool {
     let popup = popup_hwnd(window);
-    foreground_focus_hwnd().is_some_and(|focused| {
-        focused == popup || unsafe { IsChild(popup, focused) } != 0
-    })
+    foreground_focus_hwnd()
+        .is_some_and(|focused| focused == popup || unsafe { IsChild(popup, focused) } != 0)
 }
 
 fn popup_child_has_keyboard_focus(window: &Window) -> bool {
     let popup = popup_hwnd(window);
-    foreground_focus_hwnd().is_some_and(|focused| {
-        focused != popup && unsafe { IsChild(popup, focused) } != 0
-    })
+    foreground_focus_hwnd()
+        .is_some_and(|focused| focused != popup && unsafe { IsChild(popup, focused) } != 0)
 }
 
 fn popup_still_owns_focus(state: &ShellState) -> bool {
