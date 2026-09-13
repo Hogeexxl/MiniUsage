@@ -1297,9 +1297,7 @@ async fn t_s03_001_gate_a_batch_detail_revision_and_cursor_replacement_matrix() 
     assert_eq!(child_model_usage[0]["usage"]["reasoning_tokens"], 3);
     assert!(child_model_usage[0]["usage"]["estimated_cost"].is_null());
     assert_eq!(grandchild_model_usage[0]["usage"]["total_tokens"], 40);
-    assert!(
-        grandchild_model_usage[0]["usage"]["estimated_cost"].is_null()
-    );
+    assert!(grandchild_model_usage[0]["usage"]["estimated_cost"].is_null());
 
     // A root can be eligible solely because a descendant has usage in-range.
     // Detail still returns the descendant aggregate with an empty Main block.
