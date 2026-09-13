@@ -228,7 +228,7 @@
             "other_output_tokens": 0,
             "total_tokens": 100000,
             "cache_hit_rate": 0,
-            "estimated_cost": 0.5
+            "estimated_cost": 0.4
           }
         },
         {
@@ -244,7 +244,7 @@
             "other_output_tokens": 0,
             "total_tokens": 200000,
             "cache_hit_rate": 0,
-            "estimated_cost": 1.0
+            "estimated_cost": 0.8
           }
         },
         {
@@ -274,7 +274,7 @@
         "other_output_tokens": 0,
         "total_tokens": 600000,
         "cache_hit_rate": 0,
-        "estimated_cost": 2.7
+        "estimated_cost": 2.4
       },
       "subagent_count": 1,
       "inclusive_usage": {
@@ -287,7 +287,7 @@
         "other_output_tokens": 0,
         "total_tokens": 700000,
         "cache_hit_rate": 0,
-        "estimated_cost": 2.72
+        "estimated_cost": 2.42
       }
     },
     "subagents": [
