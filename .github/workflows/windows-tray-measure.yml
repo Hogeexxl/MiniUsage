@@ -1,0 +1,122 @@
+name: Windows Tray Measurement
+
+on:
+  push:
+    branches:
+      - codex/windows-tray-panel
+    paths:
+      - frontend/src/App.tsx
+      - frontend/src/tray/**
+      - frontend/src/dashboard/MetricGrid.tsx
+      - frontend/src/dashboard/RangeSelector.tsx
+      - src/main.rs
+      - src/windows_shell.rs
+      - Cargo.toml
+      - Cargo.lock
+      - .github/workflows/windows-tray-measure.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  hosted-probe:
+    name: Hosted Windows WebView2 measurement
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out feature branch
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Set up Rust stable
+        shell: pwsh
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build tray measurement frontend
+        working-directory: frontend
+        run: |
+          npx tsc --noEmit
+          npx vite build --mode tray-measure
+
+      - name: Build debug product binary
+        shell: pwsh
+        run: cargo build --locked --bin mini-usage
+
+      - name: Probe hosted runner DPI
+        shell: pwsh
+        run: |
+          Add-Type @'
+          using System;
+          using System.Runtime.InteropServices;
+          public static class DpiProbe {
+              [DllImport("user32.dll")]
+              public static extern uint GetDpiForSystem();
+          }
+          '@
+          $dpi = [DpiProbe]::GetDpiForSystem()
+          $percent = [math]::Round(($dpi / 96.0) * 100)
+          "HOSTED_DPI=$dpi" | Tee-Object -FilePath $env:GITHUB_ENV -Append
+          "HOSTED_DPI_PERCENT=$percent" | Tee-Object -FilePath $env:GITHUB_ENV -Append
+          Write-Host "Hosted runner system DPI: $dpi ($percent%)"
+
+      - name: Ensure MiniUsage port is free
+        shell: pwsh
+        run: |
+          $listener = Get-NetTCPConnection -LocalPort 3210 -State Listen -ErrorAction SilentlyContinue
+          if ($listener) {
+            throw "Port 3210 is already listening before Gate C hosted probe."
+          }
+
+      - name: Run M01-M09 measurement
+        shell: pwsh
+        run: |
+          $env:MINIUSAGE_WINDOWS_TRAY_MEASURE = '1'
+          $env:MINIUSAGE_DISABLE_BROWSER = '1'
+          $stdout = Join-Path $env:RUNNER_TEMP 'tray-measure.stdout.log'
+          $stderr = Join-Path $env:RUNNER_TEMP 'tray-measure.stderr.log'
+          $process = Start-Process -FilePath (Resolve-Path 'target/debug/mini-usage.exe') -WorkingDirectory (Resolve-Path '.') -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+          if (-not $process.WaitForExit(120000)) {
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            Get-Content $stdout -ErrorAction SilentlyContinue
+            Get-Content $stderr -ErrorAction SilentlyContinue
+            throw 'Measurement process did not auto-exit within 120 seconds.'
+          }
+          $process.Refresh()
+          Write-Host "Measurement exit code: $($process.ExitCode)"
+          Get-Content $stdout -ErrorAction SilentlyContinue
+          Get-Content $stderr -ErrorAction SilentlyContinue
+          if ($process.ExitCode -ne 0) {
+            throw "Measurement process exited with code $($process.ExitCode)."
+          }
+          $records = @(
+            Get-Content $stdout |
+              Where-Object { $_ -match '^\{' } |
+              ForEach-Object { $_ | ConvertFrom-Json }
+          )
+          if ($records.Count -ne 9) {
+            throw "Expected exactly 9 measurement records, got $($records.Count)."
+          }
+          $expected = 1..9 | ForEach-Object { "M{0:D2}" -f $_ }
+          for ($i = 0; $i -lt 9; $i++) {
+            if ($records[$i].status -ne 'ok' -or $records[$i].scenario -ne $expected[$i]) {
+              throw "Measurement record $i is invalid or out of order."
+            }
+          }
+          $maxHeight = ($records | Measure-Object -Property required_height -Maximum).Maximum
+          Write-Host "Hosted DPI: $env:HOSTED_DPI_PERCENT%; required max logical height: $maxHeight"
