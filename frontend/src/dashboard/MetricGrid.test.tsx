@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { SummaryUsageDto } from "../data/types";
 import { chartMuted, chartSeriesColor } from "./charts/chartPalette";
 import type { CodexQuotaResponse } from "../data/types";
+import { Popover, PopoverContent, PopoverTrigger } from "../ui/beui/popover";
 import { CacheHitMetric, codexQuotaColor, EstimatedCostMetric, MetricGrid } from "./MetricGrid";
 import { formatCodexPlanType, formatCodexResetTime } from "./format";
 
@@ -122,6 +123,25 @@ describe("MetricGrid v0.2.1", () => {
     });
   });
 
+  it("keeps the default Popover theme contract when inverseTheme is omitted", async () => {
+    render(
+      <Popover defaultOpen>
+        <PopoverTrigger>
+          <button type="button">default</button>
+        </PopoverTrigger>
+        <PopoverContent>Default content</PopoverContent>
+      </Popover>,
+    );
+
+    const dialog = await screen.findByRole("dialog");
+    const portal = dialog.closest("[data-popover-portal]");
+    expect(portal).not.toBeNull();
+    expect(portal?.querySelectorAll(".bg-popover")).toHaveLength(2);
+    expect(portal?.querySelectorAll(".bg-primary")).toHaveLength(0);
+    expect(dialog).toHaveClass("text-popover-foreground");
+    expect(dialog).not.toHaveClass("text-primary-foreground");
+  });
+
   it("[T-S03-001] renders five KPI cards and all required titles without a model filter", () => {
     render(<MetricGrid usage={usage} modelFilterActive={false} quota={readyQuota} />);
 
@@ -233,6 +253,12 @@ describe("MetricGrid v0.2.1", () => {
     const dialog = await screen.findByRole("dialog");
     expect(dialog).toHaveTextContent("5/5 个会话完整计价");
     expect(dialog).not.toHaveTextContent("计价不完整");
+    const portal = dialog.closest("[data-popover-portal]");
+    expect(portal).not.toBeNull();
+    expect(portal?.querySelectorAll(".bg-primary")).toHaveLength(2);
+    expect(portal?.querySelectorAll(".bg-popover")).toHaveLength(0);
+    expect(dialog).toHaveClass("text-primary-foreground");
+    expect(dialog).not.toHaveClass("text-popover-foreground");
   });
 
   it("[T-S03-005] keeps known partial cost, warns, and reports unified completeness copy", async () => {
@@ -325,6 +351,12 @@ describe("MetricGrid v0.2.1", () => {
     const dialog = (await screen.findByText("hoge@example.com")).closest('[role="dialog"]');
     expect(dialog).toHaveTextContent("hoge@example.com");
     expect(dialog).toHaveTextContent("重置卡：2 次");
+    const portal = dialog?.closest("[data-popover-portal]");
+    expect(portal).not.toBeNull();
+    expect(portal?.querySelectorAll(".bg-primary")).toHaveLength(2);
+    expect(portal?.querySelectorAll(".bg-popover")).toHaveLength(0);
+    expect(dialog).toHaveClass("text-primary-foreground");
+    expect(dialog).not.toHaveClass("text-popover-foreground");
   });
 
   it("T-Q-SW-003 renders both quota windows with independent reset times and shared palette", async () => {

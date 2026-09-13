@@ -167,7 +167,7 @@ export function EstimatedCostMetric({ usage, glare = true }: { usage: SummaryUsa
               <CircleAlert className="h-4 w-4" />
             </button>
           </PopoverTrigger>
-          <PopoverContent className="w-max max-w-64 text-xs">
+          <PopoverContent inverseTheme className="w-max max-w-64 text-xs">
             <div className="flex flex-col gap-1">
               <div>{complete}/{total} 个会话完整计价</div>
               {hasIncomplete ? <div>{incomplete} 个会话计价不完整</div> : null}
@@ -220,7 +220,7 @@ export function CodexQuotaCard({ quota, glare = true }: { quota: CodexQuotaRespo
             {plan}
           </button>
         </PopoverTrigger>
-        <PopoverContent className="w-max max-w-64 text-xs">
+        <PopoverContent inverseTheme className="w-max max-w-64 text-xs">
           <div className="flex flex-col gap-1">
             <div>{email}</div>
             <div>重置卡：{resetCredits}</div>

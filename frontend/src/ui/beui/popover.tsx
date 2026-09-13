@@ -501,9 +501,14 @@ const ALIGN_ORIGIN: Record<Align, string> = {
 export interface PopoverContentProps {
   children: ReactNode;
   className?: string;
+  inverseTheme?: boolean;
 }
 
-export function PopoverContent({ children, className }: PopoverContentProps) {
+export function PopoverContent({
+  children,
+  className,
+  inverseTheme = false,
+}: PopoverContentProps) {
   const ctx = usePopoverContext("PopoverContent");
   const [portalReady, setPortalReady] = useState(false);
   const {
@@ -580,6 +585,10 @@ export function PopoverContent({ children, className }: PopoverContentProps) {
     triggerMode === "hover"
       ? makeHoverHandlers(panelHover, openHover, scheduleClose)
       : {};
+  const gooBackground = inverseTheme ? "bg-primary" : "bg-popover";
+  const foreground = inverseTheme
+    ? "text-primary-foreground"
+    : "text-popover-foreground";
 
   // Match the server and first client render, then attach the portal after
   // hydration. This preserves SSR without regenerating the page on the client.
@@ -630,7 +639,7 @@ export function PopoverContent({ children, className }: PopoverContentProps) {
         }}
       >
         <div
-          className="absolute bg-popover"
+          className={`absolute ${gooBackground}`}
           style={{
             left: geo.trigger.x,
             top: geo.trigger.y,
@@ -641,7 +650,7 @@ export function PopoverContent({ children, className }: PopoverContentProps) {
         />
         <div
           ref={blobRef}
-          className="absolute inset-0 bg-popover"
+          className={`absolute inset-0 ${gooBackground}`}
           style={{
             clipPath: clipForProgress(geo, progress.get(), false),
           }}
@@ -680,7 +689,7 @@ export function PopoverContent({ children, className }: PopoverContentProps) {
               transformOrigin: `${ALIGN_ORIGIN[align]} ${side === "bottom" ? "top" : "bottom"}`,
             }}
             className={cn(
-              "w-max max-w-[min(92vw,20rem)] p-4 text-popover-foreground outline-none",
+              `w-max max-w-[min(92vw,20rem)] p-4 ${foreground} outline-none`,
               className,
             )}
           >
