@@ -111,7 +111,9 @@ fn t_dist_013_windows_release_has_static_runtime_and_install_smoke() {
         "MSVCP",
         "/DEPENDENTS",
         "llvm-readobj.exe",
-        "Windows CUI",
+        "Inspect Windows PE imports and GUI subsystem",
+        "Windows GUI",
+        "IMAGE_SUBSYSTEM_WINDOWS_GUI",
         "IMAGE_FILE_MACHINE_AMD64",
         "PE32+",
         "expectedPackagerName = \"mini-usage_$($env:CARGO_VERSION)_x64-setup.exe\"",
@@ -128,7 +130,14 @@ fn t_dist_013_windows_release_has_static_runtime_and_install_smoke() {
     for required in [
         "Start-Process -FilePath $installer",
         "'/S'",
+        "MINIUSAGE_WINDOWS_HEADLESS_SMOKE",
         "MINIUSAGE_DISABLE_BROWSER",
+        "Start-Process -FilePath `$binaryPath",
+        "-PassThru",
+        "-Wait",
+        "-RedirectStandardOutput `$stdoutPath",
+        "-RedirectStandardError `$stderrPath",
+        "exit `$miniUsage.ExitCode",
         "127.0.0.1:3210/api/health",
         "X-MiniUsage-Version",
         "expectedBinaryVersion = $env:CARGO_VERSION",
@@ -172,6 +181,9 @@ fn t_dist_013_windows_release_has_static_runtime_and_install_smoke() {
             "Windows clean-runtime smoke guard is missing: {required}"
         );
     }
+
+    assert!(!smoke.contains("& '$escapedBinary'"));
+    assert!(!smoke.contains("exit `$LASTEXITCODE"));
 
     for forbidden in [
         "if ($null -ne $uninstaller)",

@@ -4,6 +4,23 @@ import { describe, expect, it, vi } from "vitest";
 import { RangeSelector } from "./RangeSelector";
 
 describe("RangeSelector", () => {
+  it("renders only the requested preset ranges when custom is hidden", () => {
+    const onChange = vi.fn();
+    render(
+      <RangeSelector
+        value={{ key: "today" }}
+        onChange={onChange}
+        ranges={["today", "yesterday", "7d"]}
+        showCustom={false}
+      />,
+    );
+    expect(screen.getAllByRole("tab")).toHaveLength(3);
+    for (const label of ["今天", "昨天", "7d"]) {
+      expect(screen.getByRole("tab", { name: label })).toBeInTheDocument();
+    }
+    expect(screen.queryByRole("tab", { name: "自定义" })).not.toBeInTheDocument();
+  });
+
   it("exposes the range tablist and selected state", () => {
     const onChange = vi.fn();
     render(<RangeSelector value={{ key: "today" }} onChange={onChange} />);

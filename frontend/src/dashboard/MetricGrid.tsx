@@ -52,7 +52,7 @@ function Dot({ className }: { className: string }) {
   );
 }
 
-function TotalTokenMetric({ usage }: { usage: SummaryUsageDto }) {
+export function TotalTokenMetric({ usage }: { usage: SummaryUsageDto }) {
   const reduce = useReducedMotion();
   const [focus, setFocus] = useState<Focus>(null);
   const input = usage.input_tokens;
@@ -182,7 +182,7 @@ export function codexQuotaColor(remainingPercent: number): string {
   return chartSeriesColor(9);
 }
 
-function CodexQuotaCard({ quota }: { quota: CodexQuotaResponse }) {
+export function CodexQuotaCard({ quota }: { quota: CodexQuotaResponse }) {
   if (quota.status === "loading") return <SkeletonCard bar />;
 
   const weekly = quota.status === "ready" ? quota.weekly : null;
@@ -256,7 +256,7 @@ function CodexQuotaCard({ quota }: { quota: CodexQuotaResponse }) {
   );
 }
 
-function SkeletonCard({ wide = false, bar = false }: { wide?: boolean; bar?: boolean }) {
+export function SkeletonCard({ wide = false, bar = false }: { wide?: boolean; bar?: boolean }) {
   return (
     <div aria-hidden className={`h-36 animate-pulse rounded-2xl border border-border bg-card p-4 ${wide ? "min-w-0 max-[1439px]:col-span-2 max-[767px]:col-span-1" : ""}`}>
       <div className="h-3 w-20 rounded bg-muted" />

@@ -275,6 +275,7 @@ Remove-Item Env:CARGO_HOME, Env:RUSTUP_HOME, Env:NODE_PATH, Env:npm_config_prefi
 `$env:TEMP = '$escapedTemp'
 `$env:TMP = '$escapedTemp'
 `$env:CODEX_HOME = '$escapedCodexHome'
+`$env:MINIUSAGE_WINDOWS_HEADLESS_SMOKE = '1'
 `$env:MINIUSAGE_DISABLE_BROWSER = '1'
 Set-Location -LiteralPath '$escapedRuntimeRoot'
 [pscustomobject]@{
@@ -283,8 +284,11 @@ Set-Location -LiteralPath '$escapedRuntimeRoot'
     UserProfile = `$env:USERPROFILE
     LocalAppData = [Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)
 } | ConvertTo-Json -Compress | Set-Content -LiteralPath '$escapedIdentityPath' -Encoding utf8 -NoNewline
-& '$escapedBinary' 1>'$escapedStdout' 2>'$escapedStderr'
-exit `$LASTEXITCODE
+`$binaryPath = '$escapedBinary'
+`$stdoutPath = '$escapedStdout'
+`$stderrPath = '$escapedStderr'
+`$miniUsage = Start-Process -FilePath `$binaryPath -PassThru -Wait -RedirectStandardOutput `$stdoutPath -RedirectStandardError `$stderrPath
+exit `$miniUsage.ExitCode
 "@ | Set-Content -LiteralPath $launcher -Encoding utf8
 
     $pwsh = Join-Path $PSHOME 'pwsh.exe'
