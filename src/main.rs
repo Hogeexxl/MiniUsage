@@ -1,3 +1,8 @@
+#![cfg_attr(
+    all(target_os = "windows", not(debug_assertions), not(test)),
+    windows_subsystem = "windows"
+)]
+
 use std::sync::Arc;
 
 #[cfg(not(feature = "embedded-frontend"))]
@@ -17,12 +22,21 @@ fn report_codex_auth_save_failure() {
     eprintln!("MiniUsage Codex quota auth.json update failed");
 }
 
+#[cfg(target_os = "windows")]
+mod windows_shell;
+
+#[cfg(not(target_os = "windows"))]
 #[tokio::main]
 async fn main() {
     if let Err(error) = run(SystemBrowser).await {
         eprintln!("MiniUsage startup failed: {error}");
         std::process::exit(1);
     }
+}
+
+#[cfg(target_os = "windows")]
+fn main() {
+    windows_shell::run();
 }
 
 async fn run(browser_opener: impl BrowserOpener + Clone + 'static) -> Result<(), String> {
@@ -43,6 +57,20 @@ async fn run_with_update_factory<B, F>(
 where
     B: BrowserOpener + Clone + 'static,
     F: FnOnce() -> Result<Arc<UpdateService>, String> + Send + 'static,
+{
+    run_with_update_factory_and_ready(browser_opener, ledger_options, update_factory, || {}).await
+}
+
+async fn run_with_update_factory_and_ready<B, F, R>(
+    browser_opener: B,
+    ledger_options: LedgerOptions,
+    update_factory: F,
+    on_ready: R,
+) -> Result<(), String>
+where
+    B: BrowserOpener + Clone + 'static,
+    F: FnOnce() -> Result<Arc<UpdateService>, String> + Send + 'static,
+    R: FnOnce() + Send + 'static,
 {
     let browser_opener: Arc<dyn BrowserOpener> = Arc::new(browser_opener);
     let listener = match launcher::bind_or_detect_existing()
@@ -138,6 +166,8 @@ where
         }
     }
 
+    on_ready();
+
     let codex_quota_task = codex_quota_service.spawn_background();
 
     if let Err(error) = browser::open_dashboard(browser_opener.as_ref()) {
@@ -155,6 +185,20 @@ where
     codex_quota_task.abort();
     let _ = codex_quota_task.await;
     result
+}
+
+#[cfg(target_os = "windows")]
+async fn run_windows_backend<R>(on_ready: R) -> Result<(), String>
+where
+    R: FnOnce() + Send + 'static,
+{
+    run_with_update_factory_and_ready(
+        SystemBrowser,
+        LedgerOptions::default(),
+        || UpdateService::new_github().map_err(|error| error.to_string()),
+        on_ready,
+    )
+    .await
 }
 
 #[cfg(test)]
