@@ -45,8 +45,8 @@ jobs:
           existing="$(git rev-list -n 1 "$tag" 2>/dev/null || true)"
           if [[ -n "$existing" ]]; then
             if [[ "$existing" != "$GITHUB_SHA" ]]; then
-              echo "Existing $tag points to $existing instead of $GITHUB_SHA" >&2
-              exit 1
+              git tag -f "$tag" "$GITHUB_SHA"
+              git push --force origin "refs/tags/$tag"
             fi
           else
             git tag "$tag" "$GITHUB_SHA"
