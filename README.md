@@ -68,8 +68,8 @@ MiniUsage 是一个纯本机运行的 Rust 服务 + React Dashboard，用来读�
 
 从 [GitHub Releases](https://github.com/Hogeexxl/MiniUsage/releases) 下载对应平台的安装包（以 Releases 页面实际提供的文件为准）：
 
-- Windows x64：`MiniUsage-v0.1.0-windows-x64-setup.exe`
-- macOS Apple Silicon：`MiniUsage-v0.1.0-macos-arm64.dmg`
+- Windows x64：`MiniUsage-v0.2.6-windows-x64-setup.exe`
+- macOS Apple Silicon：`MiniUsage-v0.2.6-macos-arm64.dmg`
 
 启动后 MiniUsage 会在本机启动服务并自动打开默认浏览器；如果浏览器没有自动打开，手动访问：
 
