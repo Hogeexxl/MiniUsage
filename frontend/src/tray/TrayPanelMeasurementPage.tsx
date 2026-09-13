@@ -190,8 +190,8 @@ function nextFrame(): Promise<void> {
 }
 
 function isFiniteAnimation(animation: Animation): boolean {
-  const duration = animation.effect?.getComputedTiming().duration;
-  return typeof duration === "number" && Number.isFinite(duration);
+  const timing = animation.effect?.getComputedTiming();
+  return timing !== undefined && typeof timing.endTime === "number" && Number.isFinite(timing.endTime);
 }
 
 async function waitForAnimations(): Promise<void> {
