@@ -1,5 +1,5 @@
 use std::{
-    panic::{catch_unwind, AssertUnwindSafe},
+    panic::{AssertUnwindSafe, catch_unwind},
     path::PathBuf,
 };
 
@@ -18,10 +18,8 @@ use tray_icon::{
 };
 use windows_sys::Win32::{
     Foundation::{POINT, RECT},
-    Graphics::Gdi::{
-        GetMonitorInfoW, MonitorFromPoint, MONITORINFO, MONITOR_DEFAULTTONEAREST,
-    },
-    UI::WindowsAndMessaging::{MessageBoxW, MB_ICONERROR, MB_OK},
+    Graphics::Gdi::{GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromPoint},
+    UI::WindowsAndMessaging::{MB_ICONERROR, MB_OK, MessageBoxW},
 };
 use wry::{NewWindowResponse, WebContext, WebView, WebViewBuilder};
 
@@ -144,10 +142,7 @@ fn infer_taskbar_edge(
         (TaskbarEdge::Left, (work.left - monitor.left).max(0)),
         (TaskbarEdge::Top, (work.top - monitor.top).max(0)),
         (TaskbarEdge::Right, (monitor.right - work.right).max(0)),
-        (
-            TaskbarEdge::Bottom,
-            (monitor.bottom - work.bottom).max(0),
-        ),
+        (TaskbarEdge::Bottom, (monitor.bottom - work.bottom).max(0)),
     ];
     if let Some((edge, _)) = gaps
         .iter()
@@ -161,14 +156,8 @@ fn infer_taskbar_edge(
     let distances = [
         (TaskbarEdge::Left, (anchor.left - monitor.left).abs()),
         (TaskbarEdge::Top, (anchor.top - monitor.top).abs()),
-        (
-            TaskbarEdge::Right,
-            (monitor.right - anchor.right).abs(),
-        ),
-        (
-            TaskbarEdge::Bottom,
-            (monitor.bottom - anchor.bottom).abs(),
-        ),
+        (TaskbarEdge::Right, (monitor.right - anchor.right).abs()),
+        (TaskbarEdge::Bottom, (monitor.bottom - anchor.bottom).abs()),
     ];
     distances
         .into_iter()
@@ -191,10 +180,8 @@ fn popup_position(
     work: PhysicalRect,
     popup: PhysicalSize<u32>,
 ) -> Result<PhysicalPosition<i32>, String> {
-    let width =
-        i32::try_from(popup.width).map_err(|_| "popup width exceeds i32".to_string())?;
-    let height =
-        i32::try_from(popup.height).map_err(|_| "popup height exceeds i32".to_string())?;
+    let width = i32::try_from(popup.width).map_err(|_| "popup width exceeds i32".to_string())?;
+    let height = i32::try_from(popup.height).map_err(|_| "popup height exceeds i32".to_string())?;
     if work.width() < width || work.height() < height {
         return Err("monitor work area is smaller than the fixed tray panel".to_string());
     }
@@ -208,14 +195,8 @@ fn popup_position(
             center_x - width / 2,
             anchor.top - POPUP_GAP_PHYSICAL - height,
         ),
-        TaskbarEdge::Top => (
-            center_x - width / 2,
-            anchor.bottom + POPUP_GAP_PHYSICAL,
-        ),
-        TaskbarEdge::Left => (
-            anchor.right + POPUP_GAP_PHYSICAL,
-            center_y - height / 2,
-        ),
+        TaskbarEdge::Top => (center_x - width / 2, anchor.bottom + POPUP_GAP_PHYSICAL),
+        TaskbarEdge::Left => (anchor.right + POPUP_GAP_PHYSICAL, center_y - height / 2),
         TaskbarEdge::Right => (
             anchor.left - POPUP_GAP_PHYSICAL - width,
             center_y - height / 2,
@@ -413,8 +394,7 @@ pub fn run() -> ! {
     let mut state = ShellState::default();
     #[cfg(debug_assertions)]
     {
-        state.measurement_mode =
-            std::env::var_os("MINIUSAGE_WINDOWS_TRAY_MEASURE").is_some();
+        state.measurement_mode = std::env::var_os("MINIUSAGE_WINDOWS_TRAY_MEASURE").is_some();
     }
 
     event_loop.run(move |event, target, control_flow| {
@@ -425,9 +405,7 @@ pub fn run() -> ! {
                 state.backend_was_ready = true;
                 #[cfg(debug_assertions)]
                 if state.measurement_mode {
-                    if let Err(error) =
-                        create_measurement_ui(&mut state, target, proxy.clone())
-                    {
+                    if let Err(error) = create_measurement_ui(&mut state, target, proxy.clone()) {
                         finish_measurement_fatal(&mut state, error, control_flow);
                     }
                     return;
@@ -442,9 +420,7 @@ pub fn run() -> ! {
                     return;
                 }
 
-                if let Err(error) =
-                    create_production_ui(&mut state, target, proxy.clone())
-                {
+                if let Err(error) = create_production_ui(&mut state, target, proxy.clone()) {
                     finish_production_fatal(&mut state, error, control_flow);
                 }
             }
@@ -454,9 +430,7 @@ pub fn run() -> ! {
                     finish_measurement_fatal(
                         &mut state,
                         match result {
-                            Ok(()) => {
-                                "measurement backend exited before completion".to_string()
-                            }
+                            Ok(()) => "measurement backend exited before completion".to_string(),
                             Err(error) => error,
                         },
                         control_flow,
@@ -476,9 +450,7 @@ pub fn run() -> ! {
                             control_flow,
                         );
                     }
-                    Err(error) => {
-                        finish_production_fatal(&mut state, error, control_flow)
-                    }
+                    Err(error) => finish_production_fatal(&mut state, error, control_flow),
                 }
             }
             Event::UserEvent(UserEvent::OpenDashboard) => {
@@ -523,12 +495,8 @@ pub fn run() -> ! {
 }
 
 fn create_user_data_dir() -> Result<PathBuf, String> {
-    let base = BaseDirs::new()
-        .ok_or_else(|| "could not resolve LocalAppData".to_string())?;
-    let path = base
-        .data_local_dir()
-        .join("MiniUsage")
-        .join("WebView2");
+    let base = BaseDirs::new().ok_or_else(|| "could not resolve LocalAppData".to_string())?;
+    let path = base.data_local_dir().join("MiniUsage").join("WebView2");
     std::fs::create_dir_all(&path).map_err(|error| {
         format!(
             "could not create WebView2 user data directory {}: {error}",
@@ -564,10 +532,7 @@ fn build_popup_window(
         .with_decorations(false)
         .with_resizable(false)
         .with_always_on_top(true)
-        .with_inner_size(LogicalSize::new(
-            PANEL_WIDTH_LOGICAL as f64,
-            height as f64,
-        ))
+        .with_inner_size(LogicalSize::new(PANEL_WIDTH_LOGICAL as f64, height as f64))
         .with_skip_taskbar(true)
         .with_undecorated_shadow(true)
         .build(target)
@@ -585,28 +550,21 @@ fn create_production_ui(
             .with_icon(icon)
             .with_tooltip("MiniUsage")
             .build()
-            .map_err(|error| {
-                format!("could not create Windows tray icon: {error}")
-            })?,
+            .map_err(|error| format!("could not create Windows tray icon: {error}"))?,
     );
 
-    state.popup_window =
-        Some(build_popup_window(target, PANEL_HEIGHT_LOGICAL, false)?);
+    state.popup_window = Some(build_popup_window(target, PANEL_HEIGHT_LOGICAL, false)?);
     let user_data = create_user_data_dir()?;
     state.web_context = Some(WebContext::new(Some(user_data)));
 
     let window = state
         .popup_window
         .as_ref()
-        .ok_or_else(|| {
-            "tray popup window missing during WebView creation".to_string()
-        })?;
+        .ok_or_else(|| "tray popup window missing during WebView creation".to_string())?;
     let context = state
         .web_context
         .as_mut()
-        .ok_or_else(|| {
-            "WebContext missing during WebView creation".to_string()
-        })?;
+        .ok_or_else(|| "WebContext missing during WebView creation".to_string())?;
     let ipc_proxy = proxy.clone();
     let webview = WebViewBuilder::new_with_web_context(context)
         .with_url(TRAY_URL)
@@ -644,21 +602,15 @@ fn create_measurement_ui(
     let window = state
         .popup_window
         .as_ref()
-        .ok_or_else(|| {
-            "measurement window missing during WebView creation".to_string()
-        })?;
+        .ok_or_else(|| "measurement window missing during WebView creation".to_string())?;
     let context = state
         .web_context
         .as_mut()
-        .ok_or_else(|| {
-            "measurement WebContext missing during WebView creation".to_string()
-        })?;
+        .ok_or_else(|| "measurement WebContext missing during WebView creation".to_string())?;
     let ipc_proxy = proxy.clone();
     let webview = WebViewBuilder::new_with_web_context(context)
         .with_url(TRAY_MEASURE_URL)
-        .with_navigation_handler(|url| {
-            url == TRAY_MEASURE_URL || url == TRAY_MEASURE_URL_SLASH
-        })
+        .with_navigation_handler(|url| url == TRAY_MEASURE_URL || url == TRAY_MEASURE_URL_SLASH)
         .with_new_window_req_handler(|_, _| NewWindowResponse::Deny)
         .with_ipc_handler(move |request| {
             let message = request.body();
@@ -672,28 +624,18 @@ fn create_measurement_ui(
             let parsed: serde_json::Value = match serde_json::from_str(payload) {
                 Ok(value) => value,
                 Err(error) => {
-                    eprintln!(
-                        "tray measurement fatal: invalid JSON: {error}"
-                    );
-                    let _ = ipc_proxy.send_event(UserEvent::MeasurementFatal(
-                        format!("invalid measurement JSON: {error}"),
-                    ));
+                    eprintln!("tray measurement fatal: invalid JSON: {error}");
+                    let _ = ipc_proxy.send_event(UserEvent::MeasurementFatal(format!(
+                        "invalid measurement JSON: {error}"
+                    )));
                     return;
                 }
             };
-            match parsed
-                .get("status")
-                .and_then(serde_json::Value::as_str)
-            {
+            match parsed.get("status").and_then(serde_json::Value::as_str) {
                 Some("ok") => {
                     println!("{payload}");
-                    if parsed
-                        .get("scenario")
-                        .and_then(serde_json::Value::as_str)
-                        == Some("M09")
-                    {
-                        let _ = ipc_proxy
-                            .send_event(UserEvent::MeasurementComplete);
+                    if parsed.get("scenario").and_then(serde_json::Value::as_str) == Some("M09") {
+                        let _ = ipc_proxy.send_event(UserEvent::MeasurementComplete);
                     }
                 }
                 Some("fatal") => {
@@ -703,22 +645,17 @@ fn create_measurement_ui(
                         .unwrap_or("unknown tray measurement failure")
                         .to_string();
                     eprintln!("tray measurement fatal: {error}");
-                    let _ = ipc_proxy
-                        .send_event(UserEvent::MeasurementFatal(error));
+                    let _ = ipc_proxy.send_event(UserEvent::MeasurementFatal(error));
                 }
                 _ => {
-                    let error =
-                        "measurement result has invalid status".to_string();
+                    let error = "measurement result has invalid status".to_string();
                     eprintln!("tray measurement fatal: {error}");
-                    let _ = ipc_proxy
-                        .send_event(UserEvent::MeasurementFatal(error));
+                    let _ = ipc_proxy.send_event(UserEvent::MeasurementFatal(error));
                 }
             }
         })
         .build(window)
-        .map_err(|error| {
-            format!("could not create WebView2 measurement host: {error}")
-        })?;
+        .map_err(|error| format!("could not create WebView2 measurement host: {error}"))?;
     state.webview = Some(webview);
     state.popup_visible = true;
     Ok(())
@@ -746,16 +683,13 @@ fn handle_tray_event(
             state.focus_loss_for_tray = false;
         }
         ClickAction::RecordPress => {
-            state.tray_press_visible =
-                Some(state.popup_visible || state.focus_loss_for_tray);
+            state.tray_press_visible = Some(state.popup_visible || state.focus_loss_for_tray);
         }
         ClickAction::Toggle => {
             let was_visible = state
                 .tray_press_visible
                 .take()
-                .unwrap_or(
-                    state.popup_visible || state.focus_loss_for_tray,
-                );
+                .unwrap_or(state.popup_visible || state.focus_loss_for_tray);
             state.focus_loss_for_tray = false;
             if was_visible {
                 hide_popup(state);
@@ -766,10 +700,7 @@ fn handle_tray_event(
     }
 }
 
-fn cursor_is_over_tray(
-    state: &ShellState,
-    target: &EventLoopWindowTarget<UserEvent>,
-) -> bool {
+fn cursor_is_over_tray(state: &ShellState, target: &EventLoopWindowTarget<UserEvent>) -> bool {
     let Some(rect) = state.tray.as_ref().and_then(TrayIcon::rect) else {
         return false;
     };
@@ -820,11 +751,9 @@ fn handle_window_event(
             scale_factor,
             new_inner_size,
         } => {
-            *new_inner_size = LogicalSize::new(
-                PANEL_WIDTH_LOGICAL as f64,
-                PANEL_HEIGHT_LOGICAL as f64,
-            )
-            .to_physical(scale_factor);
+            *new_inner_size =
+                LogicalSize::new(PANEL_WIDTH_LOGICAL as f64, PANEL_HEIGHT_LOGICAL as f64)
+                    .to_physical(scale_factor);
         }
         _ => {}
     }
@@ -847,34 +776,27 @@ fn show_popup(
     let center_y = anchor.top as f64 + anchor.height() as f64 / 2.0;
     let monitor = target
         .monitor_from_point(center_x, center_y)
-        .ok_or_else(|| {
-            "could not resolve Tao monitor for tray anchor".to_string()
-        })?;
+        .ok_or_else(|| "could not resolve Tao monitor for tray anchor".to_string())?;
     let scale = monitor.scale_factor();
 
     let window = state
         .popup_window
         .as_ref()
-        .ok_or_else(|| {
-            "tray popup window is not initialized".to_string()
-        })?;
+        .ok_or_else(|| "tray popup window is not initialized".to_string())?;
     window.set_inner_size(LogicalSize::new(
         PANEL_WIDTH_LOGICAL as f64,
         PANEL_HEIGHT_LOGICAL as f64,
     ));
-    let expected_inner: PhysicalSize<u32> = LogicalSize::new(
-        PANEL_WIDTH_LOGICAL as f64,
-        PANEL_HEIGHT_LOGICAL as f64,
-    )
-    .to_physical(scale);
+    let expected_inner: PhysicalSize<u32> =
+        LogicalSize::new(PANEL_WIDTH_LOGICAL as f64, PANEL_HEIGHT_LOGICAL as f64)
+            .to_physical(scale);
     if window.inner_size() != expected_inner {
         window.set_inner_size(expected_inner);
     }
 
     let popup_size = window.outer_size();
     let (monitor_rect, work_rect) = monitor_and_work_area(anchor)?;
-    let position =
-        popup_position(anchor, monitor_rect, work_rect, popup_size)?;
+    let position = popup_position(anchor, monitor_rect, work_rect, popup_size)?;
     window.set_outer_position(position);
     window.set_visible(true);
     window.set_focus();
@@ -882,11 +804,7 @@ fn show_popup(
     Ok(())
 }
 
-fn finish_production_fatal(
-    state: &mut ShellState,
-    error: String,
-    control_flow: &mut ControlFlow,
-) {
+fn finish_production_fatal(state: &mut ShellState, error: String, control_flow: &mut ControlFlow) {
     state.teardown_production();
     show_fatal_message(&error);
     apply_flow(
@@ -896,11 +814,7 @@ fn finish_production_fatal(
 }
 
 #[cfg(debug_assertions)]
-fn finish_measurement_fatal(
-    state: &mut ShellState,
-    error: String,
-    control_flow: &mut ControlFlow,
-) {
+fn finish_measurement_fatal(state: &mut ShellState, error: String, control_flow: &mut ControlFlow) {
     eprintln!("tray measurement fatal: {error}");
     state.teardown_measurement();
     apply_flow(
@@ -931,10 +845,7 @@ fn show_fatal_message(error: &str) {
 }
 
 fn wide_null(value: &str) -> Vec<u16> {
-    value
-        .encode_utf16()
-        .chain(std::iter::once(0))
-        .collect()
+    value.encode_utf16().chain(std::iter::once(0)).collect()
 }
 
 #[cfg(test)]
@@ -944,21 +855,13 @@ mod tests {
     #[test]
     fn t_wintray_click_contract() {
         let table = [
-            (
-                ClickButton::Left,
-                ClickState::Up,
-                ClickAction::Toggle,
-            ),
+            (ClickButton::Left, ClickState::Up, ClickAction::Toggle),
             (
                 ClickButton::Left,
                 ClickState::Down,
                 ClickAction::RecordPress,
             ),
-            (
-                ClickButton::Right,
-                ClickState::Up,
-                ClickAction::Ignore,
-            ),
+            (ClickButton::Right, ClickState::Up, ClickAction::Ignore),
         ];
         for (button, state, expected) in table {
             assert_eq!(click_action(button, state), expected);
@@ -966,8 +869,7 @@ mod tests {
 
         let focus_loss_for_tray = true;
         let visible_after_focus_loss = false;
-        let was_visible =
-            visible_after_focus_loss || focus_loss_for_tray;
+        let was_visible = visible_after_focus_loss || focus_loss_for_tray;
         assert!(was_visible);
         assert!(!(!was_visible));
     }
@@ -1082,43 +984,38 @@ mod tests {
         ];
         for case in cases {
             assert_eq!(
-                popup_position(
-                    case.anchor,
-                    case.monitor,
-                    case.work,
-                    case.popup
-                )
-                .unwrap(),
+                popup_position(case.anchor, case.monitor, case.work, case.popup).unwrap(),
                 case.expected
             );
         }
 
-        assert!(popup_position(
-            PhysicalRect {
-                left: 0,
-                top: 0,
-                right: 20,
-                bottom: 20,
-            },
-            PhysicalRect {
-                left: 0,
-                top: 0,
-                right: 300,
-                bottom: 300,
-            },
-            PhysicalRect {
-                left: 0,
-                top: 0,
-                right: 300,
-                bottom: 300,
-            },
-            PhysicalSize::new(341, 400),
-        )
-        .is_err());
+        assert!(
+            popup_position(
+                PhysicalRect {
+                    left: 0,
+                    top: 0,
+                    right: 20,
+                    bottom: 20,
+                },
+                PhysicalRect {
+                    left: 0,
+                    top: 0,
+                    right: 300,
+                    bottom: 300,
+                },
+                PhysicalRect {
+                    left: 0,
+                    top: 0,
+                    right: 300,
+                    bottom: 300,
+                },
+                PhysicalSize::new(341, 400),
+            )
+            .is_err()
+        );
 
         let logical = LogicalSize::new(341.0, 400.0);
-        let physical: PhysicalSize<u32> =
-            logical.to_physical(1.25);
+        let physical: PhysicalSize<u32> = logical.to_physical(1.25);
         assert_eq!(physical.width, 426);
         assert_eq!(physical.height, 500);
     }
@@ -1185,9 +1082,7 @@ mod tests {
             Err("boom".to_string())
         );
         assert_eq!(
-            normalize_backend_worker(|| -> Result<(), String> {
-                panic!("worker panic")
-            }),
+            normalize_backend_worker(|| -> Result<(), String> { panic!("worker panic") }),
             Err("backend worker panicked".to_string())
         );
     }
