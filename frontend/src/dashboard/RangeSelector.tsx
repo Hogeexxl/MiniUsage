@@ -15,9 +15,11 @@ const RANGE_LABELS: Record<PresetRangeKey, string> = {
 type RangeSelectorProps = {
   value: DashboardRange;
   onChange: (range: DashboardRange) => void;
+  ranges?: readonly PresetRangeKey[];
+  showCustom?: boolean;
 };
 
-export function RangeSelector({ value, onChange }: RangeSelectorProps) {
+export function RangeSelector({ value, onChange, ranges = RANGE_KEYS, showCustom = true }: RangeSelectorProps) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const activeValue = value.key;
   const handleValueChange = useCallback(
@@ -31,21 +33,23 @@ export function RangeSelector({ value, onChange }: RangeSelectorProps) {
   return (
     <Tabs value={activeValue} onValueChange={handleValueChange} variant="pill">
       <TabsList>
-        {RANGE_KEYS.map((range) => (
+        {ranges.map((range) => (
           <TabsTrigger key={range} value={range}>
             {RANGE_LABELS[range]}
           </TabsTrigger>
         ))}
-        <CustomDateRangePicker
-          open={pickerOpen}
-          value={value}
-          onChange={(range) => {
-            setPickerOpen(false);
-            onChange(range);
-          }}
-          onOpenChange={setPickerOpen}
-          trigger={<TabsTrigger value="custom">自定义</TabsTrigger>}
-        />
+        {showCustom ? (
+          <CustomDateRangePicker
+            open={pickerOpen}
+            value={value}
+            onChange={(range) => {
+              setPickerOpen(false);
+              onChange(range);
+            }}
+            onOpenChange={setPickerOpen}
+            trigger={<TabsTrigger value="custom">自定义</TabsTrigger>}
+          />
+        ) : null}
       </TabsList>
     </Tabs>
   );

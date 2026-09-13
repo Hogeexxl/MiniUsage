@@ -217,6 +217,10 @@ function parseUsage(value: unknown): SummaryUsageDto {
     ...parseTokenUsage(record),
     session_count: sessionCount,
     cost_incomplete_session_count: costIncompleteSessionCount,
+    complete_session_cost_per_million_tokens: nullableCost(
+      record,
+      "complete_session_cost_per_million_tokens",
+    ),
     session_health: sessionHealth,
   };
 }

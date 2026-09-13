@@ -280,6 +280,7 @@ pub struct UsageSummary {
     /// Healthy sessions contributing usage events. Kept for the existing KPI.
     pub session_count: i64,
     pub cost_incomplete_session_count: i64,
+    pub complete_session_cost_per_million_tokens: Option<f64>,
     pub health: SessionHealthSummary,
 }
 
@@ -533,6 +534,8 @@ impl<'connection> AggregateReader<'connection> {
                 |row| row.get(0),
             )
             .map_err(map_sql_error)?;
+        let complete_session_cost_per_million_tokens =
+            self.complete_session_cost_per_million_tokens(&query, &values)?;
         let error_sessions =
             i64::try_from(self.quarantined_roots(epoch, range, query.filter())?.len())
                 .map_err(|_| AggregateError::ArithmeticOverflow)?;
@@ -552,6 +555,7 @@ impl<'connection> AggregateReader<'connection> {
             totals,
             session_count,
             cost_incomplete_session_count,
+            complete_session_cost_per_million_tokens,
             health: SessionHealthSummary {
                 total_sessions,
                 complete_sessions,
@@ -1515,6 +1519,34 @@ impl<'connection> AggregateReader<'connection> {
         row.into_totals()
     }
 
+    fn complete_session_cost_per_million_tokens(
+        &self,
+        query: &SummaryQuery,
+        values: &[Value],
+    ) -> Result<Option<f64>, AggregateError> {
+        let sql = format!(
+            "SELECT SUM(session_cost_nanos_usd), SUM(session_tokens)
+             FROM (
+                 SELECT ue.root_session_id,
+                        SUM(ue.estimated_cost_nanos_usd) AS session_cost_nanos_usd,
+                        SUM(ue.total_tokens) AS session_tokens
+                 FROM usage_events ue
+                 LEFT JOIN threads root ON root.thread_id=ue.root_session_id
+                 WHERE {}
+                 GROUP BY ue.root_session_id
+                 HAVING SUM(CASE WHEN ue.estimated_cost_nanos_usd IS NULL THEN 1 ELSE 0 END)=0
+             ) priced_sessions",
+            summary_where_clause(query.filter())
+        );
+        let (cost_nanos, total_tokens): (Option<i64>, Option<i64>) = self
+            .connection
+            .query_row(&sql, params_from_iter(values.iter()), |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })
+            .map_err(map_sql_error)?;
+        complete_pricing_cost_per_million_tokens(cost_nanos, total_tokens)
+    }
+
     fn aggregate_for_summary(
         &self,
         epoch: i64,
@@ -1762,6 +1794,20 @@ fn compare_sort_index_items(
         SessionSortField::CacheHitRate => ratio(left.cache_hit_rate, right.cache_hit_rate),
     };
     result.then_with(|| left.root_session_id.cmp(&right.root_session_id))
+}
+
+fn complete_pricing_cost_per_million_tokens(
+    cost_nanos: Option<i64>,
+    total_tokens: Option<i64>,
+) -> Result<Option<f64>, AggregateError> {
+    match (cost_nanos, total_tokens) {
+        (None, None) => Ok(None),
+        (Some(cost), Some(tokens)) if cost >= 0 && tokens > 0 => {
+            Ok(Some(cost as f64 / tokens as f64 / 1_000.0))
+        }
+        (Some(cost), Some(0)) if cost >= 0 => Ok(None),
+        _ => Err(AggregateError::InvariantViolation),
+    }
 }
 
 struct AggregateRow {
@@ -2567,6 +2613,47 @@ mod tests {
                 footer_complete
             );
         }
+    }
+
+    #[test]
+    fn complete_session_cost_per_million_tokens_uses_only_complete_filtered_sessions() {
+        let connection = cost_fixture();
+        let reader = AggregateReader::new(&connection);
+
+        let all = reader
+            .summary(SummaryQuery::new(
+                TimeRange::new(0, 9).unwrap(),
+                UsageFilter::default(),
+            ))
+            .unwrap();
+        assert_eq!(all.complete_session_cost_per_million_tokens, None);
+
+        let filtered = reader
+            .summary(SummaryQuery::new(
+                TimeRange::new(0, 9).unwrap(),
+                UsageFilter::new(vec!["m-other".into()], vec![], false, false),
+            ))
+            .unwrap();
+        let expected = 400.0 / 13.0 / 1_000.0;
+        assert!(
+            (filtered.complete_session_cost_per_million_tokens.unwrap() - expected).abs() < 1e-12
+        );
+
+        let known_slice = reader
+            .summary(SummaryQuery::new(
+                TimeRange::new(0, 4).unwrap(),
+                UsageFilter::new(vec!["m-main".into()], vec![], false, false),
+            ))
+            .unwrap();
+        let expected = 600.0 / 39.0 / 1_000.0;
+        assert!(
+            (known_slice
+                .complete_session_cost_per_million_tokens
+                .unwrap()
+                - expected)
+                .abs()
+                < 1e-12
+        );
     }
 
     #[test]

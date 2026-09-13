@@ -64,6 +64,7 @@ impl ChildGuard {
             });
         #[cfg(windows)]
         command
+            .env("MINIUSAGE_WINDOWS_HEADLESS_SMOKE", "1")
             .env("USERPROFILE", &home)
             .env("APPDATA", home.join("AppData/Roaming"))
             .env("LOCALAPPDATA", home.join("AppData/Local"));

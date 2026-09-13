@@ -19,6 +19,7 @@ const usage = {
   estimated_cost_status: "unknown",
   session_count: 1,
   cost_incomplete_session_count: 1,
+  complete_session_cost_per_million_tokens: null,
   session_health: {
     total_sessions: 1,
     complete_sessions: 0,
@@ -511,6 +512,8 @@ describe("miniUsageClient DTO seam", () => {
     }
 
     for (const invalidUsage of [
+      { ...usage, complete_session_cost_per_million_tokens: undefined },
+      { ...usage, complete_session_cost_per_million_tokens: -1 },
       { ...usage, estimated_cost_status: undefined },
       { ...usage, estimated_cost_status: "invalid" },
       { ...usage, estimated_cost: null, estimated_cost_status: "complete" },

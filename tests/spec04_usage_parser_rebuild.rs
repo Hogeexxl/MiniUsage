@@ -1,7 +1,10 @@
 use std::{
     fs,
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
     thread,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
@@ -22,6 +25,8 @@ const PRE_TURN: &str = "00000000-0898-7000-8000-000000000003";
 const CHILD_TURN: &str = "00000000-0bb8-7000-8000-000000000003";
 const ROOT_TURN: &str = "00000000-05dc-7000-8000-000000000004";
 
+static TEMP_ROOT_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
 struct TempRoot(PathBuf);
 
 impl TempRoot {
@@ -30,8 +35,9 @@ impl TempRoot {
             .duration_since(UNIX_EPOCH)
             .expect("system clock")
             .as_nanos();
+        let sequence = TEMP_ROOT_SEQUENCE.fetch_add(1, Ordering::Relaxed);
         let path = std::env::temp_dir().join(format!(
-            "miniusage-mu04-b03-{label}-{}-{stamp}",
+            "miniusage-mu04-b03-{label}-{}-{stamp}-{sequence}",
             std::process::id()
         ));
         fs::create_dir_all(&path).expect("create fixture root");
