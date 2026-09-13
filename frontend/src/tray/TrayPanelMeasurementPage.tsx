@@ -246,7 +246,7 @@ async function openM09Popover(): Promise<void> {
   const hoverRoot = trigger?.parentElement;
   if (!trigger || !hoverRoot) throw new Error("M09 quota hover root missing");
   hoverRoot.dispatchEvent(
-    new PointerEvent("pointerenter", {
+    new PointerEvent("pointerover", {
       bubbles: true,
       pointerId: 1,
       pointerType: "mouse",
