@@ -11,6 +11,12 @@ on:
       - src/windows_shell.rs
       - assets/windows/tray-icon.png
       - tests/distribution_release_guard.rs
+      - frontend/src/App.tsx
+      - frontend/src/tray/**
+      - frontend/src/dashboard/MetricGrid.tsx
+      - frontend/src/dashboard/RangeSelector.tsx
+      - frontend/package.json
+      - frontend/package-lock.json
       - .github/workflows/windows-tray-preflight.yml
   workflow_dispatch:
 
