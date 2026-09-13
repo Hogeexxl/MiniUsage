@@ -2,6 +2,8 @@ name: Release
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*.*.*'
   workflow_dispatch:
@@ -45,6 +47,9 @@ jobs:
             throw 'Cargo package mini-usage was not found'
           }
           $tag = [string]$env:GITHUB_REF_NAME
+          if ($env:GITHUB_REF_TYPE -eq 'branch' -and $tag -eq 'main') {
+            $tag = "v$cargoVersion"
+          }
           $tagMatch = [regex]::Match($tag, '^v(?<base>\d+\.\d+\.\d+)(?<suffix>-rc\.\d+)?$')
           if (-not $tagMatch.Success) {
             throw "Release tag must match vX.Y.Z or vX.Y.Z-rc.N, got $tag"
@@ -189,13 +194,17 @@ jobs:
           set -euo pipefail
           metadata="$(cargo metadata --no-deps --format-version 1)"
           cargo_version="$(printf '%s' "$metadata" | python3 -c 'import json,sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"] == "mini-usage"))')"
-          if [[ ! "$GITHUB_REF_NAME" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)(-rc\.[0-9]+)?$ ]]; then
-            echo "Release tag must match vX.Y.Z or vX.Y.Z-rc.N, got $GITHUB_REF_NAME" >&2
+          release_ref_name="$GITHUB_REF_NAME"
+          if [[ "$GITHUB_REF_TYPE" == "branch" && "$release_ref_name" == "main" ]]; then
+            release_ref_name="v${cargo_version}"
+          fi
+          if [[ ! "$release_ref_name" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)(-rc\.[0-9]+)?$ ]]; then
+            echo "Release ref must resolve to vX.Y.Z or vX.Y.Z-rc.N, got $release_ref_name" >&2
             exit 1
           fi
           tag_base="${BASH_REMATCH[1]}"
           tag_suffix="${BASH_REMATCH[2]-}"
-          tag_version="${GITHUB_REF_NAME#v}"
+          tag_version="${release_ref_name#v}"
           if [[ "$tag_base" != "$cargo_version" ]]; then
             echo "Release tag base $tag_base does not match Cargo package version $cargo_version" >&2
             exit 1
@@ -476,13 +485,17 @@ jobs:
           set -euo pipefail
           metadata="$(cargo metadata --no-deps --format-version 1)"
           cargo_version="$(printf '%s' "$metadata" | python3 -c 'import json,sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"] == "mini-usage"))')"
-          if [[ ! "$GITHUB_REF_NAME" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)(-rc\.[0-9]+)?$ ]]; then
-            echo "Release tag must match vX.Y.Z or vX.Y.Z-rc.N, got $GITHUB_REF_NAME" >&2
+          release_ref_name="$GITHUB_REF_NAME"
+          if [[ "$GITHUB_REF_TYPE" == "branch" && "$release_ref_name" == "main" ]]; then
+            release_ref_name="v${cargo_version}"
+          fi
+          if [[ ! "$release_ref_name" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)(-rc\.[0-9]+)?$ ]]; then
+            echo "Release ref must resolve to vX.Y.Z or vX.Y.Z-rc.N, got $release_ref_name" >&2
             exit 1
           fi
           tag_base="${BASH_REMATCH[1]}"
           tag_suffix="${BASH_REMATCH[2]-}"
-          tag_version="${GITHUB_REF_NAME#v}"
+          tag_version="${release_ref_name#v}"
           if [[ "$tag_base" != "$cargo_version" ]]; then
             echo "Release tag base $tag_base does not match Cargo package version $cargo_version" >&2
             exit 1
@@ -541,18 +554,23 @@ jobs:
           set -euo pipefail
           version="${{ steps.version.outputs.version }}"
           is_candidate="${{ steps.version.outputs.is_candidate }}"
+          release_tag="$GITHUB_REF_NAME"
           release_args=(--verify-tag)
+          if [[ "$GITHUB_REF_TYPE" == "branch" && "$release_tag" == "main" ]]; then
+            release_tag="v${version}"
+            release_args=(--target "$GITHUB_SHA")
+          fi
           if [[ "$is_candidate" == true ]]; then
             release_args+=(--draft --prerelease)
           elif [[ "$is_candidate" != false ]]; then
             echo "Unexpected candidate state: $is_candidate" >&2
             exit 1
           fi
-          gh release create "$GITHUB_REF_NAME" \
+          gh release create "$release_tag" \
             "release-assets/MiniUsage-v${version}-windows-x64-setup.exe" \
             "release-assets/MiniUsage-v${version}-macos-arm64.dmg" \
             release-assets/SHA256SUMS.txt \
             --repo "$GITHUB_REPOSITORY" \
-            --title "MiniUsage $GITHUB_REF_NAME" \
+            --title "MiniUsage $release_tag" \
             --generate-notes \
             "${release_args[@]}"
