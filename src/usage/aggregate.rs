@@ -2647,7 +2647,12 @@ mod tests {
             .unwrap();
         let expected = 600.0 / 39.0 / 1_000.0;
         assert!(
-            (known_slice.complete_session_cost_per_million_tokens.unwrap() - expected).abs() < 1e-12
+            (known_slice
+                .complete_session_cost_per_million_tokens
+                .unwrap()
+                - expected)
+                .abs()
+                < 1e-12
         );
     }
 
