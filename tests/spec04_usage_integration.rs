@@ -712,14 +712,15 @@ fn t_mu03_f02_v5_upgrade_rebuilds_metadata_usage_and_cost_without_loss() {
     .unwrap();
     drop(db);
 
-    // Opening a schema-v5 database performs v6/v7/v8 migration and the
-    // independent cost backfill before scanner metadata/usage rebuilds run.
+    // Opening a schema-v5 database performs every migration through the
+    // current schema-v10 boundary, including the independent cost backfill,
+    // before scanner metadata/usage rebuilds run.
     let ledger = fixture.ledger();
     let db = Connection::open(&fixture.db).unwrap();
     assert_eq!(
         db.query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
             .unwrap(),
-        9
+        10
     );
     let backfilled_cost: Option<i64> = db
         .query_row(
