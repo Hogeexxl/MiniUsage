@@ -24,7 +24,7 @@ use windows_sys::Win32::{
 use wry::{NewWindowResponse, WebContext, WebView, WebViewBuilder};
 
 const PANEL_WIDTH_LOGICAL: i32 = 341;
-const PANEL_HEIGHT_LOGICAL: i32 = -1;
+const PANEL_HEIGHT_LOGICAL: i32 = 568;
 const POPUP_GAP_PHYSICAL: i32 = 8;
 #[cfg(debug_assertions)]
 const PANEL_MEASUREMENT_HOST_HEIGHT_LOGICAL: i32 = 900;
