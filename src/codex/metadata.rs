@@ -1751,8 +1751,10 @@ mod tests {
             record_offset: 1,
         });
 
-        let mut state_snapshot =
-            state(vec![state_thread("parent"), state_thread("child")], Vec::new());
+        let mut state_snapshot = state(
+            vec![state_thread("parent"), state_thread("child")],
+            Vec::new(),
+        );
         state_snapshot.spawn_edges_status = StateSourceStatus::Unavailable;
 
         let result = ThreadMetadataResolver::resolve(ResolutionInput {
@@ -1766,14 +1768,8 @@ mod tests {
         });
 
         let child = patch(&result, "child");
-        assert_eq!(
-            child.parent_thread_id,
-            Patch::Set("parent".to_owned())
-        );
-        assert_eq!(
-            child.agent_role,
-            Patch::Set(AgentRole::Subagent)
-        );
+        assert_eq!(child.parent_thread_id, Patch::Set("parent".to_owned()));
+        assert_eq!(child.agent_role, Patch::Set(AgentRole::Subagent));
         assert_eq!(child.root_session_id, Patch::Keep);
         assert_eq!(
             child.metadata_quality_status,
