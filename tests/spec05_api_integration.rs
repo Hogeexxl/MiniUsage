@@ -1287,13 +1287,19 @@ async fn t_s03_001_gate_a_batch_detail_revision_and_cursor_replacement_matrix() 
         .unwrap();
     assert_eq!(child["parent_thread_id"], GATE_ROOT);
     assert_eq!(grandchild["parent_thread_id"], GATE_CHILD);
-    assert_eq!(child["model"], "deep-model");
-    assert_eq!(grandchild["model"], "grand-model");
-    assert_eq!(child["usage"]["total_tokens"], 33);
-    assert_eq!(child["usage"]["reasoning_tokens"], 3);
-    assert!(child["usage"]["estimated_cost"].is_null());
-    assert_eq!(grandchild["usage"]["total_tokens"], 40);
-    assert!(grandchild["usage"]["estimated_cost"].is_null());
+    let child_model_usage = child["model_usage"].as_array().unwrap();
+    let grandchild_model_usage = grandchild["model_usage"].as_array().unwrap();
+    assert_eq!(child_model_usage.len(), 1);
+    assert_eq!(grandchild_model_usage.len(), 1);
+    assert_eq!(child_model_usage[0]["model"], "deep-model");
+    assert_eq!(grandchild_model_usage[0]["model"], "grand-model");
+    assert_eq!(child_model_usage[0]["usage"]["total_tokens"], 33);
+    assert_eq!(child_model_usage[0]["usage"]["reasoning_tokens"], 3);
+    assert!(child_model_usage[0]["usage"]["estimated_cost"].is_null());
+    assert_eq!(grandchild_model_usage[0]["usage"]["total_tokens"], 40);
+    assert!(
+        grandchild_model_usage[0]["usage"]["estimated_cost"].is_null()
+    );
 
     // A root can be eligible solely because a descendant has usage in-range.
     // Detail still returns the descendant aggregate with an empty Main block.
