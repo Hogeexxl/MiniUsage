@@ -21,6 +21,7 @@ const usage: SummaryUsageDto = {
   estimated_cost_status: "partial",
   session_count: 4,
   cost_incomplete_session_count: 1,
+  complete_session_cost_per_million_tokens: 6.2354,
   session_health: {
     total_sessions: 5,
     complete_sessions: 4,
@@ -210,46 +211,70 @@ describe("MetricGrid v0.2.1", () => {
     }
   });
 
-  it("[T-S03-005] omits the cost alert for complete pricing and uses the health total denominator", () => {
+  it("[T-S03-005] always shows neutral completeness info and MToken cost for complete pricing", async () => {
     render(
       <MetricGrid
-        usage={{ ...usage, estimated_cost_status: "complete", cost_incomplete_session_count: 0 }}
+        usage={{
+          ...usage,
+          estimated_cost_status: "complete",
+          cost_incomplete_session_count: 0,
+          complete_session_cost_per_million_tokens: 12.3456,
+        }}
         modelFilterActive={false}
       />,
     );
 
-    expect(screen.getByText("5 / 5 会话完整计价")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "预估费用完整性提示" })).not.toBeInTheDocument();
+    const card = cardByTitle("预估费用");
+    expect(within(card).getByText("$12.35 / MToken")).toBeInTheDocument();
+    const trigger = within(card).getByRole("button", { name: "预估费用完整性提示" });
+    expect(trigger).toHaveClass("text-foreground");
+    expect(trigger).not.toHaveClass("text-warning");
+    fireEvent.pointerEnter(trigger.parentElement!, { pointerId: 1, pointerType: "mouse", buttons: 0 });
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("5/5 个会话完整计价");
+    expect(dialog).not.toHaveTextContent("计价不完整");
   });
 
-  it("[T-S03-005] keeps known partial cost and opens the official popover copy on click", async () => {
+  it("[T-S03-005] keeps known partial cost, warns, and reports unified completeness copy", async () => {
     render(<MetricGrid usage={usage} modelFilterActive={false} />);
 
+    const card = cardByTitle("预估费用");
     const cost = screen.getByTitle("$1,240.00");
     expect(cost).toHaveTextContent("$1.24K");
-    expect(screen.getByText("4 / 5 会话完整计价")).toBeInTheDocument();
+    expect(within(card).getByText("$6.235 / MToken")).toBeInTheDocument();
 
-    const trigger = screen.getByRole("button", { name: "预估费用完整性提示" });
-    expect(trigger).toHaveAttribute("aria-haspopup", "dialog");
-    expect(trigger).toHaveAttribute("aria-expanded", "false");
-    fireEvent.click(trigger);
-    expect(await screen.findByRole("dialog")).toHaveTextContent("有部分费用不完整");
-    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    const trigger = within(card).getByRole("button", { name: "预估费用完整性提示" });
+    expect(trigger).toHaveClass("text-warning");
+    expect(trigger).not.toHaveClass("text-destructive");
+    fireEvent.pointerEnter(trigger.parentElement!, { pointerId: 1, pointerType: "mouse", buttons: 0 });
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("4/5 个会话完整计价");
+    expect(dialog).toHaveTextContent("1 个会话计价不完整");
   });
 
-  it("[T-S03-005] shows an unknown-cost dash and opens its warning copy", async () => {
+  it("[T-S03-005] shows an unknown-cost dash and no MToken value when no session is fully priced", async () => {
     render(
       <MetricGrid
-        usage={{ ...usage, estimated_cost: null, estimated_cost_status: "unknown", cost_incomplete_session_count: 5 }}
+        usage={{
+          ...usage,
+          estimated_cost: null,
+          estimated_cost_status: "unknown",
+          cost_incomplete_session_count: 5,
+          complete_session_cost_per_million_tokens: null,
+        }}
         modelFilterActive={false}
       />,
     );
 
-    expect(within(cardByTitle("预估费用")).getByText("—")).toBeInTheDocument();
-    expect(screen.getByText("0 / 5 会话完整计价")).toBeInTheDocument();
-    const trigger = screen.getByRole("button", { name: "预估费用完整性提示" });
-    fireEvent.click(trigger);
-    expect(await screen.findByRole("dialog")).toHaveTextContent("当前费用无法完整估算");
+    const card = cardByTitle("预估费用");
+    expect(within(card).getByText("—")).toBeInTheDocument();
+    expect(within(card).getByText("— / MToken")).toBeInTheDocument();
+    const trigger = within(card).getByRole("button", { name: "预估费用完整性提示" });
+    expect(trigger).toHaveClass("text-warning");
+    fireEvent.pointerEnter(trigger.parentElement!, { pointerId: 1, pointerType: "mouse", buttons: 0 });
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("0/5 个会话完整计价");
+    expect(dialog).toHaveTextContent("5 个会话计价不完整");
   });
 
   it("[T-S03-006] exposes compact token and cost values with complete original aria/title values", () => {

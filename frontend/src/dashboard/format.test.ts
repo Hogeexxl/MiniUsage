@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatCompact, formatCost, formatInteger, formatLastSyncTime, formatRatio } from "./format";
+import { formatCompact, formatCost, formatCostPerMillionTokens, formatInteger, formatLastSyncTime, formatRatio } from "./format";
 
 describe("dashboard formatters", () => {
   it.each([
@@ -31,6 +31,13 @@ describe("dashboard formatters", () => {
     expect(formatCost(cost).text).toBe("$1.20");
     expect(ratio).toBe(0.125);
     expect(cost).toBe(1.2);
+  });
+
+  it("formats complete-session cost per MToken with quantity-based precision", () => {
+    expect(formatCostPerMillionTokens(23.4567).text).toBe("$23.46 / MToken");
+    expect(formatCostPerMillionTokens(6.2354).text).toBe("$6.235 / MToken");
+    expect(formatCostPerMillionTokens(0.3474).text).toBe("$0.347 / MToken");
+    expect(formatCostPerMillionTokens(null).text).toBe("— / MToken");
   });
 
   it("formats a completed sync timestamp as HH:mm:ss", () => {

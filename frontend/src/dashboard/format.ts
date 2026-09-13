@@ -65,8 +65,22 @@ export function formatCost(value: number | null): FormattedValue {
 export function formatCostFull(value: number): FormattedValue {
   const cost = finiteNonNegative(value);
   const text = formatCompactCost(cost);
-  const full = `$${cost.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const full = `${cost.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   return { text, title: full, accessibleName: full };
+}
+
+export function formatCostPerMillionTokens(value: number | null): FormattedValue {
+  if (value === null) {
+    const unknown = "费用 / MToken 未知";
+    return { text: "— / MToken", title: unknown, accessibleName: unknown };
+  }
+  const cost = finiteNonNegative(value);
+  const fractionDigits = cost >= 10 ? 2 : 3;
+  const text = `${cost.toLocaleString("en-US", {
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
+  })} / MToken`;
+  return { text, title: text, accessibleName: text };
 }
 
 export function formatLastSyncTime(value: number | null): string {

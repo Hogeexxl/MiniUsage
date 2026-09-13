@@ -153,6 +153,7 @@ pub struct SummaryUsageDto {
     pub estimated_cost_status: String,
     pub session_count: i64,
     pub cost_incomplete_session_count: i64,
+    pub complete_session_cost_per_million_tokens: Option<f64>,
     pub session_health: SessionHealthDto,
 }
 
@@ -642,6 +643,9 @@ pub fn summary_response(
             estimated_cost_status: tokens.estimated_cost_status,
             session_count: snapshot.value.session_count,
             cost_incomplete_session_count: snapshot.value.cost_incomplete_session_count,
+            complete_session_cost_per_million_tokens: snapshot
+                .value
+                .complete_session_cost_per_million_tokens,
             session_health: SessionHealthDto {
                 total_sessions: snapshot.value.health.total_sessions,
                 complete_sessions: snapshot.value.health.complete_sessions,
@@ -1370,6 +1374,7 @@ mod tests {
                     },
                     session_count: 0,
                     cost_incomplete_session_count: 0,
+                    complete_session_cost_per_million_tokens: Some(12.345),
                     health: crate::usage::aggregate::SessionHealthSummary {
                         total_sessions: 0,
                         complete_sessions: 0,
@@ -1385,6 +1390,10 @@ mod tests {
         assert_eq!(summary.usage.cache_hit_rate, None);
         assert_eq!(summary.usage.estimated_cost, Some(0.0));
         assert_eq!(summary.usage.estimated_cost_status, "complete");
+        assert_eq!(
+            summary.usage.complete_session_cost_per_million_tokens,
+            Some(12.345)
+        );
 
         let response = session_snapshot_response(
             &range,
@@ -1568,6 +1577,7 @@ mod tests {
                         totals: totals(Some(3), 1, 0),
                         session_count: 0,
                         cost_incomplete_session_count: 0,
+                        complete_session_cost_per_million_tokens: None,
                         health: crate::usage::aggregate::SessionHealthSummary {
                             total_sessions: 0,
                             complete_sessions: 0,
