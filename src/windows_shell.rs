@@ -10,16 +10,21 @@ use tao::{
     dpi::{LogicalSize, PhysicalPosition, PhysicalSize},
     event::{Event, WindowEvent},
     event_loop::{ControlFlow, EventLoopBuilder, EventLoopProxy, EventLoopWindowTarget},
-    platform::windows::WindowBuilderExtWindows,
+    platform::windows::{WindowBuilderExtWindows, WindowExtWindows},
     window::{Window, WindowBuilder},
 };
 use tray_icon::{
     MouseButton, MouseButtonState, Rect as TrayRect, TrayIcon, TrayIconBuilder, TrayIconEvent,
 };
 use windows_sys::Win32::{
-    Foundation::{POINT, RECT},
+    Foundation::{HWND, POINT, RECT},
     Graphics::Gdi::{GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromPoint},
-    UI::WindowsAndMessaging::{MB_ICONERROR, MB_OK, MessageBoxW},
+    UI::{
+        Input::KeyboardAndMouse::GetFocus,
+        WindowsAndMessaging::{
+            GetForegroundWindow, IsChild, MB_ICONERROR, MB_OK, MessageBoxW,
+        },
+    },
 };
 use wry::{NewWindowResponse, WebContext, WebView, WebViewBuilder};
 
@@ -41,6 +46,7 @@ enum UserEvent {
     BackendReady,
     BackendExited(Result<(), String>),
     Tray(TrayIconEvent),
+    RepositionPopup,
     OpenDashboard,
     #[cfg(debug_assertions)]
     MeasurementComplete,
@@ -453,6 +459,17 @@ pub fn run() -> ! {
                     Err(error) => finish_production_fatal(&mut state, error, control_flow),
                 }
             }
+            Event::UserEvent(UserEvent::RepositionPopup) => {
+                #[cfg(debug_assertions)]
+                if state.measurement_mode {
+                    return;
+                }
+                if state.popup_visible
+                    && let Err(error) = reposition_visible_popup(&state)
+                {
+                    finish_production_fatal(&mut state, error, control_flow);
+                }
+            }
             Event::UserEvent(UserEvent::OpenDashboard) => {
                 if let Err(error) = browser::open_dashboard(&SystemBrowser) {
                     eprintln!("MiniUsage could not open Dashboard: {error}");
@@ -487,7 +504,7 @@ pub fn run() -> ! {
                 if state.popup_window.as_ref().map(Window::id) != Some(window_id) {
                     return;
                 }
-                handle_window_event(&mut state, event, target, control_flow);
+                handle_window_event(&mut state, event, target, &proxy, control_flow);
             }
             _ => {}
         }
@@ -665,6 +682,7 @@ fn handle_tray_event(
     state: &mut ShellState,
     event: TrayIconEvent,
     target: &EventLoopWindowTarget<UserEvent>,
+    proxy: &EventLoopProxy<UserEvent>,
     control_flow: &mut ControlFlow,
 ) {
     let TrayIconEvent::Click {
@@ -710,6 +728,79 @@ fn cursor_is_over_tray(state: &ShellState, target: &EventLoopWindowTarget<UserEv
     tray_rect_to_physical(rect).contains(cursor)
 }
 
+fn popup_hwnd(window: &Window) -> HWND {
+    window.hwnd() as HWND
+}
+
+fn popup_contains_keyboard_focus(window: &Window) -> bool {
+    let popup = popup_hwnd(window);
+    let focused = unsafe { GetFocus() };
+    !focused.is_null()
+        && (focused == popup || unsafe { IsChild(popup, focused) } != 0)
+}
+
+fn popup_child_has_keyboard_focus(window: &Window) -> bool {
+    let popup = popup_hwnd(window);
+    let focused = unsafe { GetFocus() };
+    !focused.is_null()
+        && focused != popup
+        && unsafe { IsChild(popup, focused) } != 0
+}
+
+fn popup_still_owns_focus(state: &ShellState) -> bool {
+    let Some(window) = state.popup_window.as_ref() else {
+        return false;
+    };
+    popup_contains_keyboard_focus(window)
+        || unsafe { GetForegroundWindow() } == popup_hwnd(window)
+}
+
+fn focus_popup_webview(state: &ShellState) -> Result<(), String> {
+    let webview = state
+        .webview
+        .as_ref()
+        .ok_or_else(|| "tray WebView is not initialized".to_string())?;
+    let window = state
+        .popup_window
+        .as_ref()
+        .ok_or_else(|| "tray popup window is not initialized".to_string())?;
+
+    webview
+        .focus()
+        .map_err(|error| format!("could not focus tray WebView2: {error}"))?;
+
+    if !popup_child_has_keyboard_focus(window) {
+        return Err("tray WebView2 did not acquire keyboard focus".to_string());
+    }
+    Ok(())
+}
+
+fn position_popup(window: &Window, anchor: PhysicalRect) -> Result<(), String> {
+    let popup_size = window.outer_size();
+    let (monitor_rect, work_rect) = monitor_and_work_area(anchor)?;
+    let position = popup_position(anchor, monitor_rect, work_rect, popup_size)?;
+    window.set_outer_position(position);
+    Ok(())
+}
+
+fn reposition_visible_popup(state: &ShellState) -> Result<(), String> {
+    let tray_rect = state
+        .tray
+        .as_ref()
+        .and_then(TrayIcon::rect)
+        .ok_or_else(|| "could not refresh tray anchor during DPI change".to_string())?;
+    let anchor = tray_rect_to_physical(tray_rect);
+    let window = state
+        .popup_window
+        .as_ref()
+        .ok_or_else(|| "tray popup window is not initialized".to_string())?;
+    position_popup(window, anchor)
+}
+
+fn should_hide_on_focus_loss(popup_still_owns_focus: bool) -> bool {
+    !popup_still_owns_focus
+}
+
 fn handle_window_event(
     state: &mut ShellState,
     event: WindowEvent<'_>,
@@ -741,6 +832,9 @@ fn handle_window_event(
 
     match event {
         WindowEvent::Focused(false) if state.popup_visible => {
+            if !should_hide_on_focus_loss(popup_still_owns_focus(state)) {
+                return;
+            }
             if cursor_is_over_tray(state, target) {
                 state.focus_loss_for_tray = true;
             }
@@ -754,6 +848,9 @@ fn handle_window_event(
             *new_inner_size =
                 LogicalSize::new(PANEL_WIDTH_LOGICAL as f64, PANEL_HEIGHT_LOGICAL as f64)
                     .to_physical(scale_factor);
+            if state.popup_visible {
+                let _ = proxy.send_event(UserEvent::RepositionPopup);
+            }
         }
         _ => {}
     }
@@ -794,13 +891,15 @@ fn show_popup(
         window.set_inner_size(expected_inner);
     }
 
-    let popup_size = window.outer_size();
-    let (monitor_rect, work_rect) = monitor_and_work_area(anchor)?;
-    let position = popup_position(anchor, monitor_rect, work_rect, popup_size)?;
-    window.set_outer_position(position);
+    position_popup(window, anchor)?;
     window.set_visible(true);
     window.set_focus();
     state.popup_visible = true;
+
+    if let Err(error) = focus_popup_webview(state) {
+        hide_popup(state);
+        return Err(error);
+    }
     Ok(())
 }
 
@@ -872,6 +971,9 @@ mod tests {
         let was_visible = visible_after_focus_loss || focus_loss_for_tray;
         assert!(was_visible);
         assert!(!(!was_visible));
+
+        assert!(!should_hide_on_focus_loss(true));
+        assert!(should_hide_on_focus_loss(false));
     }
 
     #[test]
