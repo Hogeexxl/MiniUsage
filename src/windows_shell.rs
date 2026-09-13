@@ -682,7 +682,6 @@ fn handle_tray_event(
     state: &mut ShellState,
     event: TrayIconEvent,
     target: &EventLoopWindowTarget<UserEvent>,
-    proxy: &EventLoopProxy<UserEvent>,
     control_flow: &mut ControlFlow,
 ) {
     let TrayIconEvent::Click {
@@ -805,6 +804,7 @@ fn handle_window_event(
     state: &mut ShellState,
     event: WindowEvent<'_>,
     target: &EventLoopWindowTarget<UserEvent>,
+    proxy: &EventLoopProxy<UserEvent>,
     control_flow: &mut ControlFlow,
 ) {
     #[cfg(debug_assertions)]
