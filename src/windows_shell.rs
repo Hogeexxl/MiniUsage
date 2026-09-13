@@ -21,9 +21,7 @@ use windows_sys::Win32::{
     Graphics::Gdi::{GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromPoint},
     UI::{
         Input::KeyboardAndMouse::GetFocus,
-        WindowsAndMessaging::{
-            GetForegroundWindow, IsChild, MB_ICONERROR, MB_OK, MessageBoxW,
-        },
+        WindowsAndMessaging::{GetForegroundWindow, IsChild, MB_ICONERROR, MB_OK, MessageBoxW},
     },
 };
 use wry::{NewWindowResponse, WebContext, WebView, WebViewBuilder};
@@ -734,24 +732,20 @@ fn popup_hwnd(window: &Window) -> HWND {
 fn popup_contains_keyboard_focus(window: &Window) -> bool {
     let popup = popup_hwnd(window);
     let focused = unsafe { GetFocus() };
-    !focused.is_null()
-        && (focused == popup || unsafe { IsChild(popup, focused) } != 0)
+    !focused.is_null() && (focused == popup || unsafe { IsChild(popup, focused) } != 0)
 }
 
 fn popup_child_has_keyboard_focus(window: &Window) -> bool {
     let popup = popup_hwnd(window);
     let focused = unsafe { GetFocus() };
-    !focused.is_null()
-        && focused != popup
-        && unsafe { IsChild(popup, focused) } != 0
+    !focused.is_null() && focused != popup && unsafe { IsChild(popup, focused) } != 0
 }
 
 fn popup_still_owns_focus(state: &ShellState) -> bool {
     let Some(window) = state.popup_window.as_ref() else {
         return false;
     };
-    popup_contains_keyboard_focus(window)
-        || unsafe { GetForegroundWindow() } == popup_hwnd(window)
+    popup_contains_keyboard_focus(window) || unsafe { GetForegroundWindow() } == popup_hwnd(window)
 }
 
 fn focus_popup_webview(state: &ShellState) -> Result<(), String> {
