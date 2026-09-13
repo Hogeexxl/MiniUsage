@@ -104,7 +104,7 @@ export function TotalTokenMetric({ usage }: { usage: SummaryUsageDto }) {
   );
 }
 
-export function CacheHitMetric({ usage }: { usage: SummaryUsageDto }) {
+export function CacheHitMetric({ usage, glare = true }: { usage: SummaryUsageDto; glare?: boolean }) {
   const reduce = useReducedMotion();
   const [focus, setFocus] = useState<CacheFocus>(null);
   const input = usage.input_tokens;
@@ -113,7 +113,7 @@ export function CacheHitMetric({ usage }: { usage: SummaryUsageDto }) {
   const cachedPct = input > 0 ? Math.min(1, Math.max(0, cached / input)) * 100 : 0;
 
   return (
-    <TiltCard className={`${CARD} flex flex-col`}>
+    <TiltCard glare={glare} className={`${CARD} flex flex-col`}>
       <div className={TITLE}>缓存命中</div>
       {rate === null ? (
         <div className={VALUE}>—</div>
@@ -138,7 +138,7 @@ export function CacheHitMetric({ usage }: { usage: SummaryUsageDto }) {
 
 function SessionCountMetric({ usage }: { usage: SummaryUsageDto }) {
   return (
-    <TiltCard className={`${CARD} flex flex-col`}>
+    <TiltCard glare={false} className={`${CARD} flex flex-col`}>
       <div className={TITLE}>会话数量</div>
       <CompactTicker value={usage.session_health.total_sessions} formatter={formatIntegerFull} />
       <div className={`${LEGEND} mt-auto`}>仅统计主线程会话。</div>
@@ -146,13 +146,13 @@ function SessionCountMetric({ usage }: { usage: SummaryUsageDto }) {
   );
 }
 
-export function EstimatedCostMetric({ usage }: { usage: SummaryUsageDto }) {
+export function EstimatedCostMetric({ usage, glare = true }: { usage: SummaryUsageDto; glare?: boolean }) {
   const total = usage.session_health.total_sessions;
   const complete = total - usage.cost_incomplete_session_count;
   const message = usage.estimated_cost_status === "partial" ? "有部分费用不完整" : "当前费用无法完整估算";
 
   return (
-    <TiltCard className={`${CARD} flex flex-col`}>
+    <TiltCard glare={glare} className={`${CARD} flex flex-col`}>
       <div className="flex items-center justify-between gap-2">
         <div className={TITLE}>预估费用</div>
         {usage.estimated_cost_status !== "complete" ? (
@@ -182,13 +182,13 @@ export function codexQuotaColor(remainingPercent: number): string {
   return chartSeriesColor(9);
 }
 
-export function CodexQuotaCard({ quota }: { quota: CodexQuotaResponse }) {
+export function CodexQuotaCard({ quota, glare = true }: { quota: CodexQuotaResponse; glare?: boolean }) {
   if (quota.status === "loading") return <SkeletonCard bar />;
 
   const weekly = quota.status === "ready" ? quota.weekly : null;
   if (weekly === null) {
     return (
-      <TiltCard className={`${CARD} flex flex-col`}>
+      <TiltCard glare={glare} className={`${CARD} flex flex-col`}>
         <div className={TITLE}>剩余配额</div>
         <div className={VALUE}>—</div>
         <div className={`${LEGEND} mt-auto`}>暂时无法获取配额</div>
@@ -220,7 +220,7 @@ export function CodexQuotaCard({ quota }: { quota: CodexQuotaResponse }) {
   );
 
   return (
-    <TiltCard className={`${CARD} flex flex-col`}>
+    <TiltCard glare={glare} className={`${CARD} flex flex-col`}>
       {header}
       {quota.session === null ? (
         <>
@@ -294,10 +294,10 @@ export const MetricGrid = memo(function MetricGrid({ usage, modelFilterActive, q
       ) : (
         <>
           <TotalTokenMetric usage={usage} />
-          <CacheHitMetric usage={usage} />
+          <CacheHitMetric usage={usage} glare={false} />
           {!modelFilterActive ? <SessionCountMetric usage={usage} /> : null}
-          <EstimatedCostMetric usage={usage} />
-          <CodexQuotaCard quota={quota} />
+          <EstimatedCostMetric usage={usage} glare={false} />
+          <CodexQuotaCard quota={quota} glare={false} />
         </>
       )}
     </div>

@@ -5,6 +5,7 @@ import type { CodexQuotaResponse } from "../data/types";
 import { serviceClient, type ServiceClient } from "../data/serviceClient";
 import { AnimatedToastStack, useAnimatedToastStack } from "../ui/beui/animated-toast-stack";
 import { Button } from "../ui/beui/button";
+import { ThemeToggle } from "../ui/beui/theme-toggle";
 import { formatLastSyncTime } from "../dashboard/format";
 import { CacheHitMetric, CodexQuotaCard, EstimatedCostMetric, SkeletonCard, TotalTokenMetric } from "../dashboard/MetricGrid";
 import { RangeSelector } from "../dashboard/RangeSelector";
@@ -89,6 +90,12 @@ export function TrayPanelView({ view, quota, stopping, onOpenDashboard, onStop }
         >
           <RefreshCw className={`h-4 w-4${refreshAnimating ? " animate-spin" : ""}`} />
         </Button>
+        <ThemeToggle
+          variant="circle-blur"
+          start="bottom-up"
+          className="rounded-xl border border-border bg-background p-2.5"
+          iconClassName="h-5 w-5"
+        />
         <Button
           variant="outline"
           size="icon"
@@ -132,11 +139,11 @@ export function TrayPanelView({ view, quota, stopping, onOpenDashboard, onStop }
         ) : (
           <>
             <TotalTokenMetric usage={view.metrics} />
-            <EstimatedCostMetric usage={view.metrics} />
-            <CacheHitMetric usage={view.metrics} />
+            <EstimatedCostMetric usage={view.metrics} glare={false} />
+            <CacheHitMetric usage={view.metrics} glare={false} />
           </>
         )}
-        <CodexQuotaCard quota={quota} />
+        <CodexQuotaCard quota={quota} glare={false} />
       </div>
     </div>
   );

@@ -1,9 +1,11 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { ReactNode } from "react";
 
 import type { MiniUsageClient } from "../data/miniUsageClient";
 import type { RevisionFeed as RevisionFeedType } from "../data/revisionFeed";
 import type { CodexQuotaResponse, DashboardRange, RevisionTuple, StatusResponse, SummaryUsageDto } from "../data/types";
+import { ThemeProvider } from "../theme/ThemeProvider";
 import { TrayPanelPage, TrayPanelView, type TrayPanelViewModel } from "./TrayPanelPage";
 
 const usage: SummaryUsageDto = {
@@ -109,17 +111,61 @@ function viewFor(overrides: Partial<TrayPanelViewModel> = {}): TrayPanelViewMode
   };
 }
 
+function renderWithTheme(node: ReactNode) {
+  return render(<ThemeProvider>{node}</ThemeProvider>);
+}
+
+function enableTiltEffects() {
+  vi.spyOn(window, "matchMedia").mockImplementation((query) => ({
+    matches: query.includes("(hover: hover) and (pointer: fine)"),
+    media: query,
+    onchange: null,
+    addListener: () => undefined,
+    removeListener: () => undefined,
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+    dispatchEvent: () => false,
+  }));
+}
+
+function glareOverlayCount(card: HTMLElement): number {
+  return Array.from(card.children).filter((child) =>
+    child.classList.contains("pointer-events-none") &&
+    child.classList.contains("absolute") &&
+    child.classList.contains("inset-0") &&
+    child.classList.contains("opacity-15"),
+  ).length;
+}
+
 afterEach(() => {
   delete (window as Window & { ipc?: unknown }).ipc;
 });
 
 describe("TrayPanelPage", () => {
+  it("disables glare on tray-only KPI cards while retaining it for total tokens", async () => {
+    enableTiltEffects();
+    renderWithTheme(
+      <TrayPanelView
+        view={viewFor()}
+        quota={quota}
+        stopping={false}
+        onOpenDashboard={vi.fn()}
+        onStop={vi.fn()}
+      />,
+    );
+
+    const grid = screen.getByLabelText("KPI 指标");
+    await waitFor(() => {
+      expect(Array.from(grid.children).map((card) => glareOverlayCount(card as HTMLElement))).toEqual([1, 0, 0, 0]);
+    });
+  });
+
   it("renders the contracted tray controls and routes actions through injected clients", async () => {
     const client = fakeClient();
     const stop = vi.fn(async () => "stopped" as const);
     const ipc = vi.fn();
     (window as Window & { ipc?: unknown }).ipc = { postMessage: ipc };
-    render(<TrayPanelPage options={{ client, revisionFeed, serviceClient: { getState: vi.fn(async () => "running" as const), stop } }} />);
+    renderWithTheme(<TrayPanelPage options={{ client, revisionFeed, serviceClient: { getState: vi.fn(async () => "running" as const), stop } }} />);
 
     await waitFor(() => expect(screen.getByText("总 Token")).toBeInTheDocument());
     expect(screen.getAllByRole("tab")).toHaveLength(3);
@@ -130,6 +176,7 @@ describe("TrayPanelPage", () => {
     const dashboard = screen.getByRole("button", { name: "打开 Dashboard" });
     const syncTime = screen.getByText(/^上次同步：/);
     const refresh = screen.getByRole("button", { name: "刷新" });
+    const themeToggle = screen.getByRole("button", { name: /Switch to (dark|light) mode/ });
     const stopButton = screen.getByRole("button", { name: "停止服务" });
     const toolbar = dashboard.parentElement as HTMLElement;
     const grid = screen.getByLabelText("KPI 指标");
@@ -141,11 +188,13 @@ describe("TrayPanelPage", () => {
     }
     expect(dashboard).toHaveClass("border", "bg-card", "h-8");
     expect(refresh).toHaveClass("h-8", "w-8");
+    expect(themeToggle).toHaveClass("rounded-xl", "border", "border-border", "bg-background", "p-2.5");
+    expect(themeToggle.querySelector(".h-5.w-5")).toBeInTheDocument();
     expect(stopButton).toHaveClass("border-destructive/35", "text-destructive", "h-8", "w-8");
     expect(screen.getByRole("tablist").closest(".p-4")).toHaveClass("gap-4");
     expect(toolbar).toHaveClass("gap-4");
     expect(syncTime).toHaveClass("ml-auto");
-    expect(Array.from(toolbar.children)).toEqual([dashboard, syncTime, refresh, stopButton]);
+    expect(Array.from(toolbar.children)).toEqual([dashboard, syncTime, refresh, themeToggle, stopButton]);
     expect(screen.getAllByText(/^上次同步：/)).toHaveLength(1);
 
     fireEvent.click(refresh);
@@ -162,7 +211,7 @@ describe("TrayPanelPage", () => {
     const stop = vi.fn(async () => {
       throw new Error("stop failed");
     });
-    render(<TrayPanelPage options={{ client, revisionFeed, serviceClient: { getState: vi.fn(async () => "running" as const), stop } }} />);
+    renderWithTheme(<TrayPanelPage options={{ client, revisionFeed, serviceClient: { getState: vi.fn(async () => "running" as const), stop } }} />);
     await waitFor(() => expect(screen.getByText("总 Token")).toBeInTheDocument());
     const stopButton = screen.getByRole("button", { name: "停止服务" });
     fireEvent.click(stopButton);
@@ -175,7 +224,7 @@ describe("TrayPanelPage", () => {
       .mockRejectedValueOnce(new Error("status unavailable"))
       .mockResolvedValue(status);
     const client = fakeClient({ getStatus });
-    render(<TrayPanelPage options={{ client, revisionFeed }} />);
+    renderWithTheme(<TrayPanelPage options={{ client, revisionFeed }} />);
 
     await waitFor(() => expect(screen.getByText("数据加载失败")).toBeInTheDocument());
     const refresh = screen.getByRole("button", { name: "刷新" });
@@ -208,7 +257,7 @@ describe("TrayPanelPage", () => {
       .mockRejectedValueOnce(new Error("tracking unavailable"))
       .mockResolvedValueOnce(completedStatus);
     const client = fakeClient({ getStatus });
-    render(<TrayPanelPage options={{ client, revisionFeed }} />);
+    renderWithTheme(<TrayPanelPage options={{ client, revisionFeed }} />);
 
     await waitFor(() => expect(screen.getByText("总 Token")).toBeInTheDocument());
     const refresh = screen.getByRole("button", { name: "刷新" });
@@ -237,7 +286,7 @@ describe("TrayPanelPage", () => {
       ["idle", "STATUS_NOT_READY", true],
     ] as const;
     for (const [refreshState, errorCode, disabled] of cases) {
-      const { unmount } = render(
+      const { unmount } = renderWithTheme(
         <TrayPanelView
           view={viewFor({ refresh_state: refreshState, error_code: errorCode })}
           quota={quota}
@@ -255,7 +304,7 @@ describe("TrayPanelPage", () => {
     const retryLoad = vi.fn();
     const retryStatus = vi.fn();
     const requestRefresh = vi.fn();
-    render(
+    renderWithTheme(
       <TrayPanelView
         view={viewFor({ load_state: "error", refresh_state: "tracking_error", error_code: "HTTP_ERROR", retry_load: retryLoad, retry_refresh_status: retryStatus, request_refresh: requestRefresh })}
         quota={quota}
@@ -276,7 +325,7 @@ describe("TrayPanelPage", () => {
   });
 
   it("does not crash while metrics are null", () => {
-    render(
+    renderWithTheme(
       <TrayPanelView
         view={viewFor({ metrics: null, load_state: "loading" })}
         quota={{ ...quota, status: "loading", weekly: null }}
