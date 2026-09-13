@@ -94,7 +94,7 @@ jobs:
             }
           }
 
-      - name: Inspect Windows PE imports and console subsystem
+      - name: Inspect Windows PE imports and GUI subsystem
         shell: pwsh
         run: |
           $binary = Join-Path $env:GITHUB_WORKSPACE 'target/release/mini-usage.exe'
@@ -117,8 +117,8 @@ jobs:
           if ($imports -match '(?im)\b(?:VCRUNTIME|MSVCP)[^\s\r\n]*\.dll') {
             throw "Static CRT guard found a Visual C++ runtime dependency:`n$imports"
           }
-          if ($headers -notmatch '(?im)(Windows CUI|IMAGE_SUBSYSTEM_WINDOWS_CUI|\b3\s+subsystem\s+\(Windows CUI\))') {
-            throw "MiniUsage must remain a console-subsystem executable:`n$headers"
+          if ($headers -notmatch '(?im)(Windows GUI|IMAGE_SUBSYSTEM_WINDOWS_GUI|\b2\s+subsystem\s+\(Windows GUI\))') {
+            throw "MiniUsage must be a GUI-subsystem executable:`n$headers"
           }
           if ($headers -notmatch '(?im)(machine\s+\(x64\)|IMAGE_FILE_MACHINE_AMD64|COFF-x86-64|\b866\b)') {
             throw "MiniUsage release binary must be an x64 PE image:`n$headers"
