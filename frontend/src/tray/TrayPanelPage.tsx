@@ -5,8 +5,9 @@ import type { CodexQuotaResponse } from "../data/types";
 import { serviceClient, type ServiceClient } from "../data/serviceClient";
 import { AnimatedToastStack, useAnimatedToastStack } from "../ui/beui/animated-toast-stack";
 import { Button } from "../ui/beui/button";
+import { ThemeToggle } from "../ui/beui/theme-toggle";
 import { formatLastSyncTime } from "../dashboard/format";
-import { CodexQuotaCard, SkeletonCard, TotalTokenMetric } from "../dashboard/MetricGrid";
+import { CacheHitMetric, CodexQuotaCard, EstimatedCostMetric, SkeletonCard, TotalTokenMetric } from "../dashboard/MetricGrid";
 import { RangeSelector } from "../dashboard/RangeSelector";
 import {
   useDashboardController,
@@ -58,9 +59,6 @@ function refreshErrorMessage(refreshState: TrayPanelViewModel["refresh_state"], 
 }
 
 export function TrayPanelView({ view, quota, stopping, onOpenDashboard, onStop }: TrayPanelViewProps) {
-  const metricsLoading =
-    view.metrics === null &&
-    (view.load_state === "initial" || view.load_state === "loading");
   const loadError = loadErrorMessage(view.load_state);
   const refreshError = refreshErrorMessage(view.refresh_state, view.error_code);
   const refreshEnabled =
@@ -81,6 +79,7 @@ export function TrayPanelView({ view, quota, stopping, onOpenDashboard, onStop }
           Dashboard
           <ArrowUpRight className="h-4 w-4" />
         </Button>
+        <div className="ml-auto text-xs text-muted-foreground">上次同步：{formatLastSyncTime(view.last_scan_completed_at_ms)}</div>
         <Button
           variant="ghost"
           size="icon"
@@ -91,6 +90,12 @@ export function TrayPanelView({ view, quota, stopping, onOpenDashboard, onStop }
         >
           <RefreshCw className={`h-4 w-4${refreshAnimating ? " animate-spin" : ""}`} />
         </Button>
+        <ThemeToggle
+          variant="circle-blur"
+          start="bottom-up"
+          className="rounded-xl border border-border bg-background p-2.5"
+          iconClassName="h-5 w-5"
+        />
         <Button
           variant="outline"
           size="icon"
@@ -124,10 +129,22 @@ export function TrayPanelView({ view, quota, stopping, onOpenDashboard, onStop }
         </div>
       ) : null}
 
-      {metricsLoading || view.metrics === null ? <SkeletonCard wide bar /> : <TotalTokenMetric usage={view.metrics} />}
-      <CodexQuotaCard quota={quota} />
-
-      <div className="text-xs text-muted-foreground">上次同步：{formatLastSyncTime(view.last_scan_completed_at_ms)}</div>
+      <div className="grid grid-cols-[304px_304px] gap-4 [&>*]:col-span-1" aria-label={view.metrics ? "KPI 指标" : "KPI 加载中"}>
+        {view.metrics === null ? (
+          <>
+            <SkeletonCard />
+            <SkeletonCard />
+            <SkeletonCard />
+          </>
+        ) : (
+          <>
+            <TotalTokenMetric usage={view.metrics} />
+            <EstimatedCostMetric usage={view.metrics} glare={false} />
+            <CacheHitMetric usage={view.metrics} glare={false} />
+          </>
+        )}
+        <CodexQuotaCard quota={quota} glare={false} />
+      </div>
     </div>
   );
 }

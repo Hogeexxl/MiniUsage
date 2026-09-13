@@ -282,10 +282,10 @@ function measure(scenario: Scenario): MeasureSuccess {
   if (roots.length !== 1) throw new Error("measurement root missing or not unique");
   const root = roots[0];
   const rootRect = root.getBoundingClientRect();
-  if (rootRect.width !== 341) throw new Error(`measurement root width is ${rootRect.width}, expected 341`);
+  if (rootRect.width !== 656) throw new Error(`measurement root width is ${rootRect.width}, expected 656`);
 
   let minVisibleLeft = 0;
-  let maxVisibleRight = 341;
+  let maxVisibleRight = 656;
   let maxVisibleBottom = rootRect.height;
   for (const element of measurementElements(root, scenario)) {
     const style = getComputedStyle(element);
@@ -299,7 +299,7 @@ function measure(scenario: Scenario): MeasureSuccess {
     const left = rect.left - rootRect.left;
     const right = rect.right - rootRect.left;
     const bottom = rect.bottom - rootRect.top;
-    if (left < 0 || right > 341) throw new Error("measurement element overflows the 341px viewport");
+    if (left < 0 || right > 656) throw new Error("measurement element overflows the 656px viewport");
     minVisibleLeft = Math.min(minVisibleLeft, left);
     maxVisibleRight = Math.max(maxVisibleRight, right);
     maxVisibleBottom = Math.max(maxVisibleBottom, bottom);
@@ -363,7 +363,7 @@ export function TrayPanelMeasurementPage() {
 
   const specimen = SPECIMENS[scenario];
   return (
-    <div data-tray-measure-root style={{ width: "341px" }}>
+    <div data-tray-measure-root style={{ width: "656px" }}>
       <TrayPanelView
         view={specimen.view}
         quota={specimen.quota}

@@ -1,10 +1,10 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 
 import type { SummaryUsageDto } from "../data/types";
 import { chartMuted, chartSeriesColor } from "./charts/chartPalette";
 import type { CodexQuotaResponse } from "../data/types";
-import { codexQuotaColor, MetricGrid } from "./MetricGrid";
+import { CacheHitMetric, codexQuotaColor, EstimatedCostMetric, MetricGrid } from "./MetricGrid";
 import { formatCodexPlanType, formatCodexResetTime } from "./format";
 
 const usage: SummaryUsageDto = {
@@ -83,7 +83,44 @@ function widths(segments: HTMLElement[]): string[] {
   return segments.map((segment) => segment.style.width);
 }
 
+function enableTiltEffects() {
+  vi.spyOn(window, "matchMedia").mockImplementation((query) => ({
+    matches: query.includes("(hover: hover) and (pointer: fine)"),
+    media: query,
+    onchange: null,
+    addListener: () => undefined,
+    removeListener: () => undefined,
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+    dispatchEvent: () => false,
+  }));
+}
+
+function glareOverlayCount(card: HTMLElement): number {
+  return Array.from(card.children).filter((child) =>
+    child.classList.contains("pointer-events-none") &&
+    child.classList.contains("absolute") &&
+    child.classList.contains("inset-0") &&
+    child.classList.contains("opacity-15"),
+  ).length;
+}
+
 describe("MetricGrid v0.2.1", () => {
+  it("exports the shared tray metric components without changing dashboard behavior", () => {
+    expect(CacheHitMetric).toEqual(expect.any(Function));
+    expect(EstimatedCostMetric).toEqual(expect.any(Function));
+  });
+
+  it("keeps glare only on the total token card in the dashboard grid", async () => {
+    enableTiltEffects();
+    render(<MetricGrid usage={usage} modelFilterActive={false} quota={readyQuota} />);
+
+    const grid = screen.getByLabelText("KPI 指标");
+    await waitFor(() => {
+      expect(Array.from(grid.children).map((card) => glareOverlayCount(card as HTMLElement))).toEqual([1, 0, 0, 0, 0]);
+    });
+  });
+
   it("[T-S03-001] renders five KPI cards and all required titles without a model filter", () => {
     render(<MetricGrid usage={usage} modelFilterActive={false} quota={readyQuota} />);
 
