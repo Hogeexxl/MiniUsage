@@ -1004,7 +1004,7 @@ mod tests {
                     bottom: 1040,
                 },
                 popup: PhysicalSize::new(341, 400),
-                expected: PhysicalPosition::new(1649, 632),
+                expected: PhysicalPosition::new(1579, 632),
             },
             Case {
                 anchor: PhysicalRect {
@@ -1077,7 +1077,7 @@ mod tests {
                     bottom: 984,
                 },
                 popup: PhysicalSize::new(426, 500),
-                expected: PhysicalPosition::new(-1280, 476),
+                expected: PhysicalPosition::new(-1280, 484),
             },
         ];
         for case in cases {
