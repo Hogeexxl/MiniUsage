@@ -1,0 +1,49 @@
+name: Windows Tray Preflight
+
+on:
+  push:
+    branches:
+      - codex/windows-tray-panel
+    paths:
+      - Cargo.toml
+      - assets/windows/tray-icon.png
+      - .github/workflows/windows-tray-preflight.yml
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  preflight:
+    name: Windows x64 dependency preflight
+    runs-on: windows-latest
+    steps:
+      - name: Check out feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: codex/windows-tray-panel
+
+      - name: Set up Rust stable
+        shell: pwsh
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+
+      - name: Resolve once and check frozen desktop dependency line
+        shell: pwsh
+        run: cargo check --bin mini-usage
+
+      - name: Commit resolved Cargo.lock
+        shell: pwsh
+        run: |
+          if (git diff --quiet -- Cargo.lock) {
+            Write-Host 'Cargo.lock already matches the preflight resolution.'
+            exit 0
+          }
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add Cargo.lock
+          git commit -m 'chore: lock Windows tray dependencies [skip ci]'
+          git push origin HEAD:codex/windows-tray-panel
