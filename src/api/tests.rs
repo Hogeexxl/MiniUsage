@@ -693,3 +693,203 @@ mod support;
 mod spec05_concurrency;
 
 mod spec05_p2;
+
+
+#[tokio::test]
+async fn t_public_api_v1_info_contract_is_stable() {
+    let fixture = support::ApiFixture::new("public-v1-info");
+    let response = fixture.call(Method::GET, "/api/v1/info", &[]).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response
+            .headers()
+            .get(header::CACHE_CONTROL)
+            .and_then(|value| value.to_str().ok()),
+        Some("no-store")
+    );
+    assert_eq!(
+        json_body(response).await,
+        json!({
+            "service": "miniusage",
+            "app_version": env!("CARGO_PKG_VERSION"),
+            "api_version": "1",
+            "capabilities": [
+                "revision",
+                "revision-events",
+                "status",
+                "codex-quota",
+                "usage-summary"
+            ]
+        })
+    );
+    fixture.scanner.shutdown().unwrap();
+}
+
+#[tokio::test]
+async fn t_public_api_v1_revision_and_status_expose_only_public_contract() {
+    let fixture = support::ApiFixture::new("public-v1-status");
+
+    let revision = fixture.call(Method::GET, "/api/v1/revision", &[]).await;
+    assert_eq!(revision.status(), StatusCode::OK);
+    let revision = json_body(revision).await;
+    assert!(revision["data_revision"].as_i64().is_some());
+    assert!(revision["status_revision"].as_i64().is_some());
+
+    let status = fixture.call(Method::GET, "/api/v1/status", &[]).await;
+    assert_eq!(status.status(), StatusCode::OK);
+    let status = json_body(status).await;
+    for key in [
+        "data_revision",
+        "status_revision",
+        "scan_state",
+        "source_binding_status",
+        "last_finished_scan_result",
+        "last_scan_started_at_ms",
+        "last_scan_completed_at_ms",
+        "last_scan_failed_at_ms",
+        "last_scan_error_code",
+    ] {
+        assert!(status.get(key).is_some(), "missing public status field: {key}");
+    }
+    for internal_key in [
+        "active_scan_id",
+        "last_finished_scan_id",
+        "followup",
+        "target_scan",
+    ] {
+        assert!(
+            status.get(internal_key).is_none(),
+            "internal status field leaked: {internal_key}"
+        );
+    }
+
+    fixture.scanner.shutdown().unwrap();
+}
+
+#[tokio::test]
+async fn t_public_api_v1_quota_redacts_account_and_internal_fields() {
+    let provider = quota_fixture_provider();
+    let service = CodexQuotaService::with_provider_and_clock(
+        "/tmp/codex-public-api-v1-quota",
+        Arc::new(provider),
+        Arc::new(|| 1_700_000_000_000),
+    );
+    let ready = service.refresh_now().await;
+    assert_eq!(ready.status, CodexQuotaStatus::Ready);
+
+    let fixture = support::ApiFixture::with_quota_service("public-v1-quota", service);
+    let response = fixture.call(Method::GET, "/api/v1/codex/quota", &[]).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = json_body(response).await;
+
+    assert_eq!(body["status"], "ready");
+    assert!(body.get("session").is_some());
+    assert!(body.get("weekly").is_some());
+    assert_eq!(body["fetched_at_ms"], 1_700_000_000_000_i64);
+    assert!(body.get("account_email").is_none());
+    assert!(body.get("plan_type").is_none());
+    assert!(body.get("reset_credits_available").is_none());
+
+    fixture.scanner.shutdown().unwrap();
+}
+
+#[tokio::test]
+async fn t_public_api_v1_summary_supports_named_and_custom_ranges_only() {
+    let fixture = support::ApiFixture::new("public-v1-summary-ranges");
+
+    for range in ["today", "yesterday", "7d", "30d", "year"] {
+        let uri = format!("/api/v1/usage/summary?range={range}");
+        let response = fixture.call(Method::GET, &uri, &[]).await;
+        assert_eq!(response.status(), StatusCode::OK, "range={range}");
+        let body = json_body(response).await;
+        assert_eq!(body["range"]["key"], range);
+        assert!(
+            body["range"]["end_ms"].as_i64().unwrap()
+                > body["range"]["start_ms"].as_i64().unwrap()
+        );
+        assert!(
+            body["range"]["timezone"]
+                .as_str()
+                .is_some_and(|value| !value.is_empty())
+        );
+        assert!(body["usage"].is_object());
+    }
+
+    let custom = fixture
+        .call(
+            Method::GET,
+            "/api/v1/usage/summary?range=custom&from=2026-09-01&to=2026-09-14",
+            &[],
+        )
+        .await;
+    assert_eq!(custom.status(), StatusCode::OK);
+    let custom = json_body(custom).await;
+    assert_eq!(custom["range"]["key"], "custom");
+    assert!(
+        custom["range"]["end_ms"].as_i64().unwrap()
+            > custom["range"]["start_ms"].as_i64().unwrap()
+    );
+
+    for uri in [
+        "/api/v1/usage/summary?range=today&model=gpt-5",
+        "/api/v1/usage/summary?range=today&project_path=%2Ftmp",
+        "/api/v1/usage/summary?range=today&unknown=1",
+    ] {
+        let response = fixture.call(Method::GET, uri, &[]).await;
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{uri}");
+        assert_eq!(json_body(response).await["error"]["code"], "INVALID_FILTER");
+    }
+
+    fixture.scanner.shutdown().unwrap();
+}
+
+#[tokio::test]
+async fn t_public_api_v1_events_is_sse_and_keeps_existing_local_security() {
+    let fixture = support::ApiFixture::new("public-v1-events");
+
+    let response = fixture.call(Method::GET, "/api/v1/events", &[]).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response
+            .headers()
+            .get(header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok()),
+        Some("text/event-stream")
+    );
+    assert_eq!(
+        response
+            .headers()
+            .get("x-accel-buffering")
+            .and_then(|value| value.to_str().ok()),
+        Some("no")
+    );
+    assert_eq!(
+        response
+            .headers()
+            .get(header::CACHE_CONTROL)
+            .and_then(|value| value.to_str().ok()),
+        Some("no-store")
+    );
+    drop(response);
+
+    let rejected = fixture
+        .app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::GET)
+                .uri("/api/v1/revision")
+                .header("host", "example.test")
+                .body(axum::body::Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(rejected.status(), StatusCode::FORBIDDEN);
+    assert_eq!(
+        json_body(rejected).await["error"]["code"],
+        "FORBIDDEN_HOST"
+    );
+
+    fixture.scanner.shutdown().unwrap();
+}
