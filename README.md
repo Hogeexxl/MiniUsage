@@ -120,6 +120,20 @@ MiniUsage 自身的数据全部落在本机：
 
 监听地址与端口固定为 `127.0.0.1:3210`，不可配置，以保证服务不会暴露到网络。
 
+## Public API v1
+
+MiniUsage 提供只读、版本化的本机 Public API，供 PeekFlow 等同机应用读取已经处理好的 Usage、Codex Quota 与状态数据。Public API 与 Dashboard 自用的 Internal API 共用底层 Query / Aggregate 能力，但拥有独立稳定契约。
+
+Public API 根路径：
+
+~~~text
+http://127.0.0.1:3210/api/v1
+~~~
+
+首版提供 info、revision、revision SSE、status、Codex quota 与 usage summary；Usage 时间范围支持 today、yesterday、7d、30d、year 和 custom。
+
+完整架构、接口表、SSE/GET 协作方式与时间语义见 [Public API v1 产品需求文档](docs/MiniUsage_Public_API_v1_产品需求文档.md)。
+
 ## 平台、更新与开发
 
 - 正式发布支持：`Windows 10/11 x64` 与 `macOS Apple Silicon arm64`。
