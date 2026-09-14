@@ -141,7 +141,7 @@ impl From<CodexQuotaWindow> for QuotaWindowResponse {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 struct QuotaResponse {
     status: &'static str,
-    session: Option<QuotaWindowResponse>,
+    five_hour: Option<QuotaWindowResponse>,
     weekly: Option<QuotaWindowResponse>,
     fetched_at_ms: Option<i64>,
 }
@@ -155,7 +155,7 @@ impl From<CodexQuotaResponse> for QuotaResponse {
                 CodexQuotaStatus::AuthRequired => "auth_required",
                 CodexQuotaStatus::Unavailable => "unavailable",
             },
-            session: value.session.map(Into::into),
+            five_hour: value.session.map(Into::into),
             weekly: value.weekly.map(Into::into),
             fetched_at_ms: value.fetched_at_ms,
         }
