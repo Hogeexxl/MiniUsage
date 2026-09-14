@@ -783,8 +783,9 @@ async fn t_public_api_v1_quota_redacts_account_and_internal_fields() {
     let body = json_body(response).await;
 
     assert_eq!(body["status"], "ready");
-    assert!(body.get("session").is_some());
+    assert!(body.get("five_hour").is_some());
     assert!(body.get("weekly").is_some());
+    assert!(body.get("session").is_none());
     assert_eq!(body["fetched_at_ms"], 1_700_000_000_000_i64);
     assert!(body.get("account_email").is_none());
     assert!(body.get("plan_type").is_none());
