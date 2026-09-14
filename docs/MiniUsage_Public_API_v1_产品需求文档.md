@@ -115,7 +115,7 @@ Public API v1 复用 Mu 当前 HTTP Server，并继续固定监听：
 | Revision | GET /api/v1/revision | data_revision、status_revision | 轻量判断 Usage 数据或 Mu 状态是否发生变化；用于启动校验、SSE 断线恢复和降级 polling |
 | Revision SSE | GET /api/v1/events | SSE revision event，payload 为 data_revision、status_revision | 长连接变化通知；Mu 有变化时主动通知客户端，客户端再通过 GET 拉取真实数据 |
 | Mu 状态 | GET /api/v1/status | 数据 revision、扫描状态、数据源状态、最近扫描结果/时间与安全错误码 | 告诉第三方应用 Mu 当前具体处于什么状态，用于 ready / updating / unavailable 等判断 |
-| Codex Quota | GET /api/v1/codex/quota | Quota 状态、5H window、Weekly window、使用/剩余比例、reset timestamp、抓取时间 | 用于 Widget 或其他应用展示 Codex 当前额度 |
+| Codex Quota | GET /api/v1/codex/quota | Quota 状态、five_hour（5H）window、weekly window、使用/剩余比例、reset timestamp、抓取时间 | 用于 Widget 或其他应用展示 Codex 当前额度 |
 | Usage 汇总 | GET /api/v1/usage/summary | Token、预估费用、Session 数、缓存命中率、Reasoning Token、数据完整状态和实际解析后的 range | Public API v1 的核心统计接口，用于 KPI、Widget、CLI 与其他汇总展示 |
 
 首版不支持 Session 列表、Session 详情、模型分布、项目分布、Skills、模型/项目筛选、Filter Options、WebSocket 与任何 Public 写操作。
@@ -250,7 +250,7 @@ Public Status 只暴露第三方应用需要的稳定状态，不暴露 target s
 Public Quota 首版提供：
 
 - status；
-- 5H session window；
+- five_hour（5H）window；
 - Weekly window；
 - used_percent；
 - remaining_percent；
