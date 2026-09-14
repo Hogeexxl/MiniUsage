@@ -871,7 +871,8 @@ async fn t_public_api_v1_events_is_sse_and_keeps_existing_local_security() {
             .and_then(|value| value.to_str().ok()),
         Some("no-store")
     );
-    drop(response);
+    let events_finished =
+        tokio::spawn(async move { to_bytes(response.into_body(), 64 * 1024).await.unwrap() });
 
     let rejected = fixture
         .app
@@ -888,6 +889,23 @@ async fn t_public_api_v1_events_is_sse_and_keeps_existing_local_security() {
         .unwrap();
     assert_eq!(rejected.status(), StatusCode::FORBIDDEN);
     assert_eq!(json_body(rejected).await["error"]["code"], "FORBIDDEN_HOST");
+
+    let stopped = fixture
+        .call(
+            Method::POST,
+            "/api/service/stop",
+            &[("x-miniusage-request", "1")],
+        )
+        .await;
+    assert_eq!(stopped.status(), StatusCode::OK);
+    let event_bytes = tokio::time::timeout(std::time::Duration::from_secs(1), events_finished)
+        .await
+        .expect("Public API SSE must close during process shutdown")
+        .unwrap();
+    let rendered = String::from_utf8_lossy(&event_bytes);
+    assert!(rendered.contains("event: revision"));
+    assert!(rendered.contains("data_revision"));
+    assert!(rendered.contains("status_revision"));
 
     fixture.scanner.shutdown().unwrap();
 }
