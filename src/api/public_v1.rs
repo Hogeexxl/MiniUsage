@@ -239,7 +239,8 @@ impl From<query::SummaryUsageDto> for UsageSummaryResponse {
             estimated_cost_status: value.estimated_cost_status,
             session_count: value.session_count,
             cost_incomplete_session_count: value.cost_incomplete_session_count,
-            complete_session_cost_per_million_tokens: value.complete_session_cost_per_million_tokens,
+            complete_session_cost_per_million_tokens: value
+                .complete_session_cost_per_million_tokens,
             session_health: value.session_health.into(),
         }
     }
