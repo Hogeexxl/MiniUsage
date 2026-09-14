@@ -748,7 +748,10 @@ async fn t_public_api_v1_revision_and_status_expose_only_public_contract() {
         "last_scan_failed_at_ms",
         "last_scan_error_code",
     ] {
-        assert!(status.get(key).is_some(), "missing public status field: {key}");
+        assert!(
+            status.get(key).is_some(),
+            "missing public status field: {key}"
+        );
     }
     for internal_key in [
         "active_scan_id",
@@ -804,8 +807,7 @@ async fn t_public_api_v1_summary_supports_named_and_custom_ranges_only() {
         let body = json_body(response).await;
         assert_eq!(body["range"]["key"], range);
         assert!(
-            body["range"]["end_ms"].as_i64().unwrap()
-                > body["range"]["start_ms"].as_i64().unwrap()
+            body["range"]["end_ms"].as_i64().unwrap() > body["range"]["start_ms"].as_i64().unwrap()
         );
         assert!(
             body["range"]["timezone"]
@@ -826,8 +828,7 @@ async fn t_public_api_v1_summary_supports_named_and_custom_ranges_only() {
     let custom = json_body(custom).await;
     assert_eq!(custom["range"]["key"], "custom");
     assert!(
-        custom["range"]["end_ms"].as_i64().unwrap()
-            > custom["range"]["start_ms"].as_i64().unwrap()
+        custom["range"]["end_ms"].as_i64().unwrap() > custom["range"]["start_ms"].as_i64().unwrap()
     );
 
     for uri in [
@@ -886,10 +887,7 @@ async fn t_public_api_v1_events_is_sse_and_keeps_existing_local_security() {
         .await
         .unwrap();
     assert_eq!(rejected.status(), StatusCode::FORBIDDEN);
-    assert_eq!(
-        json_body(rejected).await["error"]["code"],
-        "FORBIDDEN_HOST"
-    );
+    assert_eq!(json_body(rejected).await["error"]["code"], "FORBIDDEN_HOST");
 
     fixture.scanner.shutdown().unwrap();
 }
