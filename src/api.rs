@@ -32,6 +32,7 @@ use crate::{
     usage::{SummaryQuery, ledger::UsageLedger},
 };
 
+mod public_v1;
 mod static_assets;
 
 pub use query::ApiError;
@@ -161,7 +162,7 @@ pub const fn listen_address() -> SocketAddr {
 }
 
 fn build_router(state: ApiState, frontend: static_assets::FrontendSource) -> Router {
-    let api = Router::new()
+    let api = public_v1::routes()
         .route("/health", get(health))
         .route("/codex/quota", get(codex_quota))
         .route("/revision", get(revision))
