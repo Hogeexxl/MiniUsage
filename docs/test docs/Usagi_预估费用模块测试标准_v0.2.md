@@ -1,8 +1,8 @@
-# MiniUsage 预估费用模块测试标准 v0.2
+# Usagi 预估费用模块测试标准 v0.2
 
-> 对应实施方案：`MiniUsage_预估费用模块实施方案_v0.5.md`  
-> 代码基线：用户于 2026-08-12 提供的最新 MiniUsage 源码快照 `8701431b-11c4-4127-a130-ad3f334a9422.zip`  
-> 本文只定义该实施方案新增或改变行为的**必要测试标准**，生产语义以 `MiniUsage_预估费用模块实施方案_v0.5.md` 为唯一依据；不重复现有 Spec01～06 已稳定覆盖的全部历史测试。  
+> 对应实施方案：`Usagi_预估费用模块实施方案_v0.5.md`  
+> 代码基线：用户于 2026-08-12 提供的最新 Usagi 源码快照 `8701431b-11c4-4127-a130-ad3f334a9422.zip`  
+> 本文只定义该实施方案新增或改变行为的**必要测试标准**，生产语义以 `Usagi_预估费用模块实施方案_v0.5.md` 为唯一依据；不重复现有 Spec01～06 已稳定覆盖的全部历史测试。  
 > 测试执行结果必须另写执行记录；不得继承旧版本 PASS。与本版生产行为冲突的旧占位断言（例如 `estimated_cost` 恒为 `null`、Main Detail 只按 `model` 分组）必须同步更新或删除，不得反向约束生产实现。
 
 ---
@@ -70,7 +70,7 @@ C. reasoning_effort usage 维度
 | P0 | 数据口径、迁移、canonical identity、durable state、费用计算、历史重建、聚合/API 契约。任一失败阻断本版验收。 |
 | P1 | Drawer 展示和兼容性。必须通过，但不扩展成布局/压力专项。 |
 
-本文只定义测试内容；具体施工 ownership 和并行关系以 `MiniUsage_预估费用模块实施方案_v0.5.md` Part E 为准。
+本文只定义测试内容；具体施工 ownership 和并行关系以 `Usagi_预估费用模块实施方案_v0.5.md` Part E 为准。
 
 测试执行点固定为：
 
@@ -194,7 +194,7 @@ C1
 → cost module unit tests
 
 F1
-→ miniUsageClient / SessionDetailDrawer / formatter 相关 frontend tests
+→ usagiClient / SessionDetailDrawer / formatter 相关 frontend tests
 
 D1
 → event cost persistence / Ledger::open reprice tests
@@ -226,7 +226,7 @@ Integration Owner
 理由：
 
 - 前五类属于现有基础能力，继续由现有测试回归；
-- 后三类不在 `MiniUsage_预估费用模块实施方案_v0.5.md` 的生产范围内。
+- 后三类不在 `Usagi_预估费用模块实施方案_v0.5.md` 的生产范围内。
 
 ---
 

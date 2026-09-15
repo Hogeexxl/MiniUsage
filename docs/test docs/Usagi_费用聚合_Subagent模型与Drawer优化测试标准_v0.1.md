@@ -1,9 +1,9 @@
-# MiniUsage 费用聚合、Subagent 模型归属与 Drawer 优化测试标准
+# Usagi 费用聚合、Subagent 模型归属与 Drawer 优化测试标准
 
 > 版本：v0.1  
 > 日期：2026-08-13  
-> 对应实施方案：`MiniUsage_费用聚合_Subagent模型与Drawer优化实施方案_v0.2.md`  
-> 代码基线：用户本轮提供的最新 MiniUsage 代码快照（已完成扫描性能优化）  
+> 对应实施方案：`Usagi_费用聚合_Subagent模型与Drawer优化实施方案_v0.2.md`  
+> 代码基线：用户本轮提供的最新 Usagi 代码快照（已完成扫描性能优化）  
 > 本文只定义本轮新增或改变行为的**必要测试标准**。生产语义以对应实施方案为唯一依据；不重复 Spec01～06、预估费用模块、扫描性能优化中已经稳定覆盖的全部历史测试。
 
 ---
@@ -186,8 +186,8 @@ Track C — Aggregate / API
 测试：aggregate/API module tests
 
 Frontend Contract Owner（Gate B 尾部的串行 seam）
-生产：frontend/src/data/types.ts、frontend/src/data/miniUsageClient.ts
-测试：frontend/src/data/miniUsageClient.test.ts
+生产：frontend/src/data/types.ts、frontend/src/data/usagiClient.ts
+测试：frontend/src/data/usagiClient.test.ts
 说明：API DTO 冻结后一次完成，后续 D/E Track 不再并行修改这两个文件
 
 Track D — Session / Dashboard
@@ -209,7 +209,7 @@ Integration Owner
 
 关键禁止：
 
-- 两个 Track 同时修改 `src/usage/aggregate.rs`、`frontend/src/data/miniUsageClient.ts`、`frontend/src/index.css` 等共享热点文件。
+- 两个 Track 同时修改 `src/usage/aggregate.rs`、`frontend/src/data/usagiClient.ts`、`frontend/src/index.css` 等共享热点文件。
 - Track B 为方便测试去改 Track A pricing，或 Track C 为方便 UI 去改 Frontend contract。
 - Integration Owner 在各 Track 尚未过局部 Gate 时提前“大一统重构”。
 
@@ -259,7 +259,7 @@ A2 与 B2 都可能在启动/历史数据上生效，但机制必须独立；它
 
 ```text
 Frontend Contract Owner
--> types.ts + miniUsageClient.ts + client tests
+-> types.ts + usagiClient.ts + client tests
 -> 完成 T-MU04-C03
 ```
 
@@ -274,7 +274,7 @@ T-MU04-C02
 T-MU04-C03
 复跑 Gate A
 backend 受影响测试
-frontend miniUsageClient tests + npm run check
+frontend usagiClient tests + npm run check
 ```
 
 ### 11.3 Wave 3 — 两条 UI Track 并行
@@ -344,7 +344,7 @@ Gate A/B/C 全部重跑
 - 新货币或费用精度测试
 ```
 
-其中 scanner 性能不新增第二套测试，而是最终复跑当前 `MiniUsage_扫描更新性能优化测试标准_v0.1.md` 的 Gate D。
+其中 scanner 性能不新增第二套测试，而是最终复跑当前 `Usagi_扫描更新性能优化测试标准_v0.1.md` 的 Gate D。
 
 ---
 

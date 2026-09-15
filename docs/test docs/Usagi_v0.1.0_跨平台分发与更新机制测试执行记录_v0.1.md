@@ -1,6 +1,6 @@
-# MiniUsage v0.1.0 跨平台分发与更新机制测试执行记录 v0.1
+# Usagi v0.1.0 跨平台分发与更新机制测试执行记录 v0.1
 
-> 验收依据：`docs/test docs/MiniUsage_v0.1.0_跨平台分发与更新机制测试标准_v0.1.md`  
+> 验收依据：`docs/test docs/Usagi_v0.1.0_跨平台分发与更新机制测试标准_v0.1.md`  
 > 正式版本：`v0.1.0`  
 > 正式 Release commit：`a3c3f7d8e27cecdf6f66157540b84e878532e2a0`  
 > 正式 tag：`v0.1.0`（annotated tag，指向上述 commit）  
@@ -24,7 +24,7 @@ Gate A ～ Gate G：全部 PASS
 FINAL Gate：PASS
 ```
 
-因此：**MiniUsage v0.1.0 跨平台分发与更新机制正式完成。**
+因此：**Usagi v0.1.0 跨平台分发与更新机制正式完成。**
 
 正式支持范围保持为：
 
@@ -237,8 +237,8 @@ Recovery run 实际输出：
 
 ```text
 Anonymous public latest Release verified: v0.1.0
-Released MiniUsage 0.1.0 correctly reports current/latest equality
-Internal MiniUsage 0.0.9 correctly detects public 0.1.0 as an update
+Released Usagi 0.1.0 correctly reports current/latest equality
+Internal Usagi 0.0.9 correctly detects public 0.1.0 as an update
 T-DIST-015 PASS
 ```
 
@@ -357,9 +357,9 @@ FINAL blocking result under documented rule: no
 
 ## 9. 最终公开 GitHub Release
 
-Release：`MiniUsage v0.1.0`  
+Release：`Usagi v0.1.0`  
 Release ID：`371185376`  
-URL：`https://github.com/Hogeexxl/MiniUsage/releases/tag/v0.1.0`  
+URL：`https://github.com/Hogeexxl/Usagi/releases/tag/v0.1.0`  
 状态：
 
 ```text
@@ -373,29 +373,29 @@ anonymous access = PASS
 
 | Asset | 最终公开 SHA-256 |
 |---|---|
-| `MiniUsage-v0.1.0-windows-x64-setup.exe` | `6b70cebcb63378690000fe4ca5b8a5428de733f299aa2fc83af7f2b0e7fd4624` |
-| `MiniUsage-v0.1.0-macos-arm64.dmg` | `b39a6dda5480a83c04121bfb0dd39b8abef35c8c5524a4b0933b408e2c235f0d` |
+| `Usagi-v0.1.0-windows-x64-setup.exe` | `6b70cebcb63378690000fe4ca5b8a5428de733f299aa2fc83af7f2b0e7fd4624` |
+| `Usagi-v0.1.0-macos-arm64.dmg` | `b39a6dda5480a83c04121bfb0dd39b8abef35c8c5524a4b0933b408e2c235f0d` |
 | `SHA256SUMS.txt` | GitHub asset 已公开；文件内容包含上述两个安装资产的真实 SHA-256 |
 
 Repair run 对公开安装资产实际执行：
 
 ```text
-MiniUsage-v0.1.0-windows-x64-setup.exe: OK
-MiniUsage-v0.1.0-macos-arm64.dmg: OK
+Usagi-v0.1.0-windows-x64-setup.exe: OK
+Usagi-v0.1.0-macos-arm64.dmg: OK
 ```
 
 `SHA256SUMS.txt` 内容中的两条值为：
 
 ```text
-6b70cebcb63378690000fe4ca5b8a5428de733f299aa2fc83af7f2b0e7fd4624  MiniUsage-v0.1.0-windows-x64-setup.exe
-b39a6dda5480a83c04121bfb0dd39b8abef35c8c5524a4b0933b408e2c235f0d  MiniUsage-v0.1.0-macos-arm64.dmg
+6b70cebcb63378690000fe4ca5b8a5428de733f299aa2fc83af7f2b0e7fd4624  Usagi-v0.1.0-windows-x64-setup.exe
+b39a6dda5480a83c04121bfb0dd39b8abef35c8c5524a4b0933b408e2c235f0d  Usagi-v0.1.0-macos-arm64.dmg
 ```
 
 最终资产集合验证为恰好：
 
 ```text
-MiniUsage-v0.1.0-macos-arm64.dmg
-MiniUsage-v0.1.0-windows-x64-setup.exe
+Usagi-v0.1.0-macos-arm64.dmg
+Usagi-v0.1.0-windows-x64-setup.exe
 SHA256SUMS.txt
 ```
 
@@ -491,4 +491,4 @@ FAIL：0
 未进行：0
 ```
 
-**MiniUsage v0.1.0 已达到 `MiniUsage_v0.1.0_跨平台分发与更新机制测试标准_v0.1.md` 的最终完成定义。**
+**Usagi v0.1.0 已达到 `Usagi_v0.1.0_跨平台分发与更新机制测试标准_v0.1.md` 的最终完成定义。**

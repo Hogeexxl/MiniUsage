@@ -1,12 +1,12 @@
-# MiniUsage v0.1.0 跨平台分发与更新机制测试标准 v0.1
+# Usagi v0.1.0 跨平台分发与更新机制测试标准 v0.1
 
 > 版本：v0.1  
 > 日期：2026-08-14  
-> 对应实施方案：`MiniUsage_v0.1.0_跨平台分发与更新机制实施方案_v0.1.md`  
-> 代码基线：实施方案记录的当前 MiniUsage v0.1.0 功能基线  
+> 对应实施方案：`Usagi_v0.1.0_跨平台分发与更新机制实施方案_v0.1.md`  
+> 代码基线：实施方案记录的当前 Usagi v0.1.0 功能基线  
 > 适用范围：Windows/macOS 跨平台运行、正式安装包、嵌入式前端、启动器、GitHub CI/Release、版本检查与更新提示  
 >
-> **本文是 MiniUsage v0.1.0“跨平台分发与更新机制”范围内的唯一正式测试执行标准。**  
+> **本文是 Usagi v0.1.0“跨平台分发与更新机制”范围内的唯一正式测试执行标准。**  
 > 本轮功能语义以对应实施方案为准；实施方案 S0～S13 中的 Gate 继续作为施工阶段门禁，但不得替代本文正式测试条目。最终是否可发布 v0.1.0，以本文完成门为准。
 
 > **范围决策（2026-08-14）**：v0.1.0 正式测试与发布只覆盖两个安装包：Windows 10/11 x64 安装包和 macOS Apple Silicon arm64 DMG，另附 `SHA256SUMS.txt`。macOS Intel/x86_64 不属于本版本正式支持范围，不纳入 runner、构建、smoke、Release asset、Gate 或 DoD；这是范围决策，不表示 Intel 测试失败。
@@ -177,12 +177,12 @@ v0.1.0 是正式公开发布，因此本文登记的 P2 在 **FINAL Gate 必须�
 | ID | 依赖分类 | 优先级 | 计划执行点 | 测试条目 | 当前状态 | 测试状态 | 计划测试/证据落点 | 缺口 / 说明 |
 |---|---|---:|---|---|---|---|---|---|
 | **T-DIST-001** | 独立闭环 | P0 | S1 / Gate A | **非 vendor + locked 构建矩阵**：仓库不再强制 `crates.io -> vendor`；无 `vendor/` 目录的 fresh checkout 可用 `Cargo.lock` 完成 `cargo check/test --locked`；前端 `npm ci` 可正常安装；运行时版本只取 `CARGO_PKG_VERSION`。 | ⏳ 待实现 | 未进行 | `.cargo/config.toml` 静态 guard + macOS/CI fresh checkout build | 不要求离线构建；不得重新提交 vendor 规避。 |
-| **T-DIST-002** | 独立闭环 + 兼容回归 | P0 | S2 / Gate B | **平台路径矩阵**：显式 `db_path/codex_home` 优先；`CODEX_HOME` 次之；默认值最后。macOS 默认 DB 必须仍为 `~/Library/Application Support/MiniUsage/mu.sqlite3`，默认 Codex 为 `~/.codex`；Windows 默认 Codex 为用户 Home 下 `.codex`，DB 为 Windows Local AppData/MiniUsage。包含空/缺环境变量与 Unicode 用户目录。 | ⏳ 待实现 | 未进行 | `src/platform/paths` table-driven unit tests + platform integration | macOS 默认 DB 地址变化直接 FAIL，防止旧用户出现第二个空数据库。 |
+| **T-DIST-002** | 独立闭环 + 兼容回归 | P0 | S2 / Gate B | **平台路径矩阵**：显式 `db_path/codex_home` 优先；`CODEX_HOME` 次之；默认值最后。macOS 默认 DB 必须仍为 `~/Library/Application Support/Usagi/mu.sqlite3`，默认 Codex 为 `~/.codex`；Windows 默认 Codex 为用户 Home 下 `.codex`，DB 为 Windows Local AppData/Usagi。包含空/缺环境变量与 Unicode 用户目录。 | ⏳ 待实现 | 未进行 | `src/platform/paths` table-driven unit tests + platform integration | macOS 默认 DB 地址变化直接 FAIL，防止旧用户出现第二个空数据库。 |
 | **T-DIST-003** | 独立闭环 + Scanner 前置联动 | P0 | S3 / Gate B | **跨平台物理文件 identity 矩阵**：同一文件重复读取 identity 稳定；两个不同文件 identity 不同；rename 后同一物理文件保持可识别语义；same-path replacement 得到不同 identity/generation；读前/读后/path 最终 identity 不一致时 ChunkReader 拒绝继续提交。Windows identity 不得为统一 `(0,0)`。 | ⏳ 待实现 | 未进行 | `src/platform/file_identity` + `src/scanner/chunk_reader` 私有/集成测试 | 必须使用真实临时文件；禁止只测试 struct 比较。 |
 | **T-DIST-004** | 前置联动：现有 scanner 测试 | P0 | S3～S4 / Gate B | **Windows scanner 真实闭环与测试平台化**：真实 Windows runner 能编译并运行 discovery/chunk reader/scanner 关键测试；两个 rollout 不被错误去重；同一路径 replacement/truncate 能触发既有安全处理；通用测试不因 `std::os::unix`、`ps` 等 Unix-only 依赖失败。真正 OS 特有测试可 target-specific，但不得把整个 scanner 套件从 Windows 跳过。 | ⏳ 待实现 | 未进行 | Windows `cargo test --locked` + scanner integration；平台 RSS adapter 相关测试 | “Windows cargo check 通过”不足以 PASS。 |
 | **T-DIST-005** | 独立闭环 + 前端联动 | P0 | S5 / Gate C | **正式 binary 自包含前端**：production/release binary 被复制到一个没有源码仓库、没有 `frontend/dist` 的临时目录后启动；`/api/health`、`/`、JS/CSS/font/MIME、SPA fallback 均正常，Dashboard 可加载；不存在运行时回退去读仓库 `frontend/dist`。开发模式仍可使用现有 filesystem/dev 路径。 | ⏳ 待实现 | 未进行 | release build smoke + real HTTP/browser smoke | 必须测正式 embedded 路径，不能只测 Vite dev server。 |
-| **T-DIST-006** | 独立闭环 | P0 | S6 / Gate C | **启动器生命周期矩阵**：第一次启动成功 bind `127.0.0.1:3210` 后调用默认浏览器打开 Dashboard；第二次启动探测到具有 MiniUsage health marker 的已有实例时不得创建第二 scanner/DB worker，只重新打开页面并退出；3210 被非 MU 程序占用时返回明确用户可理解错误，不 panic、不 kill 对方；服务仍不得绑定 `0.0.0.0`。 | ⏳ 待实现 | 未进行 | launcher unit/integration + real process smoke；最终 artifact GUI smoke | OS 默认浏览器“窗口确实弹出”允许在最终 Windows/macOS GUI smoke 人工确认一次；其余逻辑必须自动化。 |
-| **T-DIST-007** | 独立闭环 + 主程序联动 | P0 | S7 / Gate D | **UpdateService 状态机/调度/隔离矩阵**：核心服务已可用后立即异步检查；使用 paused/fake time 验证 4h 周期（不得真实等待 4h）；newer/equal/older/invalid tag/timeout/DNS/HTTP error/invalid JSON 状态正确；自动与手动并发检查 single-flight；失败不得抹掉已知新版；GitHub 慢/挂/失败不得阻塞 MiniUsage 启动、Ledger、Scanner、API、手动同步。 | ⏳ 待实现 | 未进行 | `src/update` table-driven tests + startup integration | 外部 GitHub 在此条允许 mock adapter；禁止把网络成功作为测试前置。 |
+| **T-DIST-006** | 独立闭环 | P0 | S6 / Gate C | **启动器生命周期矩阵**：第一次启动成功 bind `127.0.0.1:3210` 后调用默认浏览器打开 Dashboard；第二次启动探测到具有 Usagi health marker 的已有实例时不得创建第二 scanner/DB worker，只重新打开页面并退出；3210 被非 MU 程序占用时返回明确用户可理解错误，不 panic、不 kill 对方；服务仍不得绑定 `0.0.0.0`。 | ⏳ 待实现 | 未进行 | launcher unit/integration + real process smoke；最终 artifact GUI smoke | OS 默认浏览器“窗口确实弹出”允许在最终 Windows/macOS GUI smoke 人工确认一次；其余逻辑必须自动化。 |
+| **T-DIST-007** | 独立闭环 + 主程序联动 | P0 | S7 / Gate D | **UpdateService 状态机/调度/隔离矩阵**：核心服务已可用后立即异步检查；使用 paused/fake time 验证 4h 周期（不得真实等待 4h）；newer/equal/older/invalid tag/timeout/DNS/HTTP error/invalid JSON 状态正确；自动与手动并发检查 single-flight；失败不得抹掉已知新版；GitHub 慢/挂/失败不得阻塞 Usagi 启动、Ledger、Scanner、API、手动同步。 | ⏳ 待实现 | 未进行 | `src/update` table-driven tests + startup integration | 外部 GitHub 在此条允许 mock adapter；禁止把网络成功作为测试前置。 |
 | **T-DIST-008** | 前置联动：S05 HTTP 安全 | P0 | S8 / Gate D | **Update API 契约矩阵**：`GET /api/update/status` 返回当前版本、latest/update_available/release_url/last_checked/check 状态的固定 DTO；`POST /api/update/check` 只触发/复用单次检查；`POST /api/update/open-release` 仅在已有合法 Release URL 时打开对应页面。继续受既有 Host/Origin/Sec-Fetch/loopback 安全边界保护，响应不泄漏 GitHub 原始错误/Token/路径。 | ⏳ 待实现 | 未进行 | real Axum router integration + DTO tests | API 字段在 S8 Gate 冻结；前端不得直接请求 `api.github.com`。 |
 | **T-DIST-009** | 前置联动：S8 | P0 | S9 / Gate D | **前端更新按钮完整状态机**：默认 `检查更新`；主动点击仅本按钮进入 `检查中…`，其它 Dashboard 操作不被禁用；latest 时提示“当前已是最新版本 vX.Y.Z”并恢复按钮；newer 时变 `版本升级`；自动后台发现新版时不弹强制窗口，只把按钮变为 `版本升级`；主动失败给用户提示，自动失败静默；点击 `版本升级` 调用后端打开准确 Release。页面以本地 status 初始读取 + 60s localhost 轮询感知后端 4h 检查结果，timer/unmount 不泄漏，不产生外网前端请求。 | ⏳ 待实现 | 未进行 | `useUpdateController` + `UpdateButton` tests，fake timers；必要 browser integration | 60s 前端轮询只是读取 localhost 状态，不等于每 60s 请求 GitHub。 |
 | **T-DIST-010** | 独立闭环 | P1 | S10 / Gate E | **公开仓库交付边界**：README 只按当前事实描述 Windows/macOS 安装、源码构建、未签名 macOS 首次允许方式、更新机制；已确认的 LICENSE 存在；tracked source 不包含真实 DB/rollout、明显 secret、用户私人绝对路径或 `.cargo/config.toml.saved`；README 不要求最终用户安装 Rust/Cargo/Node/SQLite。 | ⏳ 待实现 | 未进行 | repo static guard + README review | 不把通用示例路径误判为 secret；许可证内容必须来自用户确认。 |
@@ -190,7 +190,7 @@ v0.1.0 是正式公开发布，因此本文登记的 P2 在 **FINAL Gate 必须�
 | **T-DIST-012** | 独立闭环 | P0 | S12 / Gate F | **版本与 Release 资产一致性**：Release workflow 仅正式 `vX.Y.Z` tag 触发；tag `v0.1.0`、`Cargo.toml 0.1.0`、binary reported version、GitHub Release tag/name、两个安装包文件名中的版本一致；不一致时 workflow 必须在上传正式 Release 前失败。生成 `SHA256SUMS`，其中每个正式 asset 均有对应校验值。 | ⏳ 待实现 | 未进行 | release workflow dry-run + artifact metadata assertions | `frontend/package.json` 不参与产品版本判定。 |
 | **T-DIST-013** | 前置联动：Windows 全链路 | P0 | S12 / Gate F | **Windows x64 正式安装包 clean-runtime smoke**：只使用 Release workflow 产出的 installer；在与仓库无关的临时用户环境安装，运行目录无源码/`frontend/dist`；用受限 PATH 启动并验证 health + Dashboard；不得调用 Rust/Cargo/Node/npm/SQLite CLI/Visual Studio 工具。若采用静态 CRT，则检查 PE 依赖中不存在未计划的 VC runtime 前置依赖；卸载/覆盖行为至少不破坏用户数据目录。 | ⏳ 待实现 | 未进行 | Windows release artifact install/launch smoke + dependency inspection | GitHub runner 本身装有开发工具不等于测试失效；关键是运行时不解析/调用它们，并检查动态依赖。 |
 | **T-DIST-014** | 前置联动：macOS 全链路 | P0 | S12 / Gate F | **macOS arm64 正式分发包 smoke**：Release workflow 产物架构正确；从与仓库无关的位置展开/安装并启动，health + embedded Dashboard 可用，默认 DB/Codex 路径保持平台约定；不依赖源码/Node/Rust。v0.1.0 明确允许未签名，因此不以“Gatekeeper 无警告”为 PASS 条件，但 README 必须给出首次允许运行说明。 | ⏳ 待实现 | 未进行 | macOS arm64 GitHub artifact smoke + `file`/架构检查 | 不要求 Developer ID、notarization 或代码签名。 |
-| **T-DIST-015** | 最终外部联动：GitHub Public Release | P0 | S13 / Gate G | **真实公开 Release 更新 E2E**：正式 `v0.1.0` 发布后，真实 MiniUsage v0.1.0 访问公开仓库 latest release，识别“当前已是最新”；另以不污染正式 tag 的内部测试构建（如 current=`0.0.9`）访问同一个 public latest release，识别 `v0.1.0` 为新版并得到正确 Release URL；不需要 GitHub Token。 | ⏳ 待实现 | 未进行 | real GitHub public API + released repository | 这是唯一必须访问真实 GitHub 网络的更新测试；失败需区分代码错误与 GitHub 暂时不可用。 |
+| **T-DIST-015** | 最终外部联动：GitHub Public Release | P0 | S13 / Gate G | **真实公开 Release 更新 E2E**：正式 `v0.1.0` 发布后，真实 Usagi v0.1.0 访问公开仓库 latest release，识别“当前已是最新”；另以不污染正式 tag 的内部测试构建（如 current=`0.0.9`）访问同一个 public latest release，识别 `v0.1.0` 为新版并得到正确 Release URL；不需要 GitHub Token。 | ⏳ 待实现 | 未进行 | real GitHub public API + released repository | 这是唯一必须访问真实 GitHub 网络的更新测试；失败需区分代码错误与 GitHub 暂时不可用。 |
 | **T-DIST-016** | 最终回归 | P0 | FINAL | **本轮改动后的完整回归**：macOS 与 Windows 对各自可执行范围运行 `cargo fmt --check`、`cargo check --locked`、无过滤 `cargo test --locked`；前端 `npm run test`、`npm run check`、`npm run build`；原有 Dashboard/Session/refresh/SSE/Scanner 核心链不得因平台/launcher/update 改造回退。正式 Gate 不允许用仅定向测试代替全量回归。 | ⏳ 待实现 | 未进行 | CI final matrix + local macOS evidence | 已有业务测试复用原测试，不在本文复制新的 T-DIST 条目。 |
 | **T-DIST-017** | 最终资源复核 | P2 | FINAL | **受影响平台资源测试**：执行本轮因 Windows 适配实际修改到的既有 scanner/chunk-reader/RSS 资源 P2；Windows 使用等价平台 RSS sampler，不以 `ps` 缺失跳过；复用既有批大小/内存/时间预算，不因本轮发布工程另造新性能指标。 | ⏳ 待实现 | 未进行 | 既有 P2 测试 + Windows/macOS 平台 adapter evidence | 只复核“本轮修改路径触及的 P2”，不机械重跑与发布工程无关的所有历史压力矩阵。 |
 
@@ -456,7 +456,7 @@ tests/
 ```text
 frontend/src/dashboard/UpdateButton.test.tsx
 frontend/src/dashboard/useUpdateController.test.tsx
-frontend/src/data/miniUsageClient.test.ts
+frontend/src/data/usagiClient.test.ts
 frontend/tests/browser/...
 ```
 
@@ -558,7 +558,7 @@ README 正确说明首次手动允许方式
 定义：
 
 ```text
-MiniUsage 核心服务已启动
+Usagi 核心服务已启动
 ↓
 UpdateService 后台立即检查一次
 ↓
@@ -753,7 +753,7 @@ Luna 在本轮不得：
 
 # 14. 最终完成定义
 
-只有以下全部成立，才能认定 **MiniUsage v0.1.0 跨平台分发与更新机制完成**：
+只有以下全部成立，才能认定 **Usagi v0.1.0 跨平台分发与更新机制完成**：
 
 ```text
 [ ] T-DIST-001～016 全部 PASS
@@ -769,7 +769,7 @@ Luna 在本轮不得：
 [ ] 非 MU 端口冲突不 panic、不误杀
 [ ] UpdateService 启动后异步检查
 [ ] 自动检查周期为 4h
-[ ] GitHub 异常不影响 MiniUsage 主功能
+[ ] GitHub 异常不影响 Usagi 主功能
 [ ] 前端常态为“检查更新”
 [ ] 主动检查最新版有明确提示
 [ ] 发现新版变为“版本升级”
@@ -803,7 +803,7 @@ Luna 可以继续按实施方案施工，并在每个施工阶段用本文对应
 最终交付时应另生成：
 
 ```text
-MiniUsage_v0.1.0_跨平台分发与更新机制测试执行记录_v0.1.md
+Usagi_v0.1.0_跨平台分发与更新机制测试执行记录_v0.1.md
 ```
 
 该执行记录只记录：

@@ -1,6 +1,6 @@
-# MiniUsage Spec06-02 Session 测试代码布局 v0.1
+# Usagi Spec06-02 Session 测试代码布局 v0.1
 
-> 本文只记录 Spec06-02 的测试落点；条目、优先级、Gate 与通过标准唯一取自 `MiniUsage_测试标准_Spec01-06_v0.17.md` 的 T-S06-016～030、T-FINAL-014。它不是第二份测试标准，也不把未执行的浏览器或压力结果写成 PASS。
+> 本文只记录 Spec06-02 的测试落点；条目、优先级、Gate 与通过标准唯一取自 `Usagi_测试标准_Spec01-06_v0.17.md` 的 T-S06-016～030、T-FINAL-014。它不是第二份测试标准，也不把未执行的浏览器或压力结果写成 PASS。
 
 ## 1. 生产与单元边界
 
@@ -13,7 +13,7 @@
 
 | 条目 | 生产落点 | 自动化证据 | 当前结论 |
 | --- | --- | --- | --- |
-| T-S06-016 | `frontend/src/data/miniUsageClient.ts` Session parser 与 `data/types.ts` DTO | `frontend/src/data/miniUsageClient.test.ts` Session page、duplicate root、estimated_cost/runtime boundary | PASS（单元） |
+| T-S06-016 | `frontend/src/data/usagiClient.ts` Session parser 与 `data/types.ts` DTO | `frontend/src/data/usagiClient.test.ts` Session page、duplicate root、estimated_cost/runtime boundary | PASS（单元） |
 | T-S06-017 | `frontend/src/dashboard/session/sessionFormat.ts` | `sessionFormat.test.ts` fallback、model list、同日/同年/跨年与 timezone | PASS（单元） |
 | T-S06-018 | `frontend/src/data/revisionFeed.ts` | `revisionFeed.test.ts` one EventSource、one fallback timer、monotonic tuple、cleanup；`DashboardPage.test.tsx` StrictMode remount；`useSessionTableController.test.tsx` shared revision error/retry seam | PASS（单元） |
 | T-S06-019 | `useSessionTableController.ts` per-range snapshot、Abort/generation、first page | `useSessionTableController.test.tsx` initial 50-row request、range snapshot | PASS（单元） |

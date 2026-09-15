@@ -1,6 +1,6 @@
-# MiniUsage 测试标准（Spec 01～06）v0.17
+# Usagi 测试标准（Spec 01～06）v0.17
 
-> 本文是当前版本 Spec01～06 的唯一统一测试标准。v0.17 **取代** v0.16/v0.15，并已吸收原 `MiniUsage_测试标准_数据口径改造.md` 的有效要求。功能语义以 Spec01～06 v0.2、两份数据口径和 Spec08 当前实施目标为准；Spec07 是已完成历史实施方案，不再作为当前测试来源。
+> 本文是当前版本 Spec01～06 的唯一统一测试标准。v0.17 **取代** v0.16/v0.15，并已吸收原 `Usagi_测试标准_数据口径改造.md` 的有效要求。功能语义以 Spec01～06 v0.2、两份数据口径和 Spec08 当前实施目标为准；Spec07 是已完成历史实施方案，不再作为当前测试来源。
 >
 > 本文只定义“必须验证什么”，**不继承历史 PASS 状态**。测试执行结果必须另写执行记录；代码或 Spec 发生语义变化后，旧 PASS 不得自动视为新版本 PASS。
 
@@ -275,12 +275,12 @@ Spec08_真实Codex适配与旧方案冗余清理实施方案_v0.2.md
 | ID | 依赖分类 | 优先级 | 执行点 | 测试条目 |
 |---|---|---:|---|---|
 | T-S06-001 | 独立闭环 + 前置联动：S05 | P1 | S06-01 完成门 | 前端工程与构建边界：保留 React19 + TS strict + Vite6 + Tailwind4；Vitest/jsdom/RTL 为最低必需组件测试依赖，若真实浏览器验收需要额外 runner 只能作为 test/dev dependency；无 router/全局状态库/请求缓存/UI/图表库；`test/check/build` 可执行；JetBrains Mono WOFF2 + 许可本地入库、无 CDN；Axum 可托管 `frontend/dist`。 |
-| T-S06-002 | 前置联动：S05 | P0 | S06-01 完成门 | `miniUsageClient` 对 summary/status/revision/refresh/error 使用精确 canonical DTO 与运行时校验：HTTP status、必需字段、安全整数/ratio/null；`cache_write_tokens/uncached_input_tokens` nullable；不得依赖或 fallback 到旧 Token API 字段，不向 view 暴露原始 body/API message，不使用 `any`。 |
+| T-S06-002 | 前置联动：S05 | P0 | S06-01 完成门 | `usagiClient` 对 summary/status/revision/refresh/error 使用精确 canonical DTO 与运行时校验：HTTP status、必需字段、安全整数/ratio/null；`cache_write_tokens/uncached_input_tokens` nullable；不得依赖或 fallback 到旧 Token API 字段，不向 view 暴露原始 body/API message，不使用 `any`。 |
 | T-S06-003 | 前置联动：S05 | P0 | S06-01 完成门 | 初始加载与 range snapshot：mount 默认 today 并行 summary+status；五 range 各自最多一份成功 snapshot；切换立即更新选择、abort 旧 summary、generation 丢弃晚响应；新 range 无缓存只显示 skeleton，失败不得借用其他 range；切回旧 range 可保留自己的旧值；`retry_load()` 只重试当前失败依赖并追平 revision。 |
 | T-S06-004 | 前置联动：S04/S05 | P0 | S06-01 完成门 | 8 张 KPI 固定顺序/标签/字段：预估费用、总 Token、输入 Token、输出 Token、会话数量、缓存命中率、缓存写入 Token、缓存读取 Token；active epoch=0 合法零值；estimated_cost/null ratio/null cache-write 为 `—`；明确 cache-write 0 显示0；compact 值 title/accessible name 保留完整整数。 |
 | T-S06-005 | 独立闭环 | P1 | S06-01 完成门 | 真实浏览器布局矩阵：1512px 时 84px 外留白、1344px 流体内容区、固定 `32 16 64` padding、1312px KPI 可用宽、237×106 卡片、5 列间 31.75px；1280/1024/768 自动换列；767/390 两列流体、无 body 水平滚动；页面无 nav/sidebar/settings/chart/图表占位。 |
 | T-S06-006 | 独立闭环 | P1 | S06-01 完成门 | Dashboard 可访问性/动效：range `role=group` + aria-label/aria-pressed；按钮键盘可操作与 2px focus-visible；loading/error/status `aria-live=polite`、skeleton aria-hidden；reduced-motion 关闭 transition；200% zoom 与高对比仍可操作。 |
-| T-S06-007 | 前置联动：S03/S05 | P0 | S06-01 完成门 | refresh 可点击条件与请求边界：status 已成功、binding ready、无 requesting/target/active/queued 时才允许；idle/failed 可新 Started，running/source_changed/queued 禁用；POST 必带 `X-MiniUsage-Request:1`；快速重复点击只有一个在途 refresh。 |
+| T-S06-007 | 前置联动：S03/S05 | P0 | S06-01 完成门 | refresh 可点击条件与请求边界：status 已成功、binding ready、无 requesting/target/active/queued 时才允许；idle/failed 可新 Started，running/source_changed/queued 禁用；POST 必带 `X-Usagi-Request:1`；快速重复点击只有一个在途 refresh。 |
 | T-S06-008 | 前置联动：S03/S05 | P0 | S06-01 完成门 | Started/Coalesced target 语义：202 保存直接 scan ID；200 保存 durable follow-up ID 而非当前 active ID；两者进入同步中；仅匹配 `target_scan_id` 的 queued/running/completed/failed/start_failed 归约目标，当前 scan 投影或单纯 revision 增长不能提前完成。 |
 | T-S06-009 | 前置联动：S03/S05 | P0 | S06-01 完成门 | refresh/status 错误与竞态：403=`无法发起同步`，409 SOURCE_CHANGED=`数据源已变化`，其他 POST=`同步失败`；同步跟踪 status 失败=`同步状态获取失败` 且 `retry_refresh_status()` 只重试 status；POST 网络中断/旧 POST 响应晚到不得覆盖新 generation；普通 status 失败不得误报同步失败。 |
 | T-S06-010 | 前置联动：S03/S05 | P0 | S06-01 完成门 | mount/重载目标恢复与 follow-up 边界：queued/start_failed/active 按持久化 ID 恢复；start_failed 先带 ID 查询 target 再归约；多个 Coalesced 共目标 ID；终态到 follow-up started 间仍 queued；Busy 保持等待并接受后续重试；只有 nonretry internal/shutdown/source_changed 进入 start_failed。 |
@@ -307,7 +307,7 @@ Spec08_真实Codex适配与旧方案冗余清理实施方案_v0.2.md
 
 ## 9. 数据口径改造统一专项条目
 
-以下 T-DC 条目已并入本文，不再把独立 `MiniUsage_测试标准_数据口径改造.md` 当作第二套标准。
+以下 T-DC 条目已并入本文，不再把独立 `Usagi_测试标准_数据口径改造.md` 当作第二套标准。
 
 | ID | 归属 Spec | 优先级 | 测试条目 |
 |---|---|---:|---|
@@ -422,16 +422,16 @@ Dashboard 展示与 API 新 snapshot 一致
 
 | 条目 | 当前自动化证据（本版本） |
 |---|---|
-| T-S06-016～017 | `frontend/src/data/miniUsageClient.test.ts`, `frontend/src/dashboard/session/sessionFormat.test.ts` cover Session DTO/runtime and timezone/title/model formatting. |
+| T-S06-016～017 | `frontend/src/data/usagiClient.test.ts`, `frontend/src/dashboard/session/sessionFormat.test.ts` cover Session DTO/runtime and timezone/title/model formatting. |
 | T-S06-018～020 | `frontend/src/data/revisionFeed.test.ts`, `frontend/src/dashboard/session/useSessionTableController.test.tsx` cover one shared EventSource/fallback timer, monotonic revisions, range snapshots, first-page refresh and Session revision-error retry; `frontend/src/dashboard/DashboardPage.test.tsx` covers StrictMode remount lifecycle. |
-| T-S06-021～025 | `useSessionTableController.test.tsx`, `SessionSection.test.tsx`, and `miniUsageClient.test.ts` cover fixed-50 cursor append, stale recovery, fixed errors/retry, nine-column inclusive contract, six skeleton rows, empty/loading/error/footer states. |
+| T-S06-021～025 | `useSessionTableController.test.tsx`, `SessionSection.test.tsx`, and `usagiClient.test.ts` cover fixed-50 cursor append, stale recovery, fixed errors/retry, nine-column inclusive contract, six skeleton rows, empty/loading/error/footer states. |
 | T-S06-026～027 | `frontend/tests/browser/dashboard.spec.ts` `T-FINAL-014` checks the real Session table wrapper, nine headers, pagination and rendered rows in Chromium; `spec06_real_axum_browser_gate` runs the same test set against Vite dev and Axum production dist (9/9 each in the recorded run). |
 | T-S06-028 | `tests/spec05_api_integration.rs::t_s06_028_real_http_session_pagination_revision_and_restart_contract` uses 51 scanner-produced roots, 50+1 pages, stale cursor after scan and INVALID cursor after router restart. |
 | T-S06-029～030 | `DashboardPage.tsx` passes one `RevisionFeed` to Dashboard and Session; feed/controller tests cover shared transport, StrictMode cleanup, abort/generation and duplicate guards; browser `T-S06-030` runs real 50→100→150→200 pagination with scanner revision during load-more, blocked SSE transport and rapid range interaction against the Axum fixture. Dev and dist rounds each pass 9/9. |
 | T-FINAL-014 | `frontend/tests/browser/dashboard.spec.ts` `T-FINAL-014 renders 50+1 Session pagination through the real Dashboard` runs against the same fixture and exercises scanner revision→STALE_CURSOR and server restart→INVALID_CURSOR; UI preserves stable rows and automatically recovers the first page before continuing. Dev and dist rounds each pass 9/9; backend stale/restart contract is also covered by `t_s06_028`. |
 | T-FINAL-017 | `tests/spec06_frontend_browser.rs::spec06_real_axum_browser_gate` seeds one v3→v4 fixture containing Main (`payload.source` string), Legacy (direct `payload.parent_thread_id` + `payload.forked_from_id`), Guardian (direct parent + `source.subagent.other`, no state edge), and 200 extra Session rollouts (201 root Sessions). It begins a blocked build, waits for scanner replay/activation, asserts priority/conflict/root, active epoch/parser and Guardian `session_meta_parent` provenance, then the browser test queries the same real HTTP API and Dashboard. Dev and dist rounds each pass 9/9. |
 | T-FINAL-018 | `src/scanner/mod.rs::tests::stale_guardian_fact_replays_from_zero_and_leaves_usage_checkpoint_untouched` proves v1 ready/EOF stale metadata replay, raw-byte and identity preservation, parser v2/fact/root repair, and usage checkpoint isolation; `tests/spec03_scanner_integration.rs::t_s03_017_missing_and_stale_safe_facts_force_real_worker_rebuild_from_zero` covers missing/stale safe-fact recovery. The browser fixture performs the same v1→v2 stale upgrade without manual deletion. |
-| T-FINAL-019 | This table and `docs/test docs/MiniUsage_Spec06-02_测试代码布局_v0.1.md` map the newly implemented Session symbols to current tests. It does not mark unrelated final P0/P1 or P2 rows complete, and archived Spec04/Spec05 execution records are not current evidence. |
+| T-FINAL-019 | This table and `docs/test docs/Usagi_Spec06-02_测试代码布局_v0.1.md` map the newly implemented Session symbols to current tests. It does not mark unrelated final P0/P1 or P2 rows complete, and archived Spec04/Spec05 execution records are not current evidence. |
 
 ## 13. 必跑命令
 
