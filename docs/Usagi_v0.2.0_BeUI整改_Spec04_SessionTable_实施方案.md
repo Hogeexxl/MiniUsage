@@ -1,4 +1,4 @@
-# MiniUsage v0.2.0 BeUI 整改实施方案 — Spec04：Session Table
+# Usagi v0.2.0 BeUI 整改实施方案 — Spec04：Session Table
 
 > 施工分支：`feat/v0.2.0-beui-redesign`  
 > 前置条件：**Spec03 / Gate S03 已通过。**  

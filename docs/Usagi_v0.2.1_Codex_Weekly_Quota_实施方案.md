@@ -1,6 +1,6 @@
-# MiniUsage v0.2.1 Codex Weekly Quota 实施方案
+# Usagi v0.2.1 Codex Weekly Quota 实施方案
 
-> 目标版本：**MiniUsage 0.2.1**  
+> 目标版本：**Usagi 0.2.1**  
 > 施工对象：Luna 主控 + 2 个 Subagent  
 > 基线：GitHub `main`，当前包版本 `0.2.0`  
 > 范围：**仅 Codex Weekly Quota**。不扩展 Claude / 多供应商，不改现有 Token 统计口径，不改现有“同步数据”按钮语义。
@@ -165,7 +165,7 @@ Headers：
 ```text
 Authorization: Bearer <access_token>
 Accept: application/json
-User-Agent: MiniUsage/<current package version>
+User-Agent: Usagi/<current package version>
 ChatGPT-Account-Id: <account_id>   # 有值时才发送
 ```
 
@@ -779,9 +779,9 @@ export type CodexQuotaResponse = {
 };
 ```
 
-## 8.2 miniUsageClient.ts
+## 8.2 usagiClient.ts
 
-`MiniUsageClient` 新增：
+`UsagiClient` 新增：
 
 ```ts
 codexQuota(signal?: AbortSignal): Promise<CodexQuotaResponse>;
@@ -1321,8 +1321,8 @@ src/cost/**
 
 ```text
 frontend/src/data/types.ts
-frontend/src/data/miniUsageClient.ts
-frontend/src/data/miniUsageClient.test.ts
+frontend/src/data/usagiClient.ts
+frontend/src/data/usagiClient.test.ts
 frontend/src/dashboard/useCodexQuotaController.ts      # 新增
 frontend/src/dashboard/MetricGrid.tsx
 frontend/src/dashboard/MetricGrid.test.tsx

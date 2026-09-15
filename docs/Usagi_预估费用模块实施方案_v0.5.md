@@ -1,6 +1,6 @@
-# MiniUsage 预估费用模块实施方案 v0.5
+# Usagi 预估费用模块实施方案 v0.5
 
-> 代码基线：用户于 2026-08-12 提供的最新 MiniUsage 源码快照 `8701431b-11c4-4127-a130-ad3f334a9422.zip`  
+> 代码基线：用户于 2026-08-12 提供的最新 Usagi 源码快照 `8701431b-11c4-4127-a130-ad3f334a9422.zip`  
 > 定价基线：OpenAI 官方公开 Standard API 价格，核验日期 2026-08-12  
 > Reasoning Effort 数据源基线：Codex rollout `turn_context` 的 request/turn context effort，核验日期 2026-08-12  
 > 本版合并三项工作：**预估费用模块** + **Subagent `agent_path` 标题适配修复** + **Drawer 模型 Reasoning Effort 展示与 Main `(model, effort)` 分组**。三项工作同版交付；Metadata、Usage Context、Cost 三个业务职责保持分离，仅在 usage event、数据库迁移、聚合/API、最终集成与发布顺序上按本文规定汇合。  
@@ -438,7 +438,7 @@ src/storage/usage.rs 负责 source state / turns / event SQL
 src/usage/rebuild.rs 负责 active state fingerprint / rebuild proof
 
 Frontend Session Detail:
-frontend/src/data/miniUsageClient.ts 有运行时 DTO 校验，
+frontend/src/data/usagiClient.ts 有运行时 DTO 校验，
 不能只改 types.ts 与 Drawer JSX
 ```
 
@@ -2889,7 +2889,7 @@ cost reprice
 本 Part 必须与独立测试标准：
 
 ```text
-MiniUsage_预估费用模块测试标准_v0.2.md
+Usagi_预估费用模块测试标准_v0.2.md
 ```
 
 配套执行。
@@ -3188,7 +3188,7 @@ C1 不读取/使用 `reasoning_effort` 参与定价。
 
 ```text
 frontend/src/data/types.ts
-frontend/src/data/miniUsageClient.ts
+frontend/src/data/usagiClient.ts
 frontend/src/dashboard/session/SessionDetailDrawer.tsx
 必要的 session formatter 文件
 对应 frontend unit/component tests
@@ -3206,7 +3206,7 @@ Main “N 个模型配置”
 Subagent single/unknown/mixed effort title
 ```
 
-`miniUsageClient.ts` 必须同步修改，因为当前 Session Detail response 不是只依赖 TypeScript 类型，还经过运行时 parser 校验。
+`usagiClient.ts` 必须同步修改，因为当前 Session Detail response 不是只依赖 TypeScript 类型，还经过运行时 parser 校验。
 
 F1 不实现费用公式，不改变 Dashboard model filter，不自行设计 API 字段。
 
@@ -3612,7 +3612,7 @@ Gate 4 不代替 Gate 1 / 1.5 / 2 / 3；执行记录缺少任一前置 Gate，�
 ## 46. 三个功能的最终关系
 
 ```text
-                                   MiniUsage 本版本
+                                   Usagi 本版本
                                           │
             ┌─────────────────────────────┼─────────────────────────────┐
             │                             │                             │
@@ -3782,6 +3782,6 @@ raw cache_write_input_tokens
 
 本文只定义生产实施方案、数据口径、模块职责、迁移策略、版本关系、执行依赖和并行分工。
 
-**本文不重复定义测试条目、测试用例或测试断言；Part E 仅引用 `MiniUsage_预估费用模块测试标准_v0.2.md` 中的测试 ID 作为施工 Gate。**
+**本文不重复定义测试条目、测试用例或测试断言；Part E 仅引用 `Usagi_预估费用模块测试标准_v0.2.md` 中的测试 ID 作为施工 Gate。**
 
-本版配套测试标准已经独立定义为 `MiniUsage_预估费用模块测试标准_v0.2.md`。测试标准以本文最终生产行为为依据，不得用历史“`estimated_cost` 恒为 null”或 Main “只按 model 分组”等旧断言反向约束生产实现。
+本版配套测试标准已经独立定义为 `Usagi_预估费用模块测试标准_v0.2.md`。测试标准以本文最终生产行为为依据，不得用历史“`estimated_cost` 恒为 null”或 Main “只按 model 分组”等旧断言反向约束生产实现。

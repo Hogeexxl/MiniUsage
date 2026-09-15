@@ -1,10 +1,10 @@
-# MiniUsage 费用聚合、Subagent 模型归属与 Drawer 优化实施方案
+# Usagi 费用聚合、Subagent 模型归属与 Drawer 优化实施方案
 
 > 版本：v0.2  
 > 日期：2026-08-13  
-> 代码基线：用户本轮提供的最新 MiniUsage 代码快照（已完成扫描性能优化）  
-> 前置已完成：`MiniUsage_扫描更新性能优化实施方案_v0.2.md` 对应实现  
-> 测试标准：`MiniUsage_费用聚合_Subagent模型与Drawer优化测试标准_v0.1.md`。本文定义生产方案、施工 ownership、并行顺序与 Gate；正式测试 ID、优先级与完成门以该测试标准为唯一依据。
+> 代码基线：用户本轮提供的最新 Usagi 代码快照（已完成扫描性能优化）  
+> 前置已完成：`Usagi_扫描更新性能优化实施方案_v0.2.md` 对应实现  
+> 测试标准：`Usagi_费用聚合_Subagent模型与Drawer优化测试标准_v0.1.md`。本文定义生产方案、施工 ownership、并行顺序与 Gate；正式测试 ID、优先级与完成门以该测试标准为唯一依据。
 
 ---
 
@@ -872,7 +872,7 @@ frontend: $xx.xx
 ```text
 frontend/src/dashboard/session/SessionTableRow.tsx
 frontend/src/data/types.ts
-frontend/src/data/miniUsageClient.ts
+frontend/src/data/usagiClient.ts
 frontend/src/index.css
 ```
 
@@ -1287,7 +1287,7 @@ model(reasoning_effort)
 
 ```text
 frontend/src/data/types.ts
-frontend/src/data/miniUsageClient.ts
+frontend/src/data/usagiClient.ts
 ```
 
 ### 16.1 TypeScript 类型
@@ -1384,7 +1384,7 @@ src/scanner/usage_consumer.rs     # 原则上不改生产逻辑，仅确认 pars
 
 ```text
 frontend/src/data/types.ts
-frontend/src/data/miniUsageClient.ts
+frontend/src/data/usagiClient.ts
 frontend/src/dashboard/MetricGrid.tsx
 frontend/src/dashboard/MetricCard.tsx
 frontend/src/dashboard/session/SessionTableRow.tsx
@@ -1409,7 +1409,7 @@ frontend/src/dashboard/session/SessionSection.test.tsx / Row 相关测试
 frontend/src/data client tests（按当前实际布局）
 ```
 
-正式测试条目与 ID 已冻结在 `MiniUsage_费用聚合_Subagent模型与Drawer优化测试标准_v0.1.md`；本节仅列预期受影响测试落点，实际 Gate 以测试标准为准。
+正式测试条目与 ID 已冻结在 `Usagi_费用聚合_Subagent模型与Drawer优化测试标准_v0.1.md`；本节仅列预期受影响测试落点，实际 Gate 以测试标准为准。
 
 ---
 
@@ -1515,8 +1515,8 @@ src/api/query.rs
 
 ```text
 frontend/src/data/types.ts
-frontend/src/data/miniUsageClient.ts
-frontend/src/data/miniUsageClient.test.ts
+frontend/src/data/usagiClient.ts
+frontend/src/data/usagiClient.test.ts
 ```
 
 职责：
@@ -1599,7 +1599,7 @@ Gate D 静态收口
 
 ## 20. Luna 施工 + 测试 Gate 总图（v0.2）
 
-正式测试 ID、优先级与命令以 `MiniUsage_费用聚合_Subagent模型与Drawer优化测试标准_v0.1.md` 为准。
+正式测试 ID、优先级与命令以 `Usagi_费用聚合_Subagent模型与Drawer优化测试标准_v0.1.md` 为准。
 
 ### 20.1 总图
 
@@ -1784,7 +1784,7 @@ npm run test:browser:gate
 还必须复跑现有：
 
 ```text
-MiniUsage_扫描更新性能优化测试标准_v0.1.md — Gate D
+Usagi_扫描更新性能优化测试标准_v0.1.md — Gate D
 ```
 
 包括真实 CODEX_HOME 三轮无变化 release 性能硬门槛。本文不重新定义阈值。
@@ -1836,7 +1836,7 @@ vs
 1. Pricing、Ownership、CostCompleteness 可从第一分钟并行，互不改同一核心文件。
 2. parser v5 只在 ownership 修复后进入历史 rebuild，不会出现“先 bump version、后修语义”的半成品。
 3. API DTO 只由 Track C 定义一次，Frontend client 只由单一 owner 接一次。
-4. Dashboard 与 Drawer 真正并行，但不争用 `types.ts`、`miniUsageClient.ts`、`index.css`。
+4. Dashboard 与 Drawer 真正并行，但不争用 `types.ts`、`usagiClient.ts`、`index.css`。
 5. 历史 reprice 与 parser rebuild 在实现阶段独立，在 F02 才验证组合，避免两条升级机制被错误耦合。
 6. Gate C 后停止新生产扩张，使最后的 performance/real-data 回归只处理确定失败，不再引入新变量。
 

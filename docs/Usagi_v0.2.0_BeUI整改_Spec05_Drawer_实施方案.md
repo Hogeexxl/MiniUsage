@@ -1,4 +1,4 @@
-# MiniUsage v0.2.0 BeUI 整改实施方案 — Spec05：Drawer
+# Usagi v0.2.0 BeUI 整改实施方案 — Spec05：Drawer
 
 > 施工分支：`feat/v0.2.0-beui-redesign`  
 > 前置条件：**Spec04 / Gate S04 已通过。**  

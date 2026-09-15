@@ -1,4 +1,4 @@
-# MiniUsage v0.2.0 BeUI 整改实施方案 — Spec02：筛选菜单区
+# Usagi v0.2.0 BeUI 整改实施方案 — Spec02：筛选菜单区
 
 > 施工分支：`feat/v0.2.0-beui-redesign`  
 > 前置条件：**Spec01 / Gate S01 已通过。**  

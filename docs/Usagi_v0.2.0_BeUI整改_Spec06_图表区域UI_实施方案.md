@@ -1,4 +1,4 @@
-# MiniUsage v0.2.0 BeUI 整改实施方案 — Spec06：图表区域 UI
+# Usagi v0.2.0 BeUI 整改实施方案 — Spec06：图表区域 UI
 
 > 施工分支：`feat/v0.2.0-beui-redesign`  
 > 文档可先审核；实际施工顺序按总计划，应在 **Spec05 / Gate S05 通过后**执行。  

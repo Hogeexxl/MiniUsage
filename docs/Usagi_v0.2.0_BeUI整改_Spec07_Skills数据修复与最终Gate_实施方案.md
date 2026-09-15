@@ -1,4 +1,4 @@
-# MiniUsage v0.2.0 BeUI 整改实施方案 — Spec07：Skills 数据正确性修复 + 最终整体验收 Gate
+# Usagi v0.2.0 BeUI 整改实施方案 — Spec07：Skills 数据正确性修复 + 最终整体验收 Gate
 
 > 施工分支：`feat/v0.2.0-beui-redesign`  
 > 前置条件：**Spec06 / Gate S06 已通过。**  

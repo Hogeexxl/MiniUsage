@@ -1,16 +1,16 @@
-# MiniUsage 程序运行机制与数据持久化方案
+# Usagi 程序运行机制与数据持久化方案
 
 > 版本：v0.3  
 > 状态：运行机制重构方案  
 > 更新日期：2026-08-05  
 > 适用范围：macOS、Google Chrome、Codex 桌面端本地会话  
-> 关联文档：`MiniUsage Codex 本地数据口径文档 v0.2`
+> 关联文档：`Usagi Codex 本地数据口径文档 v0.2`
 
 ---
 
 ## 1. 文档目标
 
-本文重新确定 MiniUsage（下文简称 MU）的程序运行机制，重点解决以下问题：
+本文重新确定 Usagi（下文简称 MU）的程序运行机制，重点解决以下问题：
 
 1. MU 扫描哪些 Codex 本地文件；
 2. MU 使用轮询、监听还是组合方式获取本地变化；
@@ -463,9 +463,9 @@ SQLite 不应独自承担所有状态。推荐组合如下：
 默认位置示例：
 
 ```text
-~/Library/Application Support/MiniUsage/mu.sqlite3
-~/Library/Application Support/MiniUsage/config.toml
-~/Library/Logs/MiniUsage/mu.log
+~/Library/Application Support/Usagi/mu.sqlite3
+~/Library/Application Support/Usagi/config.toml
+~/Library/Logs/Usagi/mu.log
 ```
 
 数据库在 WAL 模式下可能同时出现：
