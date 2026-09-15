@@ -1,4 +1,4 @@
-# MiniUsage v0.2.0 BeUI 整改实施方案 — Spec01：全局基础与 Header
+# Usagi v0.2.0 BeUI 整改实施方案 — Spec01：全局基础与 Header
 
 > 施工分支：`feat/v0.2.0-beui-redesign`  
 > 本 Spec 只处理：全局 Theme 首帧、Header、Header 使用的 BeUI primitives、Dashboard 一级分区 32px 间距。  
@@ -77,7 +77,7 @@
 
 ## 2.3 Header 固定视觉参数
 
-### `MiniUsage`
+### `Usagi`
 
 ```text
 font-family: JetBrains Mono
@@ -259,7 +259,7 @@ Theme Toggle 唯一允许的源码级业务适配：
   (() => {
     let theme = "dark";
     try {
-      const stored = window.localStorage.getItem("miniusage.theme");
+      const stored = window.localStorage.getItem("usagi.theme");
       if (stored === "dark" || stored === "light") theme = stored;
     } catch {}
     document.documentElement.classList.toggle("dark", theme === "dark");
@@ -288,7 +288,7 @@ Storage 读取失败 → 首帧 dark
 
 ```text
 Theme = "dark" | "light"
-THEME_STORAGE_KEY = "miniusage.theme"
+THEME_STORAGE_KEY = "usagi.theme"
 DEFAULT_THEME = "dark"
 ```
 
@@ -369,7 +369,7 @@ upgrade   → 版本升级
 最终 Header 左侧只能是：
 
 ```text
-MiniUsage  [检查更新 / 版本升级]
+Usagi  [检查更新 / 版本升级]
 ```
 
 不得新增 Badge、版本号、Tooltip 或其它辅助控件。
@@ -657,7 +657,7 @@ metrics-section 一级 margin-top
 
 同时检查：
 
-- 没有新增 `MiniUsageButton` / `HeaderButton` primitive。
+- 没有新增 `UsagiButton` / `HeaderButton` primitive。
 - 没有新增自制 Toast。
 - 没有新增自制 Theme Toggle。
 - 没有复制官方 `sm` class 到业务层。
@@ -719,7 +719,7 @@ ServiceButton  outline / sm / ripple=false
 
 - 三个文字按钮均为 BeUI 官方 sm 外观。
 - hover / press / state motion 与 BeUI 官方一致。
-- `MiniUsage` 保持 30 / 700 / 36 / normal。
+- `Usagi` 保持 30 / 700 / 36 / normal。
 - Header 桌面仍为左右单行布局。
 
 **PASS：无 md 文字按钮、无自制 hover/press。**
@@ -837,7 +837,7 @@ Spec01 只有满足以下全部条件才允许进入 Spec02。
 
 ## Gate S01-C：Header
 
-- `MiniUsage`：30 / 700 / 36 / normal。
+- `Usagi`：30 / 700 / 36 / normal。
 - Update：`primary / sm / ripple=false`。
 - Sync：`outline / sm / ripple=false`。
 - Stop：`outline / sm / ripple=false` + 固定 destructive semantic override。

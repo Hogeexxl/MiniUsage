@@ -1,9 +1,9 @@
-# MiniUsage Dashboard KPI 与条件筛选实施方案
+# Usagi Dashboard KPI 与条件筛选实施方案
 
 > 版本：v0.1  
 > 日期：2026-08-10  
-> 代码基线：用户于 2026-08-10 提供的 MiniUsage 最新代码快照  
-> 测试标准：`MiniUsage_Dashboard_KPI与条件筛选测试标准_v0.1.md`
+> 代码基线：用户于 2026-08-10 提供的 Usagi 最新代码快照  
+> 测试标准：`Usagi_Dashboard_KPI与条件筛选测试标准_v0.1.md`
 
 ---
 
@@ -32,7 +32,7 @@
 
 - `frontend/src/dashboard/MetricGrid.tsx` 显示 8 张卡片，其中包含 `cache_write_tokens`，不包含 `reasoning_tokens`。
 - `frontend/src/data/types.ts` 的 `UsageDto` 已包含 `reasoning_tokens` 和 `cache_write_tokens`。
-- `frontend/src/data/miniUsageClient.ts::parseTokenUsage()` 已解析 `reasoning_tokens`。
+- `frontend/src/data/usagiClient.ts::parseTokenUsage()` 已解析 `reasoning_tokens`。
 - 后端 `SummaryUsageDto`、`TokenTotals`、聚合 SQL 已包含 `reasoning_tokens`。
 
 因此：
@@ -340,7 +340,7 @@ GET /api/usage/filter-options
   "projects": [
     {
       "kind": "project",
-      "project_name": "MiniUsage",
+      "project_name": "Usagi",
       "project_path": "<repo>"
     },
     {
@@ -427,7 +427,7 @@ include_unknown_project=1
 /api/usage/summary?range=today
   &model=gpt-5.6-sol
   &model=gpt-5.6
-  &project_path=%2FUsers%2Fme%2Fdev%2FMiniUsage
+  &project_path=%2FUsers%2Fme%2Fdev%2FUsagi
   &include_projectless=1
 ```
 
@@ -577,7 +577,7 @@ DashboardFilters {
 
 ### 9.2 Client
 
-`miniUsageClient` 新增：
+`usagiClient` 新增：
 
 ```text
 filterOptions(signal)
@@ -1077,5 +1077,5 @@ S9 完成即到达 Gate C；此前不单独测试 S7、S8 或 S9。
 本轮新增/变更行为的唯一测试条目依据为：
 
 ```text
-MiniUsage_Dashboard_KPI与条件筛选测试标准_v0.1.md
+Usagi_Dashboard_KPI与条件筛选测试标准_v0.1.md
 ```

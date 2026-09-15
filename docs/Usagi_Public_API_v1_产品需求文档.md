@@ -1,4 +1,4 @@
-# MiniUsage Public API v1 产品需求文档
+# Usagi Public API v1 产品需求文档
 
 > 状态：Public API v1 产品契约
 > 根路径：/api/v1
@@ -170,7 +170,7 @@ GET /revision 用于：
 
 ~~~json
 {
-  "service": "miniusage",
+  "service": "usagi",
   "app_version": "0.3.0",
   "api_version": "1",
   "capabilities": [

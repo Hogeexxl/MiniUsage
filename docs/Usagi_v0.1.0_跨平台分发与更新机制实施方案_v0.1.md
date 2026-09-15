@@ -1,10 +1,10 @@
-# MiniUsage v0.1.0 跨平台分发与更新机制实施方案 v0.1
+# Usagi v0.1.0 跨平台分发与更新机制实施方案 v0.1
 
 > 方案版本：v0.1  
 > 日期：2026-08-14  
-> 代码基线：用户提供的最新代码包 `MiniUsage-653321c`  
+> 代码基线：用户提供的最新代码包 `Usagi-653321c`  
 > 当前应用版本：`0.1.0`（`Cargo.toml`）  
-> 目标：把当前已完成的 MiniUsage 功能基线整理为第一个可公开分发版本，并支持 Windows/macOS、GitHub Release 与版本更新提示。  
+> 目标：把当前已完成的 Usagi 功能基线整理为第一个可公开分发版本，并支持 Windows/macOS、GitHub Release 与版本更新提示。  
 > 注意：本文是**实施方案**，不是独立测试标准。每阶段只定义施工 Gate；正式测试条目另行编写。
 
 > **范围决策（2026-08-14）**：v0.1.0 正式分发收敛为两个安装包：Windows 10/11 x64 安装包与 macOS Apple Silicon arm64 DMG，另附 `SHA256SUMS.txt`。macOS Intel/x86_64 不属于本版本正式支持范围，因此不纳入 CI runner、构建、smoke、Release asset、Gate 或 DoD；这是范围决策，不表示 Intel 测试失败。
@@ -19,11 +19,11 @@
 
 必须完成：
 
-1. MiniUsage 源码进入**一个公开 GitHub 仓库**；源码与 Releases 使用同一仓库。
+1. Usagi 源码进入**一个公开 GitHub 仓库**；源码与 Releases 使用同一仓库。
 2. 支持以下正式发布目标：
    - Windows 10/11 x64；
    - macOS Apple Silicon arm64；
-3. 最终普通用户运行 MiniUsage 时，不要求预先安装：
+3. 最终普通用户运行 Usagi 时，不要求预先安装：
    - Rust；
    - Cargo；
    - Node.js；
@@ -31,7 +31,7 @@
    - SQLite；
    - Visual Studio / Windows SDK。
 4. React/Vite 构建产物随正式 Rust 二进制发布，正式运行时不得依赖仓库中的 `frontend/dist` 相对路径。
-5. 用户启动 MiniUsage 后：
+5. 用户启动 Usagi 后：
    - 启动本地 Rust 服务；
    - 继续只监听 `127.0.0.1:3210`；
    - 自动打开默认浏览器进入 Dashboard。
@@ -39,7 +39,7 @@
 7. 增加后端 UpdateService：
    - 应用核心启动完成后立即异步检查一次；
    - 之后每 4 小时自动检查一次；
-   - GitHub 不可访问时不得阻塞或破坏 MiniUsage 主功能。
+   - GitHub 不可访问时不得阻塞或破坏 Usagi 主功能。
 8. Dashboard 增加更新按钮：
    - 常态：`检查更新`；
    - 主动检查中：`检查中…`；
@@ -104,7 +104,7 @@ Luna 可以完成全部代码和流水线施工，但以下内容不得自行猜
 
 ```toml
 [package]
-name = "mini-usage"
+name = "usagi"
 version = "0.1.0"
 edition = "2024"
 ```
@@ -127,7 +127,7 @@ env!("CARGO_PKG_VERSION")
 
 获取。
 
-`frontend/package.json` 中的版本只属于 npm package metadata，不得作为 MiniUsage 更新判断依据。
+`frontend/package.json` 中的版本只属于 npm package metadata，不得作为 Usagi 更新判断依据。
 
 ---
 
@@ -173,7 +173,7 @@ CI / Release 使用 cargo --locked
 当前 `src/storage/mod.rs`：
 
 ```text
-DEFAULT_APP_DIR = Library/Application Support/MiniUsage
+DEFAULT_APP_DIR = Library/Application Support/Usagi
 home_dir()      = $HOME
 ```
 
@@ -195,10 +195,10 @@ LedgerOptions 显式 db_path / codex_home
 
 ```text
 macOS:
-~/Library/Application Support/MiniUsage/mu.sqlite3
+~/Library/Application Support/Usagi/mu.sqlite3
 
 Windows:
-使用 Windows Local AppData 下的 MiniUsage 应用数据目录
+使用 Windows Local AppData 下的 Usagi 应用数据目录
 ```
 
 实现时使用平台目录库，不再手写 `$HOME` / `%USERPROFILE%` 分支。
@@ -234,7 +234,7 @@ Windows 无法直接编译这部分。
 
 这只能算占位，不是正式 Windows 实现。
 
-因为 MiniUsage 当前会依赖物理文件身份完成：
+因为 Usagi 当前会依赖物理文件身份完成：
 
 ```text
 Discovery 去重
@@ -283,7 +283,7 @@ React/Vite source
     ↓ npm run build
 frontend/dist
     ↓ release build 时嵌入
-MiniUsage binary
+Usagi binary
     ↓ runtime
 Axum 从 binary 内部提供 index.html / JS / CSS / font
 ```
@@ -299,13 +299,13 @@ Axum 从 binary 内部提供 index.html / JS / CSS / font
 ```rust
 TcpListener::bind(address)
     .await
-    .expect("could not bind MiniUsage to 127.0.0.1:3210");
+    .expect("could not bind Usagi to 127.0.0.1:3210");
 ```
 
 结果：
 
 ```text
-第二次启动 MiniUsage
+第二次启动 Usagi
 或 3210 被其他软件占用
 → panic
 ```
@@ -316,13 +316,13 @@ TcpListener::bind(address)
 A. 3210 空闲
    → 正常启动
 
-B. 3210 已经是 MiniUsage
+B. 3210 已经是 Usagi
    → 不创建第二套 Ledger / Scanner
    → 打开已存在的 Dashboard
    → 第二个启动进程正常退出
 
 C. 3210 是其他软件
-   → 不误判为 MiniUsage
+   → 不误判为 Usagi
    → 输出明确的端口占用错误
    → 不覆盖、不 kill 对方进程
 ```
@@ -377,7 +377,7 @@ GitHub Public Repository
       ├─ macOS arm64 package
       └─ SHA256SUMS.txt
 
-用户安装/启动 MiniUsage
+用户安装/启动 Usagi
         │
         ├─ 平台路径解析
         │    ├─ CODEX_HOME
@@ -407,7 +407,7 @@ GitHub Public Repository
                     └─ 版本升级
 ```
 
-浏览器仍然只通过 MiniUsage 本机服务获得应用数据。
+浏览器仍然只通过 Usagi 本机服务获得应用数据。
 
 版本检查网络请求必须是：
 
@@ -480,7 +480,7 @@ windows-sys（只在 cfg(windows) target dependency）
 
 ## 3.3 cargo-packager 的定位
 
-`cargo-packager` 只作为**发布工具**使用，不进入 MiniUsage runtime dependency。
+`cargo-packager` 只作为**发布工具**使用，不进入 Usagi runtime dependency。
 
 它负责：
 
@@ -557,7 +557,7 @@ std::os::unix::...
 现有用户数据库：
 
 ```text
-~/Library/Application Support/MiniUsage/mu.sqlite3
+~/Library/Application Support/Usagi/mu.sqlite3
 ```
 
 改造后仍必须解析到同一路径。
@@ -582,8 +582,8 @@ std::os::unix::...
 Codex Home:
 <User Home>/.codex
 
-MiniUsage DB:
-Windows Local AppData 下 MiniUsage 的本地应用数据目录/mu.sqlite3
+Usagi DB:
+Windows Local AppData 下 Usagi 的本地应用数据目录/mu.sqlite3
 ```
 
 只要求路径符合 Windows 标准应用数据位置，不要求与 macOS 字符串结构一致。
@@ -794,7 +794,7 @@ std::os::unix::fs::MetadataExt
 测试代码中：
 
 - 真正只验证 Unix 权限/Unix symlink 特性的测试可保留 `#[cfg(unix)]`；
-- 验证 MiniUsage 通用物理身份语义的测试必须改成平台 helper，在 Windows 也运行；
+- 验证 Usagi 通用物理身份语义的测试必须改成平台 helper，在 Windows 也运行；
 - 不允许为了让 Windows CI 绿，把所有 scanner integration test 整体 `#[cfg(unix)]`。
 
 特别核对：
@@ -816,7 +816,7 @@ tests/spec06_frontend_browser.rs
 
 ## 6.1 生产目标
 
-正式安装后的 MiniUsage 不能依赖：
+正式安装后的 Usagi 不能依赖：
 
 ```text
 cwd/frontend/dist
@@ -945,7 +945,7 @@ Vite hashed asset 可以使用浏览器缓存；`index.html` 不应被长期强�
    → 自动打开浏览器
 
 4. bind 失败 AddressInUse
-   → probe 当前 3210 是否为 MiniUsage
+   → probe 当前 3210 是否为 Usagi
 ```
 
 这样第二次点击应用时不会先打开第二套 SQLite/Scanner。
@@ -959,8 +959,8 @@ Vite hashed asset 可以使用浏览器缓存；`index.html` 不应被长期强�
 增加固定 header，例如：
 
 ```text
-X-MiniUsage-App: MiniUsage
-X-MiniUsage-Version: 0.1.0
+X-Usagi-App: Usagi
+X-Usagi-Version: 0.1.0
 ```
 
 版本 header 取 `CARGO_PKG_VERSION`。
@@ -978,17 +978,17 @@ Host 正确
 ```text
 成功响应
 +
-X-MiniUsage-App 精确匹配
+X-Usagi-App 精确匹配
 ```
 
-才可认为端口上的服务是现有 MiniUsage。
+才可认为端口上的服务是现有 Usagi。
 
 ---
 
 ## 7.3 重复启动行为
 
 ```text
-端口已由 MiniUsage 占用
+端口已由 Usagi 占用
 ↓
 打开 http://127.0.0.1:3210
 ↓
@@ -1000,7 +1000,7 @@ X-MiniUsage-App 精确匹配
 ```text
 启动第二个 scanner
 修改 ledger
-kill 第一个 MiniUsage
+kill 第一个 Usagi
 换随机端口启动第二套 MU
 ```
 
@@ -1008,7 +1008,7 @@ kill 第一个 MiniUsage
 
 ## 7.4 真实端口冲突
 
-若 probe 不满足 MiniUsage marker：
+若 probe 不满足 Usagi marker：
 
 ```text
 明确报告：127.0.0.1:3210 已被其他程序占用
@@ -1041,7 +1041,7 @@ http://127.0.0.1:3210
 
 本版不增加 tray/service/daemon 生命周期系统。
 
-特别是 Windows：**不要在没有“退出 MiniUsage”机制之前，仅为了隐藏窗口就盲目切换到完全不可见的 `windows_subsystem = "windows"` 后台进程。**
+特别是 Windows：**不要在没有“退出 Usagi”机制之前，仅为了隐藏窗口就盲目切换到完全不可见的 `windows_subsystem = "windows"` 后台进程。**
 
 首版应优先保证：
 
@@ -1147,7 +1147,7 @@ HTTP client 要求：
 
 ```text
 HTTPS
-固定 User-Agent: MiniUsage/<current_version>
+固定 User-Agent: Usagi/<current_version>
 GitHub REST API version header
 短超时（建议总请求 5s 量级）
 不读取无关仓库内容
@@ -1345,7 +1345,7 @@ POST /api/update/open-release
 建议继续要求：
 
 ```text
-X-MiniUsage-Request: 1
+X-Usagi-Request: 1
 ```
 
 与 `/api/refresh` 的本机主动操作约定一致。
@@ -1416,7 +1416,7 @@ frontend/src/dashboard/useUpdateController.ts
 
 ```text
 frontend/src/data/types.ts
-frontend/src/data/miniUsageClient.ts
+frontend/src/data/usagiClient.ts
 ```
 
 不得把 fetch 直接散落在 `DashboardPage.tsx`。
@@ -1578,7 +1578,7 @@ GitHub 每 4h 请求一次
 当前 README 仍写：
 
 ```text
-MiniUsage 是 macOS 浏览器工具
+Usagi 是 macOS 浏览器工具
 Dashboard 界面仍由后续 Spec 实现
 ```
 
@@ -1587,7 +1587,7 @@ Dashboard 界面仍由后续 Spec 实现
 新 README 至少包括：
 
 ```text
-MiniUsage 是什么
+Usagi 是什么
 支持平台
 Windows/macOS 安装方式
 启动方式
@@ -1893,10 +1893,10 @@ cargo build --release --locked --features embedded-frontend
 
 ```text
 Windows:
-MiniUsage-v0.1.0-windows-x64-setup.exe
+Usagi-v0.1.0-windows-x64-setup.exe
 
 macOS arm64:
-MiniUsage-v0.1.0-macos-arm64.dmg
+Usagi-v0.1.0-macos-arm64.dmg
 ```
 
 禁止把源码目录或 Node/Rust runtime 打进安装包。
@@ -1910,8 +1910,8 @@ React 已在 executable 内，不需要把 `frontend/` 作为 runtime resource �
 最终 GitHub Release 至少：
 
 ```text
-MiniUsage-v0.1.0-windows-x64-setup.exe
-MiniUsage-v0.1.0-macos-arm64.dmg
+Usagi-v0.1.0-windows-x64-setup.exe
+Usagi-v0.1.0-macos-arm64.dmg
 SHA256SUMS.txt
 ```
 
@@ -1942,13 +1942,13 @@ permissions:
 
 ```text
 用户下载
-MiniUsage-v0.1.0-windows-x64-setup.exe
+Usagi-v0.1.0-windows-x64-setup.exe
 ↓
 安装
 ↓
-从开始菜单/快捷方式启动 MiniUsage
+从开始菜单/快捷方式启动 Usagi
 ↓
-MiniUsage 解析 %USERPROFILE% 对应 Home/.codex
+Usagi 解析 %USERPROFILE% 对应 Home/.codex
 ↓
 打开 Local AppData 中自己的 mu.sqlite3
 ↓
@@ -1977,14 +1977,14 @@ SQLite CLI
 ```text
 下载 macOS arm64 dmg
 ↓
-安装/运行 MiniUsage
+安装/运行 Usagi
 ↓
 由于本版未签名，系统可能需要用户手动允许首次启动
 ↓
-MiniUsage 继续读取
+Usagi 继续读取
 ~/.codex
 以及原有
-~/Library/Application Support/MiniUsage/mu.sqlite3
+~/Library/Application Support/Usagi/mu.sqlite3
 ↓
 浏览器打开 Dashboard
 ```
@@ -1996,7 +1996,7 @@ MiniUsage 继续读取
 ## 15.1 后端自动检查
 
 ```text
-MiniUsage 启动
+Usagi 启动
 ↓
 Core ready
 ↓
@@ -2014,7 +2014,7 @@ spawn update task
 循环
 ```
 
-如果用户关闭 MiniUsage：
+如果用户关闭 Usagi：
 
 ```text
 不再检查
@@ -2706,7 +2706,7 @@ src/api/static_assets.rs（或等价）
 frontend/src/dashboard/DashboardPage.tsx
 frontend/src/index.css
 frontend/src/data/types.ts
-frontend/src/data/miniUsageClient.ts
+frontend/src/data/usagiClient.ts
 
 新增：
 frontend/src/dashboard/UpdateButton.tsx
@@ -2749,7 +2749,7 @@ Luna 执行时明确禁止：
 1. 为 Windows 直接删除 `device_id/inode` identity 检查；
 2. 保留 Windows `(0,0)` 作为正式实现；
 3. 为了 Windows CI 通过把整个 Scanner 测试套件 `#[cfg(unix)]`；
-4. 把 GitHub Token / PAT 写进 MiniUsage；
+4. 把 GitHub Token / PAT 写进 Usagi；
 5. React 直接请求 `api.github.com`；
 6. GitHub 检查失败时阻塞 `main()` 启动；
 7. 自动检查失败后清空之前已经发现的新版状态；
@@ -2807,7 +2807,7 @@ Luna 执行时明确禁止：
 本实施方案审核通过后，再单独建立：
 
 ```text
-MiniUsage_v0.1.0_跨平台分发与更新机制测试标准_v0.1.md
+Usagi_v0.1.0_跨平台分发与更新机制测试标准_v0.1.md
 ```
 
 测试标准应只覆盖本轮新增风险：

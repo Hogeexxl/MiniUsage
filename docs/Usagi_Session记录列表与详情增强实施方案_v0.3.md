@@ -1,10 +1,10 @@
-# MiniUsage Session 记录列表与详情增强实施方案
+# Usagi Session 记录列表与详情增强实施方案
 
 > 版本：v0.3  
 > 日期：2026-08-12  
-> 代码基线：用户本轮提供的最新 MiniUsage 代码快照  
-> 已完成前置版本：`MiniUsage_Dashboard_KPI与条件筛选实施方案_v0.1.md` 及其实现结果  
-> 测试标准：`MiniUsage_Session记录列表与详情增强测试标准_v0.2.md`
+> 代码基线：用户本轮提供的最新 Usagi 代码快照  
+> 已完成前置版本：`Usagi_Dashboard_KPI与条件筛选实施方案_v0.1.md` 及其实现结果  
+> 测试标准：`Usagi_Session记录列表与详情增强测试标准_v0.2.md`
 
 ---
 

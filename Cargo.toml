@@ -1,5 +1,5 @@
 [package]
-name = "mini-usage"
+name = "usagi"
 version = "0.2.6"
 edition = "2024"
 
@@ -8,8 +8,8 @@ default = []
 embedded-frontend = ["dep:rust-embed"]
 
 [package.metadata.packager]
-product-name = "MiniUsage"
-identifier = "com.hogeexxl.miniusage"
+product-name = "Usagi"
+identifier = "com.hogeexxl.usagi"
 formats = ["nsis", "dmg"]
 
 [dependencies]

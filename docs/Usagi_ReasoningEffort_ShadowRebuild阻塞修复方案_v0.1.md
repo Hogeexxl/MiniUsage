@@ -1,8 +1,8 @@
-# MiniUsage Reasoning Effort Shadow Rebuild 阻塞修复方案 v0.1
+# Usagi Reasoning Effort Shadow Rebuild 阻塞修复方案 v0.1
 
 ## 1. 文档目的
 
-本文用于修复当前最新版 MiniUsage 中已经确认的一个生产缺陷：
+本文用于修复当前最新版 Usagi 中已经确认的一个生产缺陷：
 
 ```text
 Usage Parser / Canonical v3 → v4 后，

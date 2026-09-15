@@ -1,4 +1,4 @@
-# MiniUsage Codex 本地数据口径文档
+# Usagi Codex 本地数据口径文档
 
 > 版本：v0.2  
 > 状态：第一批字段及 Subagent 聚合口径已确定  
@@ -10,7 +10,7 @@
 
 ## 1. 文档目标
 
-本文件确定 MiniUsage（下文简称 MU）第一批数据字段的：
+本文件确定 Usagi（下文简称 MU）第一批数据字段的：
 
 - 标准英文名；
 - 标准中文显示名；
@@ -840,7 +840,7 @@ project_name = project_path 最后一级目录名
 
 ```text
 project_path = <repo>
-project_name = mini-usage
+project_name = usagi
 ```
 
 第一版规则：
@@ -1036,8 +1036,8 @@ Input 为 0 时返回 `null`，界面显示 `—`。
 {
   "last_activity_at": "2026-08-05T05:20:00+08:00",
   "session_id": "01989abc-def0-7000-8000-123456789abc",
-  "title": "设计 MiniUsage 数据口径",
-  "project_name": "mini-usage",
+  "title": "设计 Usagi 数据口径",
+  "project_name": "usagi",
   "project_path": "<repo>",
   "models_used": [
     "gpt-5.6",
