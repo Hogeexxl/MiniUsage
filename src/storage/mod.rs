@@ -1,4 +1,4 @@
-//! SQLite storage bootstrap for MiniUsage.
+//! SQLite storage bootstrap for Usagi.
 //!
 //! This module owns the connection, PRAGMA setup, schema migration, source
 //! observation/checkpoint writes, metadata commits, scan lifecycle, and the
@@ -253,7 +253,7 @@ impl From<rusqlite::Error> for StorageError {
 #[derive(Debug, Clone, Default)]
 pub struct LedgerOptions {
     /// Optional path to `mu.sqlite3`.  If omitted, the platform default is
-    /// used (`~/Library/Application Support/MiniUsage/mu.sqlite3` on macOS and
+    /// used (`~/Library/Application Support/Usagi/mu.sqlite3` on macOS and
     /// the platform local application-data directory on Windows).
     pub db_path: Option<PathBuf>,
     /// Optional Codex home to bind. If omitted, `CODEX_HOME` or the platform
@@ -829,7 +829,7 @@ mod tests {
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
                 .as_nanos();
-            let path = std::env::temp_dir().join(format!("mini-usage-storage-{unique}"));
+            let path = std::env::temp_dir().join(format!("usagi-storage-{unique}"));
             fs::create_dir_all(&path).unwrap();
             Self(path)
         }
@@ -1050,7 +1050,7 @@ mod tests {
                 "INSERT INTO source_files(
                     source_file_id,thread_id,current_path,source_area,device_id,inode,
                     file_generation,observed_size,observed_mtime_ns,file_status,last_seen_at_ms
-                 ) VALUES (1,'cost-root','/tmp/mini-usage-cost.jsonl','sessions',1,1,1,100,0,'present',0)",
+                 ) VALUES (1,'cost-root','/tmp/usagi-cost.jsonl','sessions',1,1,1,100,0,'present',0)",
                 [],
             )
             .unwrap();
