@@ -941,9 +941,7 @@ mod tests {
         }
         let connection = Connection::open(path).unwrap();
         connection
-            .execute_batch(
-                "CREATE TABLE usage_events (event_id TEXT PRIMARY KEY);",
-            )
+            .execute_batch("CREATE TABLE usage_events (event_id TEXT PRIMARY KEY);")
             .unwrap();
         for index in 0..rows {
             connection
