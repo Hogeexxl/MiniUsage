@@ -934,7 +934,6 @@ mod tests {
         )
     }
 
-
     fn seed_usage_database(path: &Path, rows: usize) {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).unwrap();
