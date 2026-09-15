@@ -8,6 +8,7 @@ use std::{
 use directories::BaseDirs;
 
 const DATABASE_DIRECTORY: &str = "Usagi";
+const LEGACY_DATABASE_DIRECTORY: &str = "MiniUsage";
 const DATABASE_FILENAME: &str = "mu.sqlite3";
 
 /// Return the current user's platform home directory.
@@ -22,11 +23,10 @@ pub fn default_codex_home() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(".codex"))
 }
 
-/// Resolve the default Usagi database path.
+/// Resolve the canonical Usagi database path.
 ///
 /// `BaseDirs::data_local_dir` maps to `~/Library/Application Support` on
-/// macOS and `%LOCALAPPDATA%` on Windows.  The macOS suffix is intentionally
-/// the historical `Usagi/mu.sqlite3` path.
+/// macOS and `%LOCALAPPDATA%` on Windows.
 pub fn default_database_path() -> PathBuf {
     let path = BaseDirs::new()
         .map(|dirs| {
@@ -36,6 +36,18 @@ pub fn default_database_path() -> PathBuf {
         })
         .unwrap_or_else(|| PathBuf::from(DATABASE_FILENAME));
     normalize_path(path).unwrap_or_else(|_| PathBuf::from(DATABASE_FILENAME))
+}
+
+/// Resolve the database path used by versions released before the Usagi rename.
+///
+/// This is migration-only compatibility state. New data is never intentionally
+/// created in this location.
+pub(crate) fn legacy_database_path() -> Option<PathBuf> {
+    let path = BaseDirs::new()?
+        .data_local_dir()
+        .join(LEGACY_DATABASE_DIRECTORY)
+        .join(DATABASE_FILENAME);
+    normalize_path(path).ok()
 }
 
 /// Resolve an explicitly supplied or environment-selected Codex home.
