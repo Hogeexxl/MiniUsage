@@ -1,6 +1,6 @@
 //! Stable, read-only Public API v1 projection.
 //!
-//! Public API handlers share MiniUsage's query/aggregate layer with the
+//! Public API handlers share Usagi's query/aggregate layer with the
 //! internal Dashboard API, but own their HTTP DTOs and accepted parameters so
 //! internal API evolution cannot silently change the public contract.
 
@@ -56,7 +56,7 @@ struct InfoResponse {
 
 async fn info() -> Json<InfoResponse> {
     Json(InfoResponse {
-        service: "miniusage",
+        service: "usagi",
         app_version: APP_VERSION,
         api_version: PUBLIC_API_VERSION,
         capabilities: CAPABILITIES,

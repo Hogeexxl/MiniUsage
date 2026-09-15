@@ -39,12 +39,12 @@ pub use query::ApiError;
 
 pub const LISTEN_PORT: u16 = 3210;
 pub const LISTEN_IPV4: [u8; 4] = [127, 0, 0, 1];
-pub const APP_MARKER_HEADER: &str = "X-MiniUsage-App";
-pub const APP_MARKER_VALUE: &str = "MiniUsage";
-pub const APP_VERSION_HEADER: &str = "X-MiniUsage-Version";
+pub const APP_MARKER_HEADER: &str = "X-Usagi-App";
+pub const APP_MARKER_VALUE: &str = "Usagi";
+pub const APP_VERSION_HEADER: &str = "X-Usagi-Version";
 pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 const CACHE_CONTROL_NO_STORE: &str = "no-store";
-const REFRESH_HEADER: &str = "x-miniusage-request";
+const REFRESH_HEADER: &str = "x-usagi-request";
 
 #[derive(Clone)]
 pub struct AppContext {

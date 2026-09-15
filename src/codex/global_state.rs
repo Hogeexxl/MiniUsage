@@ -391,7 +391,7 @@ mod tests {
     #[test]
     fn t_s02_001_missing_and_unreadable_sources_are_distinct() {
         let missing = GlobalStateReader::read_snapshot(std::env::temp_dir().join(format!(
-            "mini-usage-global-state-missing-{}",
+            "usagi-global-state-missing-{}",
             std::process::id()
         )));
         assert_eq!(missing.status, GlobalStateStatus::NotPresent);

@@ -83,7 +83,7 @@ async fn t_s05_019_real_sqlite_busy_refresh_returns_only_safe_code() {
         .call(
             Method::POST,
             "/api/refresh",
-            &[("x-miniusage-request", "1")],
+            &[("x-usagi-request", "1")],
         )
         .await;
     assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
