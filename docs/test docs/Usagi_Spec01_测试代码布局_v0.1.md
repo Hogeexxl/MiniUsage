@@ -1,4 +1,4 @@
-# MiniUsage Spec01 测试代码布局 v0.1
+# Usagi Spec01 测试代码布局 v0.1
 
 ## 1. 本轮原则
 
@@ -43,4 +43,4 @@ Spec01 后续若出现真实缺陷：
 
 - 纯函数/私有状态机回归：加在对应 `src/**.rs` 的 unit tests。
 - 跨 `Ledger`、SQLite 文件、重启/重开、多个连接、完整事务链：加到 `tests/spec01_storage_integration.rs`。
-- 不再因为原 Spec 测试章节存在某个 bullet 而新增重复测试；只按 `MiniUsage_测试标准_Spec01-06_v0.17` 执行。
+- 不再因为原 Spec 测试章节存在某个 bullet 而新增重复测试；只按 `Usagi_测试标准_Spec01-06_v0.17` 执行。

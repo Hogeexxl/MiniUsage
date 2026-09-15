@@ -1,6 +1,6 @@
-# MiniUsage Spec04 测试执行记录 v0.1
+# Usagi Spec04 测试执行记录 v0.1
 
-> 执行依据：`MiniUsage_测试标准_Spec01-05_v0.12.md` 的 Spec04 部分。Spec04 正文中的测试章节不作为本记录的测试验收来源。本记录同时包含 S04 完成门 P0/P1 与本轮最终交付要求提前执行的 T-S04-048～052 P2。
+> 执行依据：`Usagi_测试标准_Spec01-05_v0.12.md` 的 Spec04 部分。Spec04 正文中的测试章节不作为本记录的测试验收来源。本记录同时包含 S04 完成门 P0/P1 与本轮最终交付要求提前执行的 T-S04-048～052 P2。
 
 ## 1. 执行环境
 
@@ -9,7 +9,7 @@
 - Cargo：1.97.1
 - crates：项目 `.cargo/config.toml` 指向用户提供的 `vendor/`，全程 `--offline`
 - 运行环境：Linux 容器，当前进程为 root
-- 工作副本：`/mnt/data/miniusage_spec04_work`
+- 工作副本：`/mnt/data/usagi_spec04_work`
 
 ## 2. 验收集合与结果
 
@@ -181,7 +181,7 @@ cargo test --offline --test spec03_scanner_integration
 ### 4.6 binary health
 
 ```bash
-cargo test --offline --bin mini-usage
+cargo test --offline --bin usagi
 ```
 
 结果：
@@ -208,7 +208,7 @@ git diff --check
 - Aggregate：active epoch、UTC `[start,end)`、Summary/Session/model、cache-write 三态、多层 Subagent、多视图 invariant、overflow/keyset pagination。
 - Privacy/resource：usage 正文/rate-limit payload 不落 DB/log/diagnostic；unchanged `usage_bytes_read=0`；append 只读新增范围；1 GiB P2 有显式 batch/memory/time budgets。
 
-详细 ID→代码位置见 `MiniUsage_Spec04_测试代码布局_v0.1.md` 与更新后的测试标准第 6 章。
+详细 ID→代码位置见 `Usagi_Spec04_测试代码布局_v0.1.md` 与更新后的测试标准第 6 章。
 
 ## 6. 环境边界与非本轮范围
 
@@ -222,7 +222,7 @@ git diff --check
 
 ## 7. 结论
 
-依据 `MiniUsage_测试标准_Spec01-05_v0.12.md`：
+依据 `Usagi_测试标准_Spec01-05_v0.12.md`：
 
 - **Spec04 S04 Gate：52 / 52 PASS**；
 - **Spec04 P2 T-S04-048～052：5 / 5 PASS**；

@@ -1,9 +1,9 @@
-# MiniUsage Dashboard KPI 与条件筛选测试标准
+# Usagi Dashboard KPI 与条件筛选测试标准
 
 > 版本：v0.1  
 > 日期：2026-08-10  
-> 对应实施方案：`MiniUsage_Dashboard_KPI与条件筛选实施方案_v0.1.md`  
-> 格式基线：`MiniUsage_测试标准_Spec01-06_v0.17.md`
+> 对应实施方案：`Usagi_Dashboard_KPI与条件筛选实施方案_v0.1.md`  
+> 格式基线：`Usagi_测试标准_Spec01-06_v0.17.md`
 
 ---
 
@@ -84,7 +84,7 @@
 |---|---|
 | S1–S3 | `src/storage/migrations.rs`、`src/storage/metadata.rs`、`src/codex/global_state.rs`、metadata resolver/scanner integration tests |
 | S4–S6 | `src/usage/aggregate.rs`、`src/api/query.rs`、`src/api/tests/dashboard_filters.rs` |
-| S7–S9 | `frontend/src/data/miniUsageClient.test.ts`、`useDashboardController.test.tsx`、`MetricGrid.test.tsx`、`frontend/tests/browser/dashboard.spec.ts` |
+| S7–S9 | `frontend/src/data/usagiClient.test.ts`、`useDashboardController.test.tsx`、`MetricGrid.test.tsx`、`frontend/tests/browser/dashboard.spec.ts` |
 | S10 | 现有真实 Axum browser gate 与 Spec01–06 正式回归命令 |
 
 文件名可随仓库现有测试布局调整，但 ID、Gate 和测试语义必须保留。一个测试函数可以覆盖同一条目内的矩阵，不要求每个矩阵行建立独立函数。

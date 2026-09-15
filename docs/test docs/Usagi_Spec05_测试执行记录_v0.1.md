@@ -1,6 +1,6 @@
-# MiniUsage Spec05 测试执行记录 v0.1
+# Usagi Spec05 测试执行记录 v0.1
 
-> 验收依据：`MiniUsage_测试标准_Spec01-05_v0.14.md` 第 7 章（内容基线来自完成 Spec04 后的 v0.12）。Spec05 正文中的测试章节不作为本轮验收清单。
+> 验收依据：`Usagi_测试标准_Spec01-05_v0.14.md` 第 7 章（内容基线来自完成 Spec04 后的 v0.12）。Spec05 正文中的测试章节不作为本轮验收清单。
 
 ## 1. 执行环境
 
@@ -27,7 +27,7 @@ cargo check --offline
 - Spec04 与 Spec05 的 `src/storage/schema/` 目录 `diff -ru` 无差异：Spec05 未新增 migration/table；
 - `src/api.rs`、`src/api/`、`src/range.rs`、`src/random.rs` 中未出现 handler SQL `SELECT/INSERT/UPDATE/DELETE`；同步 SQLite 访问仍由 Ledger/query snapshot 封装；
 - 新增 Spec05 源码/测试中无 `TODO`、`FIXME`、`not implemented` 残留；
-- 完成 Spec04 后的 `MiniUsage_测试标准_Spec01-05_v0.12.md` SHA-256 在工作副本中保持不变，本轮另生成 v0.14，不覆盖测试基线。
+- 完成 Spec04 后的 `Usagi_测试标准_Spec01-05_v0.12.md` SHA-256 在工作副本中保持不变，本轮另生成 v0.14，不覆盖测试基线。
 
 ## 3. Spec05 验收测试实际执行
 
@@ -80,7 +80,7 @@ cargo test --offline --test spec05_api_integration -- --nocapture
 ### 3.4 Main listen contract
 
 ```bash
-cargo test --offline --bin mini-usage -- --nocapture
+cargo test --offline --bin usagi -- --nocapture
 ```
 
 结果：**1 passed / 0 failed**。监听地址固定为 `127.0.0.1:3210`。
@@ -138,7 +138,7 @@ Spec05 不复制第二套隐私 guard；复用 S01 对 schema/log/test fixture/�
 
 ## 4. Spec05 条目结论
 
-`MiniUsage_测试标准_Spec01-05_v0.14.md` 的 Spec05 共 22 条：
+`Usagi_测试标准_Spec01-05_v0.14.md` 的 Spec05 共 22 条：
 
 - P0/P1（S05 Gate）：**19 / 19 PASS**；
 - P2（T-S05-002、016、022）：**3 / 3 PASS**；

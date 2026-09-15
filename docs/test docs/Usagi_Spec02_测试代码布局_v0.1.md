@@ -1,4 +1,4 @@
-# MiniUsage Spec02 测试代码布局 v0.1
+# Usagi Spec02 测试代码布局 v0.1
 
 ## 1. 本轮原则
 

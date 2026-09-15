@@ -1,8 +1,8 @@
-# MiniUsage Session 记录列表与详情增强测试标准
+# Usagi Session 记录列表与详情增强测试标准
 
 > 版本：v0.3  
 > 日期：2026-08-12  
-> 对应实施方案：`MiniUsage_Session记录列表与详情增强实施方案_v0.3.md`
+> 对应实施方案：`Usagi_Session记录列表与详情增强实施方案_v0.3.md`
 
 ---
 
@@ -168,7 +168,7 @@ frontend check/build
 | 阶段 | 建议落点 |
 |---|---|
 | S1–S3 | `src/usage/aggregate.rs`、`src/api/query.rs`、现有 Session/API integration tests |
-| S4 | `frontend/src/data/miniUsageClient.test.ts` |
+| S4 | `frontend/src/data/usagiClient.test.ts` |
 | S5–S6 | `frontend/src/dashboard/session/useSessionTableController.test.tsx` 或仓库当前等价 controller test |
 | S7 | 现有 SessionTable 组件测试 / browser Session list test |
 | S8 | Detail client/controller tests |
