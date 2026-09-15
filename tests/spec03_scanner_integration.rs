@@ -6,10 +6,10 @@ use std::{
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
-use mini_usage::codex::rollout::{
+use usagi::codex::rollout::{
     OwningCandidateConfidence, OwningThreadCandidate, OwningThreadCandidates,
 };
-use mini_usage::{
+use usagi::{
     codex::{CompleteRolloutLine, ResumeState, RolloutMetadataParser, RolloutParseContext},
     domain::{
         ScanResult, ScanTrigger, SourceArea, SourceObservation, SourceObservationBatch,
@@ -45,7 +45,7 @@ impl TempRoot {
             .expect("clock before epoch")
             .as_nanos();
         let path = std::env::temp_dir().join(format!(
-            "miniusage-spec03-{label}-{}-{stamp}",
+            "usagi-spec03-{label}-{}-{stamp}",
             std::process::id()
         ));
         fs::create_dir_all(&path).expect("create temporary test directory");
@@ -106,7 +106,7 @@ impl ScannerFixture {
         )
     }
 
-    fn start(&self, ledger: Arc<Ledger>) -> mini_usage::scanner::ScanHandle {
+    fn start(&self, ledger: Arc<Ledger>) -> usagi::scanner::ScanHandle {
         ScanCoordinator::start(
             ScanConfig::new(self.home.clone()),
             ledger,
@@ -138,7 +138,7 @@ impl ScannerFixture {
 
     fn request_and_wait(
         &self,
-        handle: &mini_usage::scanner::ScanHandle,
+        handle: &usagi::scanner::ScanHandle,
         ledger: &Ledger,
     ) -> String {
         let disposition = handle
