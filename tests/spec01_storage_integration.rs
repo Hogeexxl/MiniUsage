@@ -9,6 +9,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+use rusqlite::{Connection, params};
 use usagi::{
     domain::{
         AgentPathProvenance, AgentRole, AgentRoleProvenance, CheckpointProcessingStatus,
@@ -20,7 +21,6 @@ use usagi::{
     },
     storage::{Ledger, LedgerOptions},
 };
-use rusqlite::{Connection, params};
 
 type PersistedProvenance = (
     Option<String>,

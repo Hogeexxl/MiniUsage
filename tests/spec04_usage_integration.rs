@@ -11,6 +11,9 @@ use axum::{
     http::{Method, Request, StatusCode},
 };
 
+use rusqlite::{Connection, OptionalExtension, params};
+use serde_json::{Value, json};
+use tower::ServiceExt;
 use usagi::{
     api::{AppContext, QueryApi},
     codex::quota::CodexQuotaService,
@@ -24,9 +27,6 @@ use usagi::{
         CompletionStatus, SessionPageRequest, SummaryQuery, TimeRange, UsageFilter, UsageLedger,
     },
 };
-use rusqlite::{Connection, OptionalExtension, params};
-use serde_json::{Value, json};
-use tower::ServiceExt;
 
 const ROOT: &str = "00000000-03e8-7000-8000-000000000001";
 const CHILD: &str = "00000000-07d0-7000-8000-000000000002";
@@ -910,14 +910,7 @@ async fn t_mu03_s03_usage_v3_to_v5_rebuild_uses_rollout_effort_and_preserves_tok
         .unwrap();
     assert_eq!(
         after,
-        (
-            2,
-            baseline.1,
-            1,
-            1,
-            0,
-            usagi::usage::USAGE_PARSER_VERSION,
-        )
+        (2, baseline.1, 1, 1, 0, usagi::usage::USAGE_PARSER_VERSION,)
     );
     assert_eq!(fs::read(&rollout).unwrap(), raw_before);
 

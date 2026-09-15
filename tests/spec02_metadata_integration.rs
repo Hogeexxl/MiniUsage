@@ -7,13 +7,13 @@ use std::{
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
+use rusqlite::{Connection, params};
+use serde_json::json;
 use usagi::{
     domain::{ScanResult, ScanTrigger},
     scanner::{CodexMetadata, RequestDisposition, ScanConfig, ScanCoordinator},
     storage::{Ledger, LedgerOptions},
 };
-use rusqlite::{Connection, params};
-use serde_json::json;
 
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
@@ -124,11 +124,7 @@ impl ScannerFixture {
         }
     }
 
-    fn request_and_wait(
-        &self,
-        handle: &usagi::scanner::ScanHandle,
-        ledger: &Ledger,
-    ) -> String {
+    fn request_and_wait(&self, handle: &usagi::scanner::ScanHandle, ledger: &Ledger) -> String {
         let disposition = handle
             .request(ScanTrigger::Manual)
             .expect("request manual scan");

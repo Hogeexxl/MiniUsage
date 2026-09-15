@@ -6,6 +6,8 @@ use std::{
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
+use rusqlite::{Connection, OptionalExtension, params};
+use serde_json::json;
 use usagi::codex::rollout::{
     OwningCandidateConfidence, OwningThreadCandidate, OwningThreadCandidates,
 };
@@ -19,8 +21,6 @@ use usagi::{
     scanner::{CodexMetadata, RequestDisposition, ScanConfig, ScanCoordinator},
     storage::{Ledger, LedgerOptions},
 };
-use rusqlite::{Connection, OptionalExtension, params};
-use serde_json::json;
 use uuid::Uuid;
 
 const OWNER_ID: &str = "00000000-0000-7000-8000-000000000001";
@@ -136,11 +136,7 @@ impl ScannerFixture {
         }
     }
 
-    fn request_and_wait(
-        &self,
-        handle: &usagi::scanner::ScanHandle,
-        ledger: &Ledger,
-    ) -> String {
+    fn request_and_wait(&self, handle: &usagi::scanner::ScanHandle, ledger: &Ledger) -> String {
         let disposition = handle
             .request(ScanTrigger::Manual)
             .expect("request manual scan");

@@ -6,6 +6,8 @@ use std::{
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
+use rusqlite::{Connection, params};
+use serde_json::json;
 use usagi::{
     domain::{
         CheckpointProcessingStatus, ContinuationState, FactQualityStatus,
@@ -15,8 +17,6 @@ use usagi::{
     scanner::{CodexMetadata, RequestDisposition, ScanConfig, ScanCoordinator},
     storage::{Ledger, LedgerOptions},
 };
-use rusqlite::{Connection, params};
-use serde_json::json;
 use uuid::Uuid;
 
 struct TempRoot(PathBuf);
@@ -637,10 +637,7 @@ fn rebuilt_subagent_same_envelope_timestamp_models_keep_relationship_and_usage_r
         .unwrap();
     assert_eq!(
         metadata_checkpoint,
-        (
-            usagi::codex::METADATA_PARSER_VERSION,
-            "ready".to_owned(),
-        )
+        (usagi::codex::METADATA_PARSER_VERSION, "ready".to_owned(),)
     );
     let relationship_after: (Option<String>, Option<String>, String) = after
         .query_row(
