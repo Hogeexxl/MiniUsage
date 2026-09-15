@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { appendRangeParams, dashboardQueryKey, miniUsageClient } from "./miniUsageClient";
-import { MiniUsageClientError, type DashboardFilters } from "./types";
+import { appendRangeParams, dashboardQueryKey, usagiClient } from "./usagiClient";
+import { UsagiClientError, type DashboardFilters } from "./types";
 
 const emptyFilters: DashboardFilters = { models: [], projects: [] };
 const range = { key: "today", start_ms: 1, end_ms: 2, timezone: "Asia/Shanghai" };
@@ -45,8 +45,8 @@ const sessionUsage = {
 const sessionItem = (root_session_id = "root-1") => ({
   root_session_id,
   title: "A session",
-  project_name: "MiniUsage",
-  project_path: "/work/MiniUsage",
+  project_name: "Usagi",
+  project_path: "/work/Usagi",
   last_activity_at_ms: 1_700_000_000_000,
   models_used: ["gpt-5"],
   subagent_count: 1,
@@ -59,7 +59,7 @@ const sessionItem = (root_session_id = "root-1") => ({
 
 afterEach(() => vi.restoreAllMocks());
 
-describe("miniUsageClient DTO seam", () => {
+describe("usagiClient DTO seam", () => {
   it("T-Q-SW-002 parses weekly-only and session-plus-weekly quota contracts", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
@@ -81,7 +81,7 @@ describe("miniUsageClient DTO seam", () => {
       ),
     );
 
-    await expect(miniUsageClient.codexQuota()).resolves.toEqual({
+    await expect(usagiClient.codexQuota()).resolves.toEqual({
       status: "ready",
       account_email: "hoge@example.com",
       plan_type: "prolite",
@@ -124,7 +124,7 @@ describe("miniUsageClient DTO seam", () => {
         { status: 200 },
       ),
     );
-    await expect(miniUsageClient.codexQuota()).resolves.toMatchObject({
+    await expect(usagiClient.codexQuota()).resolves.toMatchObject({
       session: {
         used_percent: 12,
         remaining_percent: 88,
@@ -156,7 +156,7 @@ describe("miniUsageClient DTO seam", () => {
           fetched_at_ms: null,
         }), { status: 200 }),
       );
-      await expect(miniUsageClient.codexQuota()).rejects.toBeInstanceOf(MiniUsageClientError);
+      await expect(usagiClient.codexQuota()).rejects.toBeInstanceOf(UsagiClientError);
     }
   });
 
@@ -171,7 +171,7 @@ describe("miniUsageClient DTO seam", () => {
             { model: "gpt-5.6", provider: "route-models" },
           ],
           projects: [
-            { kind: "project", project_name: "MiniUsage", project_path: "/work/MiniUsage" },
+            { kind: "project", project_name: "Usagi", project_path: "/work/Usagi" },
             { kind: "projectless" },
             { kind: "unknown" },
           ],
@@ -179,14 +179,14 @@ describe("miniUsageClient DTO seam", () => {
         { status: 200 },
       ),
     );
-    await expect(miniUsageClient.filterOptions()).resolves.toEqual({
+    await expect(usagiClient.filterOptions()).resolves.toEqual({
       data_revision: 7,
       models: [
         { model: "gpt-5.6-sol", provider: "openai" },
         { model: "gpt-5.6", provider: "route-models" },
       ],
       projects: [
-        { kind: "project", project_name: "MiniUsage", project_path: "/work/MiniUsage" },
+        { kind: "project", project_name: "Usagi", project_path: "/work/Usagi" },
         { kind: "projectless" },
         { kind: "unknown" },
       ],
@@ -194,14 +194,14 @@ describe("miniUsageClient DTO seam", () => {
 
     for (const invalid of [
       { data_revision: 1, models: [], projects: [{ kind: "projectless", project_path: "/fake" }] },
-      { data_revision: 1, models: [], projects: [{ kind: "project", project_name: "MiniUsage" }] },
+      { data_revision: 1, models: [], projects: [{ kind: "project", project_name: "Usagi" }] },
       { data_revision: 1, models: [""], projects: [] },
       { data_revision: 1, models: [{ model: "gpt-a", provider: "unknown" }], projects: [] },
       { data_revision: 1, models: [{ model: "gpt-a" }], projects: [] },
       { data_revision: 1, models: [{ model: "gpt-a", provider: "openai", extra: true }], projects: [] },
     ]) {
       fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(invalid), { status: 200 }));
-      await expect(miniUsageClient.filterOptions()).rejects.toBeInstanceOf(MiniUsageClientError);
+      await expect(usagiClient.filterOptions()).rejects.toBeInstanceOf(UsagiClientError);
     }
 
     const filters: DashboardFilters = {
@@ -214,14 +214,14 @@ describe("miniUsageClient DTO seam", () => {
       ],
     };
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ range, data_revision: 1, usage }), { status: 200 }));
-    await miniUsageClient.summary({ key: "today" }, filters);
+    await usagiClient.summary({ key: "today" }, filters);
     expect(fetchMock).toHaveBeenLastCalledWith(
       "/api/usage/summary?range=today&model=gpt-a&model=gpt-b&project_path=%2Fa+%26+b&include_projectless=1&include_unknown_project=1",
       expect.objectContaining({ method: "GET" }),
     );
 
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ range, data_revision: 1, usage }), { status: 200 }));
-    await miniUsageClient.summary({ key: "today" }, { models: [], projects: [] });
+    await usagiClient.summary({ key: "today" }, { models: [], projects: [] });
     expect(fetchMock).toHaveBeenLastCalledWith(
       "/api/usage/summary?range=today",
       expect.objectContaining({ method: "GET" }),
@@ -233,7 +233,7 @@ describe("miniUsageClient DTO seam", () => {
       new Response(JSON.stringify({ range: { ...range, key: "custom" }, data_revision: 1, usage }), { status: 200 }),
     );
     const custom = { key: "custom" as const, from: "2026-08-01", to: "2026-08-03" };
-    await miniUsageClient.summary(custom, emptyFilters);
+    await usagiClient.summary(custom, emptyFilters);
     expect(fetchMock).toHaveBeenLastCalledWith(
       "/api/usage/summary?range=custom&from=2026-08-01&to=2026-08-03",
       expect.objectContaining({ method: "GET" }),
@@ -270,14 +270,14 @@ describe("miniUsageClient DTO seam", () => {
         ),
       )
       .mockResolvedValueOnce(new Response(JSON.stringify({ data_revision: 3, status_revision: 4 }), { status: 200 }));
-    await expect(miniUsageClient.summary({ key: "today" }, emptyFilters)).resolves.toEqual({
+    await expect(usagiClient.summary({ key: "today" }, emptyFilters)).resolves.toEqual({
       range,
       data_revision: 3,
       usage,
     });
-    const status = await miniUsageClient.getStatus();
+    const status = await usagiClient.getStatus();
     expect(status.source_binding_status).toBe("ready");
-    await expect(miniUsageClient.getRevision()).resolves.toEqual({ data_revision: 3, status_revision: 4 });
+    await expect(usagiClient.getRevision()).resolves.toEqual({ data_revision: 3, status_revision: 4 });
   });
 
   it("T-S03-004 parser accepts cost-incomplete roots beyond healthy sessions only within health total", async () => {
@@ -296,7 +296,7 @@ describe("miniUsageClient DTO seam", () => {
     fetchMock.mockResolvedValueOnce(
       new Response(JSON.stringify({ range, data_revision: 0, usage: acceptedUsage }), { status: 200 }),
     );
-    await expect(miniUsageClient.summary({ key: "today" }, emptyFilters)).resolves.toMatchObject({ usage: acceptedUsage });
+    await expect(usagiClient.summary({ key: "today" }, emptyFilters)).resolves.toMatchObject({ usage: acceptedUsage });
 
     fetchMock.mockResolvedValueOnce(
       new Response(
@@ -308,7 +308,7 @@ describe("miniUsageClient DTO seam", () => {
         { status: 200 },
       ),
     );
-    await expect(miniUsageClient.summary({ key: "today" }, emptyFilters)).rejects.toBeInstanceOf(MiniUsageClientError);
+    await expect(usagiClient.summary({ key: "today" }, emptyFilters)).rejects.toBeInstanceOf(UsagiClientError);
   });
 
   it("rejects unsafe integers, invalid ratios, and legacy-field-only responses", async () => {
@@ -338,9 +338,9 @@ describe("miniUsageClient DTO seam", () => {
           { status: 200 },
         ),
       );
-    await expect(miniUsageClient.summary({ key: "today" }, emptyFilters)).rejects.toBeInstanceOf(MiniUsageClientError);
-    await expect(miniUsageClient.summary({ key: "today" }, emptyFilters)).rejects.toBeInstanceOf(MiniUsageClientError);
-    await expect(miniUsageClient.summary({ key: "today" }, emptyFilters)).rejects.toBeInstanceOf(MiniUsageClientError);
+    await expect(usagiClient.summary({ key: "today" }, emptyFilters)).rejects.toBeInstanceOf(UsagiClientError);
+    await expect(usagiClient.summary({ key: "today" }, emptyFilters)).rejects.toBeInstanceOf(UsagiClientError);
+    await expect(usagiClient.summary({ key: "today" }, emptyFilters)).rejects.toBeInstanceOf(UsagiClientError);
   });
 
   it("preserves cache-write null and zero as distinct canonical values", async () => {
@@ -357,8 +357,8 @@ describe("miniUsageClient DTO seam", () => {
           { status: 200 },
         ),
       );
-    await expect(miniUsageClient.summary({ key: "today" }, emptyFilters)).resolves.toMatchObject({ usage });
-    await expect(miniUsageClient.summary({ key: "today" }, emptyFilters)).resolves.toMatchObject({
+    await expect(usagiClient.summary({ key: "today" }, emptyFilters)).resolves.toMatchObject({ usage });
+    await expect(usagiClient.summary({ key: "today" }, emptyFilters)).resolves.toMatchObject({
       usage: { cache_write_tokens: 0, uncached_input_tokens: 6 },
     });
   });
@@ -370,18 +370,18 @@ describe("miniUsageClient DTO seam", () => {
         headers: { "content-type": "application/json" },
       }),
     );
-    await expect(miniUsageClient.refresh()).resolves.toMatchObject({ disposition: "started", http_status: 202 });
+    await expect(usagiClient.refresh()).resolves.toMatchObject({ disposition: "started", http_status: 202 });
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/refresh",
-      expect.objectContaining({ method: "POST", headers: expect.objectContaining({ "X-MiniUsage-Request": "1" }) }),
+      expect.objectContaining({ method: "POST", headers: expect.objectContaining({ "X-Usagi-Request": "1" }) }),
     );
 
     fetchMock.mockResolvedValueOnce(
       new Response(JSON.stringify({ error: { code: "SOURCE_CHANGED", message: "secret path" } }), { status: 409 }),
     );
-    const error = await miniUsageClient.getRevision().catch((value: unknown) => value);
-    expect(error).toBeInstanceOf(MiniUsageClientError);
-    expect((error as MiniUsageClientError).code).toBe("SOURCE_CHANGED");
+    const error = await usagiClient.getRevision().catch((value: unknown) => value);
+    expect(error).toBeInstanceOf(UsagiClientError);
+    expect((error as UsagiClientError).code).toBe("SOURCE_CHANGED");
     expect(String(error)).not.toContain("secret path");
   });
 
@@ -390,7 +390,7 @@ describe("miniUsageClient DTO seam", () => {
     const sortIndex = {
       root_session_id: "root-1",
       last_activity_at_ms: 1_700_000_000_000,
-      project_sort_key: "/work/MiniUsage",
+      project_sort_key: "/work/Usagi",
       model_sort_key: "gpt-5",
       total_tokens: 30,
       combined_total_tokens: 30,
@@ -405,7 +405,7 @@ describe("miniUsageClient DTO seam", () => {
         { status: 200 },
       ),
     );
-    await expect(miniUsageClient.getSessionSnapshot({ range: { key: "today" }, filters: emptyFilters })).resolves.toEqual({
+    await expect(usagiClient.getSessionSnapshot({ range: { key: "today" }, filters: emptyFilters })).resolves.toEqual({
       range,
       data_revision: 4,
       total_items: 1,
@@ -421,7 +421,7 @@ describe("miniUsageClient DTO seam", () => {
       new Response(JSON.stringify({ range, data_revision: 4, items: [sessionItem()] }), { status: 200 }),
     );
     await expect(
-      miniUsageClient.getSessionRows({
+      usagiClient.getSessionRows({
         range: { key: "today" },
         filters: { models: ["gpt-b", "gpt-a", "gpt-b"], projects: [{ kind: "projectless" }] },
         root_session_ids: ["root-1", "root-1"],
@@ -470,7 +470,7 @@ describe("miniUsageClient DTO seam", () => {
         }],
       }), { status: 200 }),
     );
-    await expect(miniUsageClient.getSessionDetail({ range: { key: "today" }, filters: emptyFilters, root_session_id: "root-1", expected_data_revision: 4 })).resolves.toMatchObject({
+    await expect(usagiClient.getSessionDetail({ range: { key: "today" }, filters: emptyFilters, root_session_id: "root-1", expected_data_revision: 4 })).resolves.toMatchObject({
       last_activity_at_ms: 1_700_000_000_000,
       main: { model_usage: [{ model: "gpt-5", reasoning_effort: "high" }], self_usage: sessionUsage, inclusive_usage: sessionUsage },
       subagents: [{
@@ -491,10 +491,10 @@ describe("miniUsageClient DTO seam", () => {
     fetchMock.mockResolvedValueOnce(
       new Response(JSON.stringify({ error: { code: "STALE_DATA_REVISION" } }), { status: 409 }),
     );
-    await expect(miniUsageClient.getSessionRows({ range: { key: "today" }, filters: emptyFilters, root_session_ids: ["root-1"], expected_data_revision: 4 })).rejects.toMatchObject({ code: "STALE_DATA_REVISION" });
+    await expect(usagiClient.getSessionRows({ range: { key: "today" }, filters: emptyFilters, root_session_ids: ["root-1"], expected_data_revision: 4 })).rejects.toMatchObject({ code: "STALE_DATA_REVISION" });
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ range, data_revision: 4, items: Array.from({ length: 61 }, () => sessionItem()) }), { status: 200 }));
-    await expect(miniUsageClient.getSessionRows({ range: { key: "today" }, filters: emptyFilters, root_session_ids: ["root-1"] })).rejects.toBeInstanceOf(MiniUsageClientError);
-    await expect(miniUsageClient.getSessionRows({ range: { key: "today" }, filters: emptyFilters, root_session_ids: Array.from({ length: 61 }, (_, index) => `root-${index}`) })).rejects.toMatchObject({ code: "INVALID_SESSION_IDS" });
+    await expect(usagiClient.getSessionRows({ range: { key: "today" }, filters: emptyFilters, root_session_ids: ["root-1"] })).rejects.toBeInstanceOf(UsagiClientError);
+    await expect(usagiClient.getSessionRows({ range: { key: "today" }, filters: emptyFilters, root_session_ids: Array.from({ length: 61 }, (_, index) => `root-${index}`) })).rejects.toMatchObject({ code: "INVALID_SESSION_IDS" });
   });
 
   it("T-MU04-C03 validates cost status combinations across summary, session, and detail DTOs", async () => {
@@ -508,7 +508,7 @@ describe("miniUsageClient DTO seam", () => {
       fetchMock.mockResolvedValueOnce(
         new Response(JSON.stringify({ range, data_revision: 0, usage: { ...usage, ...cost } }), { status: 200 }),
       );
-      await expect(miniUsageClient.summary({ key: "today" }, emptyFilters)).resolves.toMatchObject({ usage: cost });
+      await expect(usagiClient.summary({ key: "today" }, emptyFilters)).resolves.toMatchObject({ usage: cost });
     }
 
     for (const invalidUsage of [
@@ -523,13 +523,13 @@ describe("miniUsageClient DTO seam", () => {
       fetchMock.mockResolvedValueOnce(
         new Response(JSON.stringify({ range, data_revision: 0, usage: invalidUsage }), { status: 200 }),
       );
-      await expect(miniUsageClient.summary({ key: "today" }, emptyFilters)).rejects.toBeInstanceOf(MiniUsageClientError);
+      await expect(usagiClient.summary({ key: "today" }, emptyFilters)).rejects.toBeInstanceOf(UsagiClientError);
     }
 
     const sortIndex = {
       root_session_id: "root-1",
       last_activity_at_ms: 1_700_000_000_000,
-      project_sort_key: "/work/MiniUsage",
+      project_sort_key: "/work/Usagi",
       model_sort_key: "gpt-5",
       total_tokens: 30,
       combined_total_tokens: 30,
@@ -556,7 +556,7 @@ describe("miniUsageClient DTO seam", () => {
         { status: 200 },
       ),
     );
-    await expect(miniUsageClient.getSessionSnapshot({ range: { key: "today" }, filters: emptyFilters })).resolves.toMatchObject({
+    await expect(usagiClient.getSessionSnapshot({ range: { key: "today" }, filters: emptyFilters })).resolves.toMatchObject({
       items: [{ inclusive_usage: partialSessionUsage, self_usage: partialSessionUsage, subagent_usage: partialSessionUsage }],
     });
 
@@ -596,7 +596,7 @@ describe("miniUsageClient DTO seam", () => {
       ),
     );
     await expect(
-      miniUsageClient.getSessionDetail({ range: { key: "today" }, filters: emptyFilters, root_session_id: "root-1" }),
+      usagiClient.getSessionDetail({ range: { key: "today" }, filters: emptyFilters, root_session_id: "root-1" }),
     ).resolves.toMatchObject({
       main: {
         model_usage: [{ usage: detailUsage }],
