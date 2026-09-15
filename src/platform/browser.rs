@@ -32,7 +32,7 @@ impl BrowserOpener for SystemBrowser {
     fn open(&self, url: &str) -> Result<(), BrowserError> {
         // Distribution/runtime tests set this seam so they can exercise the
         // launcher without opening the user's real browser.
-        if std::env::var_os("MINIUSAGE_DISABLE_BROWSER").is_some() {
+        if std::env::var_os("USAGI_DISABLE_BROWSER").is_some() {
             return Ok(());
         }
         webbrowser::open(url).map_err(|error| BrowserError::new(error.to_string()))?;

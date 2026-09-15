@@ -27,10 +27,10 @@ pub enum LauncherError {
 impl fmt::Display for LauncherError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Bind(error) => write!(formatter, "could not bind MiniUsage listener: {error}"),
+            Self::Bind(error) => write!(formatter, "could not bind Usagi listener: {error}"),
             Self::AddressInUse(address) => write!(
                 formatter,
-                "{address} is already in use by another program (MiniUsage health marker not found)"
+                "{address} is already in use by another program (Usagi health marker not found)"
             ),
             Self::ProbeClient(error) => {
                 write!(formatter, "could not create local health probe: {error}")
@@ -38,7 +38,7 @@ impl fmt::Display for LauncherError {
             Self::NotReady(address) => {
                 write!(
                     formatter,
-                    "MiniUsage service at {address} did not become ready"
+                    "Usagi service at {address} did not become ready"
                 )
             }
         }
@@ -135,7 +135,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn exact_health_marker_identifies_existing_mini_usage() {
+    async fn exact_health_marker_identifies_existing_usagi() {
         let (address, listener) = reserve_address().await;
         let app = Router::new().route(
             "/api/health",
@@ -157,7 +157,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn occupied_non_mini_usage_port_is_an_explicit_error() {
+    async fn occupied_non_usagi_port_is_an_explicit_error() {
         let (address, listener) = reserve_address().await;
         let error = bind_or_detect_existing_at(address).await.unwrap_err();
         assert!(matches!(error, LauncherError::AddressInUse(value) if value == address));

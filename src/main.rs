@@ -8,7 +8,7 @@ use std::sync::Arc;
 #[cfg(not(feature = "embedded-frontend"))]
 use std::path::PathBuf;
 
-use mini_usage::{
+use usagi::{
     api::{AppContext, ProcessShutdown, QueryApi, listen_address},
     codex::quota::CodexQuotaService,
     launcher::{self, BindOutcome},
@@ -19,7 +19,7 @@ use mini_usage::{
 };
 
 fn report_codex_auth_save_failure() {
-    eprintln!("MiniUsage Codex quota auth.json update failed");
+    eprintln!("Usagi Codex quota auth.json update failed");
 }
 
 #[cfg(target_os = "windows")]
@@ -29,7 +29,7 @@ mod windows_shell;
 #[tokio::main]
 async fn main() {
     if let Err(error) = run(SystemBrowser).await {
-        eprintln!("MiniUsage startup failed: {error}");
+        eprintln!("Usagi startup failed: {error}");
         std::process::exit(1);
     }
 }
@@ -78,10 +78,10 @@ where
         .map_err(|error| error.to_string())?
     {
         BindOutcome::ExistingInstance => {
-            println!("MiniUsage is already running at {}", browser::DASHBOARD_URL);
+            println!("Usagi is already running at {}", browser::DASHBOARD_URL);
             if let Err(error) = browser::open_dashboard(browser_opener.as_ref()) {
                 eprintln!(
-                    "MiniUsage is already running, but the browser could not be opened: {error}\n"
+                    "Usagi is already running, but the browser could not be opened: {error}\n"
                 );
                 eprintln!("Open {} manually.", browser::DASHBOARD_URL);
             }
@@ -92,7 +92,7 @@ where
 
     let ledger = Arc::new(
         Ledger::open(ledger_options)
-            .map_err(|error| format!("could not open MiniUsage ledger: {error}"))?,
+            .map_err(|error| format!("could not open Usagi ledger: {error}"))?,
     );
     let scan_config = ScanConfig::new(ledger.codex_home().to_path_buf());
     let scanner = ScanCoordinator::start(
@@ -100,14 +100,14 @@ where
         Arc::clone(&ledger),
         CodexMetadata::from_home(ledger.codex_home()),
     )
-    .map_err(|error| format!("could not start MiniUsage scanner: {error:?}"))?;
+    .map_err(|error| format!("could not start Usagi scanner: {error:?}"))?;
     let codex_quota_service = match CodexQuotaService::new_with_diagnostic(
         ledger.codex_home(),
         report_codex_auth_save_failure,
     ) {
         Ok(service) => service,
         Err(error) => {
-            eprintln!("MiniUsage Codex quota unavailable: {error}");
+            eprintln!("Usagi Codex quota unavailable: {error}");
             CodexQuotaService::unavailable(ledger.codex_home())
         }
     };
@@ -115,7 +115,7 @@ where
     let update_service = match update_factory() {
         Ok(service) => service,
         Err(error) => {
-            eprintln!("MiniUsage update checks unavailable: {error}");
+            eprintln!("Usagi update checks unavailable: {error}");
             UpdateService::unavailable()
         }
     };
@@ -131,7 +131,7 @@ where
         },
         process_shutdown,
     )
-    .map_err(|error| format!("could not construct MiniUsage embedded router: {error}"))?;
+    .map_err(|error| format!("could not construct Usagi embedded router: {error}"))?;
 
     #[cfg(not(feature = "embedded-frontend"))]
     let app = QueryApi::router_with_shutdown(
@@ -145,10 +145,10 @@ where
         PathBuf::from("frontend/dist"),
         process_shutdown,
     )
-    .map_err(|error| format!("could not construct MiniUsage router: {error}"))?;
+    .map_err(|error| format!("could not construct Usagi router: {error}"))?;
 
     let address = listen_address();
-    println!("MiniUsage is running at http://{address}");
+    println!("Usagi is running at http://{address}");
     let mut server = Box::pin(
         axum::serve(listener, app)
             .with_graceful_shutdown(async move {
@@ -159,7 +159,7 @@ where
 
     tokio::select! {
         result = &mut server => {
-            return result.map_err(|error| format!("MiniUsage server stopped unexpectedly: {error}"));
+            return result.map_err(|error| format!("Usagi server stopped unexpectedly: {error}"));
         }
         result = launcher::wait_until_ready(address) => {
             result.map_err(|error| error.to_string())?;
@@ -171,7 +171,7 @@ where
     let codex_quota_task = codex_quota_service.spawn_background();
 
     if let Err(error) = browser::open_dashboard(browser_opener.as_ref()) {
-        eprintln!("MiniUsage server is ready, but the browser could not be opened: {error}");
+        eprintln!("Usagi server is ready, but the browser could not be opened: {error}");
         eprintln!("Open {} manually.", browser::DASHBOARD_URL);
     }
 
@@ -179,7 +179,7 @@ where
 
     let result = server
         .await
-        .map_err(|error| format!("MiniUsage server stopped unexpectedly: {error}"));
+        .map_err(|error| format!("Usagi server stopped unexpectedly: {error}"));
     update_task.abort();
     let _ = update_task.await;
     codex_quota_task.abort();
@@ -211,7 +211,7 @@ mod tests {
     };
 
     use futures_util::{FutureExt, future::BoxFuture};
-    use mini_usage::{
+    use usagi::{
         api::listen_address,
         platform::browser::{BrowserError, BrowserOpener},
         update::{ReleaseInfo, ReleaseProvider, UpdateFailureKind, UpdateService},
@@ -240,7 +240,7 @@ mod tests {
                 .unwrap_or_default()
                 .as_nanos();
             let path = std::env::temp_dir().join(format!(
-                "miniusage-update-startup-{}-{stamp}",
+                "usagi-update-startup-{}-{stamp}",
                 std::process::id()
             ));
             fs::create_dir(&path)?;
@@ -286,7 +286,7 @@ mod tests {
         fs::create_dir_all(codex_home.join("sessions")).unwrap();
         fs::create_dir_all(codex_home.join("archived_sessions")).unwrap();
         let ledger_options =
-            mini_usage::storage::LedgerOptions::new(root.path().join("mu.sqlite3"), codex_home);
+            usagi::storage::LedgerOptions::new(root.path().join("mu.sqlite3"), codex_home);
 
         let entered = Arc::new(Notify::new());
         let release = Arc::new(Notify::new());
@@ -329,7 +329,7 @@ mod tests {
             Duration::from_secs(5),
             client
                 .post("http://127.0.0.1:3210/api/refresh")
-                .header("x-miniusage-request", "1")
+                .header("x-usagi-request", "1")
                 .send(),
         )
         .await
@@ -342,7 +342,7 @@ mod tests {
 
         let stop = client
             .post("http://127.0.0.1:3210/api/service/stop")
-            .header("x-miniusage-request", "1")
+            .header("x-usagi-request", "1")
             .send()
             .await
             .unwrap();
