@@ -172,11 +172,7 @@ async fn t_q_004_quota_refresh_isolated_from_scanner_refresh_and_ledger_state() 
     );
 
     let refreshed = fixture
-        .call(
-            Method::POST,
-            "/api/refresh",
-            &[("x-usagi-request", "1")],
-        )
+        .call(Method::POST, "/api/refresh", &[("x-usagi-request", "1")])
         .await;
     assert!(matches!(
         refreshed.status(),
@@ -220,8 +216,7 @@ async fn t_dist_008_check_requires_active_header_and_maps_success_or_failure_saf
     let mut latest = semver::Version::parse(env!("CARGO_PKG_VERSION")).unwrap();
     latest.patch = latest.patch.checked_add(1).unwrap();
     let expected_latest = latest.to_string();
-    let expected_url =
-        format!("https://github.com/Hogeexxl/Usagi/releases/tag/v{expected_latest}");
+    let expected_url = format!("https://github.com/Hogeexxl/Usagi/releases/tag/v{expected_latest}");
     let provider = Arc::new(FixtureProvider::success(latest));
     let service = fixed_service(Arc::clone(&provider) as Arc<dyn ReleaseProvider>);
     let fixture = support::ApiFixture::with_updates(
@@ -551,11 +546,7 @@ async fn service_control_stops_the_scanner_and_requests_full_process_shutdown() 
     assert!(String::from_utf8_lossy(&event_bytes).contains("event: revision"));
 
     let refresh = fixture
-        .call(
-            Method::POST,
-            "/api/refresh",
-            &[("x-usagi-request", "1")],
-        )
+        .call(Method::POST, "/api/refresh", &[("x-usagi-request", "1")])
         .await;
     assert_eq!(refresh.status(), StatusCode::SERVICE_UNAVAILABLE);
 

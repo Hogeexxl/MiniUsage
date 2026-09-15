@@ -5,7 +5,6 @@ use std::{
 
 use directories::BaseDirs;
 use image::ImageFormat;
-use usagi::platform::browser::{self, SystemBrowser};
 use tao::{
     dpi::{LogicalSize, PhysicalPosition, PhysicalSize},
     event::{Event, WindowEvent},
@@ -16,6 +15,7 @@ use tao::{
 use tray_icon::{
     MouseButton, MouseButtonState, Rect as TrayRect, TrayIcon, TrayIconBuilder, TrayIconEvent,
 };
+use usagi::platform::browser::{self, SystemBrowser};
 use windows_sys::Win32::{
     Foundation::{HWND, POINT, RECT},
     Graphics::Gdi::{GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromPoint},

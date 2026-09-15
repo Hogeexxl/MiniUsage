@@ -131,11 +131,7 @@ fn command_output(program: &str, args: &[&str], cwd: &Path) -> Output {
 }
 
 fn binary_name() -> &'static str {
-    if cfg!(windows) {
-        "usagi.exe"
-    } else {
-        "usagi"
-    }
+    if cfg!(windows) { "usagi.exe" } else { "usagi" }
 }
 
 fn target_dir(manifest_dir: &Path) -> PathBuf {
