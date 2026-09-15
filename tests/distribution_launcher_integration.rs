@@ -18,7 +18,7 @@ impl TempRoot {
             .unwrap_or_default()
             .as_nanos();
         let path = std::env::temp_dir().join(format!(
-            "miniusage-distribution-launcher-{}-{stamp}",
+            "usagi-distribution-launcher-{}-{stamp}",
             std::process::id()
         ));
         fs::create_dir(&path)?;
@@ -50,7 +50,7 @@ impl ChildGuard {
             .current_dir(runtime_root)
             .env("HOME", &home)
             .env("CODEX_HOME", &codex_home)
-            .env("MINIUSAGE_DISABLE_BROWSER", "1")
+            .env("USAGI_DISABLE_BROWSER", "1")
             .stdin(Stdio::null())
             .stdout(if capture {
                 Stdio::piped()
@@ -64,7 +64,7 @@ impl ChildGuard {
             });
         #[cfg(windows)]
         command
-            .env("MINIUSAGE_WINDOWS_HEADLESS_SMOKE", "1")
+            .env("USAGI_WINDOWS_HEADLESS_SMOKE", "1")
             .env("USERPROFILE", &home)
             .env("APPDATA", home.join("AppData/Roaming"))
             .env("LOCALAPPDATA", home.join("AppData/Local"));
@@ -132,9 +132,9 @@ fn command_output(program: &str, args: &[&str], cwd: &Path) -> Output {
 
 fn binary_name() -> &'static str {
     if cfg!(windows) {
-        "mini-usage.exe"
+        "usagi.exe"
     } else {
-        "mini-usage"
+        "usagi"
     }
 }
 
@@ -196,8 +196,8 @@ async fn wait_for_health(client: &Client, child: &mut ChildGuard) {
         }
         if let Ok(response) = client.get("http://127.0.0.1:3210/api/health").send().await
             && response.status() == StatusCode::NO_CONTENT
-            && response.headers().get("x-miniusage-app")
-                == Some(&header::HeaderValue::from_static("MiniUsage"))
+            && response.headers().get("x-usagi-app")
+                == Some(&header::HeaderValue::from_static("Usagi"))
         {
             return;
         }
@@ -258,11 +258,11 @@ async fn t_dist_006_launcher_lifecycle_matrix() {
 
     let occupied_listener = tokio::net::TcpListener::bind("127.0.0.1:3210")
         .await
-        .expect("reserve listener for non-MiniUsage conflict");
+        .expect("reserve listener for non-Usagi conflict");
     let fake_app = Router::new().route("/api/health", get(|| async { StatusCode::NO_CONTENT }));
     let fake_server = tokio::spawn(axum::serve(occupied_listener, fake_app).into_future());
     let conflicting = ChildGuard::spawn(&runtime_binary, &runtime_root, true)
-        .expect("start launcher against non-MiniUsage listener");
+        .expect("start launcher against non-Usagi listener");
     let conflict_output = wait_for_exit(conflicting).await;
     assert!(!conflict_output.status.success());
     let diagnostics = format!(

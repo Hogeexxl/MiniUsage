@@ -6,7 +6,7 @@ use std::{
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
-use mini_usage::{
+use usagi::{
     domain::{
         CheckpointProcessingStatus, ContinuationState, FactQualityStatus,
         MetadataCheckpointAdvance, MetadataCommitBatch, MetadataSourceCommit, MetadataThreadCommit,
@@ -28,7 +28,7 @@ impl TempRoot {
             .expect("clock before epoch")
             .as_nanos();
         let path = std::env::temp_dir().join(format!(
-            "miniusage-replayed-ancestor-{label}-{}-{stamp}",
+            "usagi-replayed-ancestor-{label}-{}-{stamp}",
             std::process::id()
         ));
         fs::create_dir_all(&path).expect("create temporary test directory");
@@ -449,7 +449,7 @@ fn startup_replay_tail_scan_completes_and_activates_usage() {
         "replay-tail source must not keep active epoch at zero"
     );
     assert_eq!(epochs.1, None);
-    assert_eq!(epochs.2, mini_usage::usage::USAGE_PARSER_VERSION);
+    assert_eq!(epochs.2, usagi::usage::USAGE_PARSER_VERSION);
 
     handle.shutdown().unwrap();
 }
@@ -638,7 +638,7 @@ fn rebuilt_subagent_same_envelope_timestamp_models_keep_relationship_and_usage_r
     assert_eq!(
         metadata_checkpoint,
         (
-            mini_usage::codex::METADATA_PARSER_VERSION,
+            usagi::codex::METADATA_PARSER_VERSION,
             "ready".to_owned(),
         )
     );

@@ -5,7 +5,7 @@ use std::{
 
 use directories::BaseDirs;
 use image::ImageFormat;
-use mini_usage::platform::browser::{self, SystemBrowser};
+use usagi::platform::browser::{self, SystemBrowser};
 use tao::{
     dpi::{LogicalSize, PhysicalPosition, PhysicalSize},
     event::{Event, WindowEvent},
@@ -351,21 +351,21 @@ impl ShellState {
 }
 
 pub fn run() -> ! {
-    if std::env::var_os("MINIUSAGE_WINDOWS_HEADLESS_SMOKE").is_some() {
+    if std::env::var_os("USAGI_WINDOWS_HEADLESS_SMOKE").is_some() {
         let runtime = match tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()
         {
             Ok(runtime) => runtime,
             Err(error) => {
-                eprintln!("MiniUsage startup failed: could not create Tokio runtime: {error}");
+                eprintln!("Usagi startup failed: could not create Tokio runtime: {error}");
                 std::process::exit(1);
             }
         };
         let code = match runtime.block_on(super::run(SystemBrowser)) {
             Ok(()) => 0,
             Err(error) => {
-                eprintln!("MiniUsage startup failed: {error}");
+                eprintln!("Usagi startup failed: {error}");
                 1
             }
         };
@@ -398,7 +398,7 @@ pub fn run() -> ! {
     let mut state = ShellState::default();
     #[cfg(debug_assertions)]
     {
-        state.measurement_mode = std::env::var_os("MINIUSAGE_WINDOWS_TRAY_MEASURE").is_some();
+        state.measurement_mode = std::env::var_os("USAGI_WINDOWS_TRAY_MEASURE").is_some();
     }
 
     event_loop.run(move |event, target, control_flow| {
@@ -470,7 +470,7 @@ pub fn run() -> ! {
             }
             Event::UserEvent(UserEvent::OpenDashboard) => {
                 if let Err(error) = browser::open_dashboard(&SystemBrowser) {
-                    eprintln!("MiniUsage could not open Dashboard: {error}");
+                    eprintln!("Usagi could not open Dashboard: {error}");
                 }
             }
             Event::UserEvent(UserEvent::Tray(event)) => {
@@ -511,7 +511,7 @@ pub fn run() -> ! {
 
 fn create_user_data_dir() -> Result<PathBuf, String> {
     let base = BaseDirs::new().ok_or_else(|| "could not resolve LocalAppData".to_string())?;
-    let path = base.data_local_dir().join("MiniUsage").join("WebView2");
+    let path = base.data_local_dir().join("Usagi").join("WebView2");
     std::fs::create_dir_all(&path).map_err(|error| {
         format!(
             "could not create WebView2 user data directory {}: {error}",
@@ -542,7 +542,7 @@ fn build_popup_window(
     visible: bool,
 ) -> Result<Window, String> {
     WindowBuilder::new()
-        .with_title("MiniUsage")
+        .with_title("Usagi")
         .with_visible(visible)
         .with_decorations(false)
         .with_resizable(false)
@@ -563,7 +563,7 @@ fn create_production_ui(
     state.tray = Some(
         TrayIconBuilder::new()
             .with_icon(icon)
-            .with_tooltip("MiniUsage")
+            .with_tooltip("Usagi")
             .build()
             .map_err(|error| format!("could not create Windows tray icon: {error}"))?,
     );
@@ -939,8 +939,8 @@ fn apply_flow(flow: FlowKind, control_flow: &mut ControlFlow) {
 }
 
 fn show_fatal_message(error: &str) {
-    let text = wide_null(&format!("MiniUsage 启动失败：{error}"));
-    let title = wide_null("MiniUsage");
+    let text = wide_null(&format!("Usagi 启动失败：{error}"));
+    let title = wide_null("Usagi");
     unsafe {
         MessageBoxW(
             std::ptr::null_mut(),
