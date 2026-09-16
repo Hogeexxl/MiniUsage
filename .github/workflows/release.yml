@@ -148,7 +148,6 @@ jobs:
           # Keep the legacy identifier so existing MiniUsage installations upgrade in place,
           # while the installed executable/product name becomes Usagi on Windows only.
           $packagerConfig = @{
-            name = 'usagi'
             productName = 'Usagi'
             version = $env:CARGO_VERSION
             identifier = 'com.hogeexxl.miniusage'
