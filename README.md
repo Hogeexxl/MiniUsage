@@ -66,9 +66,9 @@ MiniUsage 是一个纯本机运行的 Rust 服务 + React Dashboard，用来读�
 
 ### 安装
 
-从 [GitHub Releases](https://github.com/Hogeexxl/MiniUsage/releases) 下载对应平台的安装包（以 Releases 页面实际提供的文件为准）：
+从 [GitHub Releases](https://github.com/Hogeexxl/Usagi/releases) 下载对应平台的安装包（以 Releases 页面实际提供的文件为准）：
 
-- Windows x64：`MiniUsage-v0.2.6-windows-x64-setup.exe`
+- Windows x64：`Usagi-v0.2.6-windows-x64-setup.exe`，安装后的主程序为 `usagi.exe`
 - macOS Apple Silicon：`MiniUsage-v0.2.6-macos-arm64.dmg`
 
 启动后 MiniUsage 会在本机启动服务并自动打开默认浏览器；如果浏览器没有自动打开，手动访问：
@@ -81,7 +81,7 @@ http://127.0.0.1:3210
 
 - **macOS 首次启动被拦截**：v0.1.0 的 macOS 应用未做 Developer ID 签名与 notarization。在 Finder 中按住 Control 点按应用并选择「打开」，或在「系统设置 → 隐私与安全性」中选择「仍要打开」。
 - **重复启动**：再次启动只会打开已在运行的实例，不会启动第二个。
-- **提示端口被占用**：如果 `3210` 被其他程序占用，MiniUsage 会明确报错退出，不会结束或替换占用端口的程序。
+- **端口被占用**：Windows 会从 `3210` 开始自动选择后续可用的本机端口，不会结束或替换占用端口的程序；macOS 仍保持固定 `3210` 的原有行为。
 - **看不到数据**：确认本机 `~/.codex/sessions` 下存在 `rollout-*.jsonl` 文件；如果设置过 `CODEX_HOME` 环境变量，确认它指向 Codex 实际使用的数据目录。数据每 5 分钟自动扫描一次，也可以点「同步数据」立即扫描。
 
 ## 数据来源
