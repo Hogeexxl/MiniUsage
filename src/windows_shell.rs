@@ -1,6 +1,13 @@
 use std::{
     panic::{AssertUnwindSafe, catch_unwind},
     path::PathBuf,
+    time::{Duration, Instant},
+};
+
+#[cfg(debug_assertions)]
+use std::{
+    io::{Read, Write},
+    net::TcpStream,
 };
 
 use directories::BaseDirs;
@@ -8,7 +15,7 @@ use image::ImageFormat;
 use mini_usage::platform::browser::{self, SystemBrowser};
 use tao::{
     dpi::{LogicalSize, PhysicalPosition, PhysicalSize},
-    event::{Event, WindowEvent},
+    event::{Event, StartCause, WindowEvent},
     event_loop::{ControlFlow, EventLoopBuilder, EventLoopProxy, EventLoopWindowTarget},
     platform::windows::{WindowBuilderExtWindows, WindowExtWindows},
     window::{Window, WindowBuilder},
@@ -32,12 +39,65 @@ const POPUP_GAP_PHYSICAL: i32 = 8;
 #[cfg(debug_assertions)]
 const PANEL_MEASUREMENT_HOST_HEIGHT_LOGICAL: i32 = 900;
 
-const TRAY_URL: &str = "http://127.0.0.1:3210/tray";
-const TRAY_URL_SLASH: &str = "http://127.0.0.1:3210/tray/";
+const BACKEND_ORIGIN: &str = "http://127.0.0.1:3210";
+const POPUP_FOCUS_POLL_INTERVAL: Duration = Duration::from_millis(50);
+
 #[cfg(debug_assertions)]
-const TRAY_MEASURE_URL: &str = "http://127.0.0.1:3210/tray-measure";
+const DEV_TRAY_DEFAULT_PORT: u16 = 5173;
 #[cfg(debug_assertions)]
-const TRAY_MEASURE_URL_SLASH: &str = "http://127.0.0.1:3210/tray-measure/";
+const DEV_TRAY_PORT_SCAN_COUNT: u16 = 20;
+#[cfg(debug_assertions)]
+const DEV_TRAY_PROBE_TIMEOUT: Duration = Duration::from_millis(80);
+#[cfg(debug_assertions)]
+const DEV_TRAY_MARKER_HEADER: &str = "x-usagi-frontend: 1";
+
+#[cfg(debug_assertions)]
+fn is_usagi_vite_server(port: u16) -> bool {
+    let address = std::net::SocketAddr::from(([127, 0, 0, 1], port));
+    let Ok(mut stream) = TcpStream::connect_timeout(&address, DEV_TRAY_PROBE_TIMEOUT) else {
+        return false;
+    };
+    let _ = stream.set_read_timeout(Some(DEV_TRAY_PROBE_TIMEOUT));
+    let _ = stream.set_write_timeout(Some(DEV_TRAY_PROBE_TIMEOUT));
+
+    let request = format!(
+        "GET /tray HTTP/1.1\r\nHost: localhost:{port}\r\nConnection: close\r\n\r\n"
+    );
+    if stream.write_all(request.as_bytes()).is_err() {
+        return false;
+    }
+
+    let mut response = Vec::with_capacity(2048);
+    if stream.take(8192).read_to_end(&mut response).is_err() {
+        return false;
+    }
+    String::from_utf8_lossy(&response)
+        .lines()
+        .take_while(|line| !line.trim().is_empty())
+        .any(|line| line.trim().eq_ignore_ascii_case(DEV_TRAY_MARKER_HEADER))
+}
+
+#[cfg(debug_assertions)]
+fn discover_dev_tray_port() -> Option<u16> {
+    if let Ok(value) = std::env::var("USAGI_TRAY_DEV_PORT")
+        && let Ok(port) = value.parse::<u16>()
+        && is_usagi_vite_server(port)
+    {
+        return Some(port);
+    }
+
+    (DEV_TRAY_DEFAULT_PORT..DEV_TRAY_DEFAULT_PORT.saturating_add(DEV_TRAY_PORT_SCAN_COUNT))
+        .find(|port| is_usagi_vite_server(*port))
+}
+
+fn tray_url(path: &str) -> String {
+    #[cfg(debug_assertions)]
+    if let Some(port) = discover_dev_tray_port() {
+        return format!("http://localhost:{port}{path}");
+    }
+
+    format!("{BACKEND_ORIGIN}{path}")
+}
 
 #[derive(Debug)]
 enum UserEvent {
@@ -351,21 +411,23 @@ impl ShellState {
 }
 
 pub fn run() -> ! {
-    if std::env::var_os("MINIUSAGE_WINDOWS_HEADLESS_SMOKE").is_some() {
+    if std::env::var_os("USAGI_WINDOWS_HEADLESS_SMOKE").is_some()
+        || std::env::var_os("MINIUSAGE_WINDOWS_HEADLESS_SMOKE").is_some()
+    {
         let runtime = match tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()
         {
             Ok(runtime) => runtime,
             Err(error) => {
-                eprintln!("MiniUsage startup failed: could not create Tokio runtime: {error}");
+                eprintln!("Usagi startup failed: could not create Tokio runtime: {error}");
                 std::process::exit(1);
             }
         };
         let code = match runtime.block_on(super::run(SystemBrowser)) {
             Ok(()) => 0,
             Err(error) => {
-                eprintln!("MiniUsage startup failed: {error}");
+                eprintln!("Usagi startup failed: {error}");
                 1
             }
         };
@@ -398,13 +460,25 @@ pub fn run() -> ! {
     let mut state = ShellState::default();
     #[cfg(debug_assertions)]
     {
-        state.measurement_mode = std::env::var_os("MINIUSAGE_WINDOWS_TRAY_MEASURE").is_some();
+        state.measurement_mode = std::env::var_os("USAGI_WINDOWS_TRAY_MEASURE").is_some()
+            || std::env::var_os("MINIUSAGE_WINDOWS_TRAY_MEASURE").is_some();
     }
 
     event_loop.run(move |event, target, control_flow| {
         *control_flow = ControlFlow::Wait;
 
         match event {
+            Event::NewEvents(StartCause::ResumeTimeReached { .. }) if state.popup_visible => {
+                if popup_still_owns_focus(&state) {
+                    *control_flow =
+                        ControlFlow::WaitUntil(Instant::now() + POPUP_FOCUS_POLL_INTERVAL);
+                } else {
+                    if cursor_is_over_tray(&state, target) {
+                        state.focus_loss_for_tray = true;
+                    }
+                    hide_popup(&mut state);
+                }
+            }
             Event::UserEvent(UserEvent::BackendReady) => {
                 state.backend_was_ready = true;
                 #[cfg(debug_assertions)]
@@ -470,7 +544,7 @@ pub fn run() -> ! {
             }
             Event::UserEvent(UserEvent::OpenDashboard) => {
                 if let Err(error) = browser::open_dashboard(&SystemBrowser) {
-                    eprintln!("MiniUsage could not open Dashboard: {error}");
+                    eprintln!("Usagi could not open Dashboard: {error}");
                 }
             }
             Event::UserEvent(UserEvent::Tray(event)) => {
@@ -542,7 +616,7 @@ fn build_popup_window(
     visible: bool,
 ) -> Result<Window, String> {
     WindowBuilder::new()
-        .with_title("MiniUsage")
+        .with_title("Usagi")
         .with_visible(visible)
         .with_decorations(false)
         .with_resizable(false)
@@ -563,7 +637,7 @@ fn create_production_ui(
     state.tray = Some(
         TrayIconBuilder::new()
             .with_icon(icon)
-            .with_tooltip("MiniUsage")
+            .with_tooltip("Usagi")
             .build()
             .map_err(|error| format!("could not create Windows tray icon: {error}"))?,
     );
@@ -580,10 +654,18 @@ fn create_production_ui(
         .web_context
         .as_mut()
         .ok_or_else(|| "WebContext missing during WebView creation".to_string())?;
+    let tray_url = tray_url("/tray");
+    let tray_url_slash = format!("{tray_url}/");
+    let navigation_url = tray_url.clone();
+    let navigation_url_slash = tray_url_slash.clone();
+    #[cfg(debug_assertions)]
+    eprintln!("Usagi tray panel URL: {tray_url}");
     let ipc_proxy = proxy.clone();
     let webview = WebViewBuilder::new_with_web_context(context)
-        .with_url(TRAY_URL)
-        .with_navigation_handler(|url| url == TRAY_URL || url == TRAY_URL_SLASH)
+        .with_url(&tray_url)
+        .with_navigation_handler(move |url| {
+            url == navigation_url || url == navigation_url_slash
+        })
         .with_new_window_req_handler(|_, _| NewWindowResponse::Deny)
         .with_ipc_handler(move |request| {
             if request.body() == "open-dashboard" {
@@ -622,10 +704,16 @@ fn create_measurement_ui(
         .web_context
         .as_mut()
         .ok_or_else(|| "measurement WebContext missing during WebView creation".to_string())?;
+    let measure_url = tray_url("/tray-measure");
+    let measure_url_slash = format!("{measure_url}/");
+    let navigation_url = measure_url.clone();
+    let navigation_url_slash = measure_url_slash.clone();
     let ipc_proxy = proxy.clone();
     let webview = WebViewBuilder::new_with_web_context(context)
-        .with_url(TRAY_MEASURE_URL)
-        .with_navigation_handler(|url| url == TRAY_MEASURE_URL || url == TRAY_MEASURE_URL_SLASH)
+        .with_url(&measure_url)
+        .with_navigation_handler(move |url| {
+            url == navigation_url || url == navigation_url_slash
+        })
         .with_new_window_req_handler(|_, _| NewWindowResponse::Deny)
         .with_ipc_handler(move |request| {
             let message = request.body();
@@ -710,6 +798,9 @@ fn handle_tray_event(
                 hide_popup(state);
             } else if let Err(error) = show_popup(state, rect, target) {
                 finish_production_fatal(state, error, control_flow);
+            } else {
+                *control_flow =
+                    ControlFlow::WaitUntil(Instant::now() + POPUP_FOCUS_POLL_INTERVAL);
             }
         }
     }
@@ -939,8 +1030,8 @@ fn apply_flow(flow: FlowKind, control_flow: &mut ControlFlow) {
 }
 
 fn show_fatal_message(error: &str) {
-    let text = wide_null(&format!("MiniUsage 启动失败：{error}"));
-    let title = wide_null("MiniUsage");
+    let text = wide_null(&format!("Usagi 启动失败：{error}"));
+    let title = wide_null("Usagi");
     unsafe {
         MessageBoxW(
             std::ptr::null_mut(),
@@ -958,6 +1049,13 @@ fn wide_null(value: &str) -> Vec<u16> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn t_wintray_release_fallback_url_contract() {
+        assert_eq!(BACKEND_ORIGIN, "http://127.0.0.1:3210");
+        #[cfg(not(debug_assertions))]
+        assert_eq!(tray_url("/tray"), "http://127.0.0.1:3210/tray");
+    }
 
     #[test]
     fn t_wintray_click_contract() {
