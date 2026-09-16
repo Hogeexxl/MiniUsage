@@ -230,7 +230,7 @@ if count != 1:
 open(path, "w", encoding="utf-8").write(updated)
 PY
 cargo build --manifest-path "$manifest" --release --features embedded-frontend
-low_binary="$source_root/target/release/mini-usage"
+low_binary="$source_root/target/release/usagi"
 file "$low_binary" | grep -Eiq 'arm64|aarch64' || { echo 'Internal low-version build is not arm64' >&2; exit 1; }
 low_root="$runtime_base/internal-$low_version"
 start_binary "$low_binary" "$low_version" "$low_root"
