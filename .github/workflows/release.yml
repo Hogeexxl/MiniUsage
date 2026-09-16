@@ -97,7 +97,7 @@ jobs:
       - name: Inspect Windows PE imports and GUI subsystem
         shell: pwsh
         run: |
-          $binary = Join-Path $env:GITHUB_WORKSPACE 'target/release/mini-usage.exe'
+          $binary = Join-Path $env:GITHUB_WORKSPACE 'target/release/usagi.exe'
           if (-not (Test-Path $binary)) {
             throw "release binary not found: $binary"
           }
@@ -135,14 +135,9 @@ jobs:
         shell: pwsh
         run: |
           $releaseDir = Join-Path $env:GITHUB_WORKSPACE 'target/release'
-          $cargoBinary = Join-Path $releaseDir 'mini-usage.exe'
           $usagiBinary = Join-Path $releaseDir 'usagi.exe'
-          if (-not (Test-Path -LiteralPath $cargoBinary -PathType Leaf)) {
-            throw "Cargo release binary was not found: $cargoBinary"
-          }
-          Copy-Item -LiteralPath $cargoBinary -Destination $usagiBinary -Force
           if (-not (Test-Path -LiteralPath $usagiBinary -PathType Leaf)) {
-            throw "Usagi Windows binary was not created: $usagiBinary"
+            throw "Cargo Usagi release binary was not found: $usagiBinary"
           }
 
           # Keep the legacy identifier so existing MiniUsage installations upgrade in place,
@@ -258,15 +253,40 @@ jobs:
 
       - name: Inspect arm64 release binary
         run: |
-          file target/release/mini-usage
-          file target/release/mini-usage | grep -Eq 'arm64|aarch64'
+          file target/release/usagi
+          file target/release/usagi | grep -Eq 'arm64|aarch64'
 
       - name: Install pinned cargo-packager
         run: cargo install cargo-packager --locked --version "$CARGO_PACKAGER_VERSION"
 
       - name: Build unsigned DMG
         run: |
-          cargo packager --release --formats dmg
+          release_dir="$GITHUB_WORKSPACE/target/release"
+          cp "$release_dir/usagi" "$release_dir/mini-usage"
+          chmod +x "$release_dir/mini-usage"
+
+          # Preserve the existing macOS MiniUsage.app identity and internal
+          # executable name while Cargo's development binary is now "usagi".
+          config_path="$release_dir/packager.macos.json"
+          python3 - "$config_path" "$release_dir" "$CARGO_VERSION" <<'PY'
+          import json
+          import sys
+
+          path, release_dir, version = sys.argv[1:]
+          config = {
+              "productName": "MiniUsage",
+              "version": version,
+              "identifier": "com.hogeexxl.miniusage",
+              "outDir": release_dir,
+              "binariesDir": release_dir,
+              "binaries": [{"path": "mini-usage", "main": True}],
+              "formats": ["dmg"],
+          }
+          with open(path, "w", encoding="utf-8") as handle:
+              json.dump(config, handle)
+          PY
+
+          cargo packager --release --config "$config_path"
           generated=()
           while IFS= read -r generated_path; do
             generated+=("$generated_path")
