@@ -107,9 +107,9 @@ fn command_output(program: &str, args: &[&str], cwd: &Path) -> Output {
 
 fn binary_name() -> &'static str {
     if cfg!(windows) {
-        "mini-usage.exe"
+        "usagi.exe"
     } else {
-        "mini-usage"
+        "usagi"
     }
 }
 
