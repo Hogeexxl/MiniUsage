@@ -729,9 +729,7 @@ fn create_measurement_ui(
     let ipc_proxy = proxy.clone();
     let webview = WebViewBuilder::new_with_web_context(context)
         .with_url(&measure_url)
-        .with_navigation_handler(move |url| {
-            url == navigation_url || url == navigation_url_slash
-        })
+        .with_navigation_handler(move |url| url == navigation_url || url == navigation_url_slash)
         .with_new_window_req_handler(|_, _| NewWindowResponse::Deny)
         .with_ipc_handler(move |request| {
             let message = request.body();
