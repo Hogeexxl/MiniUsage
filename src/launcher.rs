@@ -58,10 +58,19 @@ pub async fn bind_or_detect_existing() -> Result<BindOutcome, LauncherError> {
 /// already owns that port. macOS continues to use `bind_or_detect_existing`
 /// and therefore retains the fixed-port contract.
 pub async fn bind_or_detect_existing_with_port_fallback() -> Result<BindOutcome, LauncherError> {
-    let preferred = listen_address();
+    bind_or_detect_existing_in_range(listen_address(), WINDOWS_PORT_FALLBACK_COUNT).await
+}
+
+async fn bind_or_detect_existing_in_range(
+    preferred: SocketAddr,
+    count: u16,
+) -> Result<BindOutcome, LauncherError> {
+    if count == 0 {
+        return Err(LauncherError::AddressInUse(preferred));
+    }
     let start_port = preferred.port();
     let end_port = start_port
-        .checked_add(WINDOWS_PORT_FALLBACK_COUNT - 1)
+        .checked_add(count - 1)
         .ok_or_else(|| LauncherError::AddressInUse(preferred))?;
 
     for port in start_port..=end_port {
@@ -201,23 +210,9 @@ mod tests {
         let next = start.port().checked_add(1).unwrap();
         let preferred = SocketAddr::new(start.ip(), start.port());
 
-        async fn bind_range(preferred: SocketAddr, count: u16) -> Result<BindOutcome, LauncherError> {
-            for offset in 0..count {
-                let address = SocketAddr::new(preferred.ip(), preferred.port() + offset);
-                match TcpListener::bind(address).await {
-                    Ok(listener) => return Ok(BindOutcome::Listener(listener)),
-                    Err(error) if error.kind() == io::ErrorKind::AddrInUse => {
-                        if probe_health(address).await? {
-                            return Ok(BindOutcome::ExistingInstance(address));
-                        }
-                    }
-                    Err(error) => return Err(LauncherError::Bind(error)),
-                }
-            }
-            Err(LauncherError::AddressInUse(preferred))
-        }
-
-        let outcome = bind_range(preferred, 2).await.unwrap();
+        let outcome = bind_or_detect_existing_in_range(preferred, 2)
+            .await
+            .unwrap();
         let BindOutcome::Listener(listener) = outcome else {
             panic!("expected fallback listener");
         };
