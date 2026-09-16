@@ -73,10 +73,15 @@ async fn bind_or_detect_existing_in_range(
         .checked_add(count - 1)
         .ok_or_else(|| LauncherError::AddressInUse(preferred))?;
 
+    let mut first_available = None;
     for port in start_port..=end_port {
         let address = SocketAddr::new(preferred.ip(), port);
         match TcpListener::bind(address).await {
-            Ok(listener) => return Ok(BindOutcome::Listener(listener)),
+            Ok(listener) => {
+                if first_available.is_none() {
+                    first_available = Some(listener);
+                }
+            }
             Err(error) if error.kind() == io::ErrorKind::AddrInUse => {
                 if probe_health(address).await? {
                     return Ok(BindOutcome::ExistingInstance(address));
@@ -86,7 +91,9 @@ async fn bind_or_detect_existing_in_range(
         }
     }
 
-    Err(LauncherError::AddressInUse(preferred))
+    first_available
+        .map(BindOutcome::Listener)
+        .ok_or(LauncherError::AddressInUse(preferred))
 }
 
 async fn bind_or_detect_existing_at(address: SocketAddr) -> Result<BindOutcome, LauncherError> {
