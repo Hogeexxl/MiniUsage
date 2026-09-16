@@ -254,7 +254,7 @@ function Invoke-InstalledRuntimeSmoke {
     Grant-TestUserModify -Path $CodexHome
     New-Item -ItemType Directory -Force -Path (Join-Path $CodexHome 'sessions'), (Join-Path $CodexHome 'archived_sessions') | Out-Null
 
-    $launcher = Join-Path $RuntimeRoot 'launch-mini-usage.ps1'
+    $launcher = Join-Path $RuntimeRoot 'launch-usagi.ps1'
     $runtimeIdentityPath = Join-Path $RuntimeRoot 'runtime-identity.json'
     $stdoutPath = Join-Path $RuntimeRoot 'stdout.log'
     $stderrPath = Join-Path $RuntimeRoot 'stderr.log'
@@ -287,8 +287,8 @@ Set-Location -LiteralPath '$escapedRuntimeRoot'
 `$binaryPath = '$escapedBinary'
 `$stdoutPath = '$escapedStdout'
 `$stderrPath = '$escapedStderr'
-`$miniUsage = Start-Process -FilePath `$binaryPath -PassThru -Wait -RedirectStandardOutput `$stdoutPath -RedirectStandardError `$stderrPath
-exit `$miniUsage.ExitCode
+`$usagi = Start-Process -FilePath `$binaryPath -PassThru -Wait -RedirectStandardOutput `$stdoutPath -RedirectStandardError `$stderrPath
+exit `$usagi.ExitCode
 "@ | Set-Content -LiteralPath $launcher -Encoding utf8
 
     $pwsh = Join-Path $PSHOME 'pwsh.exe'
