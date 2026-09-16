@@ -39,7 +39,6 @@ const POPUP_GAP_PHYSICAL: i32 = 8;
 #[cfg(debug_assertions)]
 const PANEL_MEASUREMENT_HOST_HEIGHT_LOGICAL: i32 = 900;
 
-const BACKEND_ORIGIN: &str = "http://127.0.0.1:3210";
 const POPUP_FOCUS_POLL_INTERVAL: Duration = Duration::from_millis(50);
 
 #[cfg(debug_assertions)]
@@ -90,18 +89,18 @@ fn discover_dev_tray_port() -> Option<u16> {
         .find(|port| is_usagi_vite_server(*port))
 }
 
-fn tray_url(path: &str) -> String {
+fn tray_url(path: &str, backend_address: std::net::SocketAddr) -> String {
     #[cfg(debug_assertions)]
     if let Some(port) = discover_dev_tray_port() {
         return format!("http://localhost:{port}{path}");
     }
 
-    format!("{BACKEND_ORIGIN}{path}")
+    format!("http://{backend_address}{path}")
 }
 
 #[derive(Debug)]
 enum UserEvent {
-    BackendReady,
+    BackendReady(std::net::SocketAddr),
     BackendExited(Result<(), String>),
     Tray(TrayIconEvent),
     RepositionPopup,
@@ -381,6 +380,7 @@ where
 #[derive(Default)]
 struct ShellState {
     backend_was_ready: bool,
+    backend_address: Option<std::net::SocketAddr>,
     popup_visible: bool,
     tray_press_visible: Option<bool>,
     focus_loss_for_tray: bool,
@@ -445,8 +445,8 @@ pub fn run() -> ! {
                 .build()
                 .map_err(|error| format!("could not create Tokio runtime: {error}"))?;
             let ready_proxy = backend_proxy.clone();
-            runtime.block_on(super::run_windows_backend(move || {
-                let _ = ready_proxy.send_event(UserEvent::BackendReady);
+            runtime.block_on(super::run_windows_backend(move |address| {
+                let _ = ready_proxy.send_event(UserEvent::BackendReady(address));
             }))
         });
         let _ = backend_proxy.send_event(UserEvent::BackendExited(result));
@@ -479,11 +479,14 @@ pub fn run() -> ! {
                     hide_popup(&mut state);
                 }
             }
-            Event::UserEvent(UserEvent::BackendReady) => {
+            Event::UserEvent(UserEvent::BackendReady(address)) => {
                 state.backend_was_ready = true;
+                state.backend_address = Some(address);
                 #[cfg(debug_assertions)]
                 if state.measurement_mode {
-                    if let Err(error) = create_measurement_ui(&mut state, target, proxy.clone()) {
+                    if let Err(error) =
+                        create_measurement_ui(&mut state, target, proxy.clone(), address)
+                    {
                         finish_measurement_fatal(&mut state, error, control_flow);
                     }
                     return;
@@ -498,7 +501,9 @@ pub fn run() -> ! {
                     return;
                 }
 
-                if let Err(error) = create_production_ui(&mut state, target, proxy.clone()) {
+                if let Err(error) =
+                    create_production_ui(&mut state, target, proxy.clone(), address)
+                {
                     finish_production_fatal(&mut state, error, control_flow);
                 }
             }
@@ -543,7 +548,10 @@ pub fn run() -> ! {
                 }
             }
             Event::UserEvent(UserEvent::OpenDashboard) => {
-                if let Err(error) = browser::open_dashboard(&SystemBrowser) {
+                let Some(address) = state.backend_address else {
+                    return;
+                };
+                if let Err(error) = browser::open_dashboard_at(&SystemBrowser, address) {
                     eprintln!("Usagi could not open Dashboard: {error}");
                 }
             }
@@ -636,6 +644,7 @@ fn create_production_ui(
     state: &mut ShellState,
     target: &EventLoopWindowTarget<UserEvent>,
     proxy: EventLoopProxy<UserEvent>,
+    backend_address: std::net::SocketAddr,
 ) -> Result<(), String> {
     let icon = load_tray_icon()?;
     state.tray = Some(
@@ -658,7 +667,7 @@ fn create_production_ui(
         .web_context
         .as_mut()
         .ok_or_else(|| "WebContext missing during WebView creation".to_string())?;
-    let tray_url = tray_url("/tray");
+    let tray_url = tray_url("/tray", backend_address);
     let tray_url_slash = format!("{tray_url}/");
     let navigation_url = tray_url.clone();
     let navigation_url_slash = tray_url_slash.clone();
@@ -691,6 +700,7 @@ fn create_measurement_ui(
     state: &mut ShellState,
     target: &EventLoopWindowTarget<UserEvent>,
     proxy: EventLoopProxy<UserEvent>,
+    backend_address: std::net::SocketAddr,
 ) -> Result<(), String> {
     state.popup_window = Some(build_popup_window(
         target,
@@ -708,7 +718,7 @@ fn create_measurement_ui(
         .web_context
         .as_mut()
         .ok_or_else(|| "measurement WebContext missing during WebView creation".to_string())?;
-    let measure_url = tray_url("/tray-measure");
+    let measure_url = tray_url("/tray-measure", backend_address);
     let measure_url_slash = format!("{measure_url}/");
     let navigation_url = measure_url.clone();
     let navigation_url_slash = measure_url_slash.clone();
@@ -1056,9 +1066,11 @@ mod tests {
 
     #[test]
     fn t_wintray_release_fallback_url_contract() {
-        assert_eq!(BACKEND_ORIGIN, "http://127.0.0.1:3210");
         #[cfg(not(debug_assertions))]
-        assert_eq!(tray_url("/tray"), "http://127.0.0.1:3210/tray");
+        assert_eq!(
+            tray_url("/tray", "127.0.0.1:3217".parse().unwrap()),
+            "http://127.0.0.1:3217/tray"
+        );
     }
 
     #[test]
