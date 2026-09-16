@@ -534,45 +534,9 @@ try {
         throw 'NSIS uninstall left usagi.exe in the install directory'
     }
     if (Test-Path -LiteralPath $installRoot) {
-        $remainingInstalledExecutables = @(Get-ChildItem -Path $installRoot -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '(?i)^usagi(?:\.exe)?)
+        $remainingInstalledExecutables = @(Get-ChildItem -Path $installRoot -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '(?i)^usagi(?:\.exe)?$' })
         if ($remainingInstalledExecutables.Count -ne 0) {
             throw 'NSIS uninstall left an installed Usagi executable in the install directory'
-        }
-        throw "NSIS uninstall left the install directory in place: $installRoot"
-    }
-    if (-not (Test-Path -LiteralPath $sentinelPath -PathType Leaf) -or -not (Test-Path -LiteralPath $databasePath -PathType Leaf)) {
-        throw 'NSIS uninstall removed isolated MiniUsage user data'
-    }
-    if ((Get-FileHash -LiteralPath $databasePath -Algorithm SHA256).Hash -ne $databaseHashBeforeUninstall) {
-        throw 'NSIS uninstall changed the isolated MiniUsage database'
-    }
-    if ((Get-FileHash -LiteralPath $sentinelPath -Algorithm SHA256).Hash -ne $sentinelHashBeforeUninstall) {
-        throw 'NSIS uninstall changed isolated MiniUsage user data'
-    }
-} finally {
-    if ($testUserCreated) {
-        if ($null -ne $testUserSid) {
-            try {
-                Get-CimInstance -ClassName Win32_UserProfile |
-                    Where-Object { [string]$_.SID -eq $testUserSid } |
-                    Remove-CimInstance -ErrorAction Stop
-            } catch {
-                Write-Warning "Unable to remove isolated Windows profile for $testUserSid`: $($_.Exception.Message)"
-            }
-        }
-        try {
-            Remove-LocalUser -Name $testUser -ErrorAction Stop
-        } catch {
-            Write-Warning "Unable to remove isolated Windows test user $testUser`: $($_.Exception.Message)"
-        }
-    }
-    if (Test-Path -LiteralPath $workRoot) {
-        Remove-Item -LiteralPath $workRoot -Recurse -Force -ErrorAction SilentlyContinue
-    }
-}
- })
-        if ($remainingInstalledExecutables.Count -ne 0) {
-            throw 'NSIS uninstall left an installed MiniUsage executable in the install directory'
         }
         throw "NSIS uninstall left the install directory in place: $installRoot"
     }
