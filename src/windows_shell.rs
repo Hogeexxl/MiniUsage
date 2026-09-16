@@ -44,7 +44,7 @@ const POPUP_FOCUS_POLL_INTERVAL: Duration = Duration::from_millis(50);
 #[cfg(debug_assertions)]
 const DEV_TRAY_DEFAULT_PORT: u16 = 5173;
 #[cfg(debug_assertions)]
-const DEV_TRAY_PORT_SCAN_COUNT: u16 = 20;
+const DEV_TRAY_PORT_SCAN_COUNT: u16 = 32;
 #[cfg(debug_assertions)]
 const DEV_TRAY_PROBE_TIMEOUT: Duration = Duration::from_millis(80);
 #[cfg(debug_assertions)]
@@ -508,8 +508,7 @@ pub fn run() -> ! {
                     return;
                 }
 
-                if let Err(error) =
-                    create_production_ui(&mut state, target, proxy.clone(), address)
+                if let Err(error) = create_production_ui(&mut state, target, proxy.clone(), address)
                 {
                     finish_production_fatal(&mut state, error, control_flow);
                 }
