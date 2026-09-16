@@ -35,3 +35,16 @@ fn package_version_is_the_cargo_package_version() {
 
     assert_eq!(env!("CARGO_PKG_VERSION"), manifest_version);
 }
+
+
+#[test]
+fn cargo_binary_target_is_usagi() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let manifest = fs::read_to_string(manifest_dir.join("Cargo.toml")).expect("read Cargo.toml");
+
+    assert!(manifest.contains("autobins = false"));
+    assert!(manifest.contains("[[bin]]"));
+    assert!(manifest.contains("name = \"usagi\""));
+    assert!(manifest.contains("path = \"src/main.rs\""));
+    assert!(!manifest.contains("name = \"mini-usage\"\npath = \"src/main.rs\""));
+}
