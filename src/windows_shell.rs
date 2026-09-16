@@ -67,11 +67,11 @@ fn is_usagi_vite_server(port: u16) -> bool {
         return false;
     }
 
-    let mut response = Vec::with_capacity(2048);
-    if stream.take(8192).read_to_end(&mut response).is_err() {
+    let mut response = [0_u8; 8192];
+    let Ok(read) = stream.read(&mut response) else {
         return false;
-    }
-    String::from_utf8_lossy(&response)
+    };
+    String::from_utf8_lossy(&response[..read])
         .lines()
         .take_while(|line| !line.trim().is_empty())
         .any(|line| line.trim().eq_ignore_ascii_case(DEV_TRAY_MARKER_HEADER))
@@ -579,6 +579,10 @@ pub fn run() -> ! {
                 handle_window_event(&mut state, event, target, &proxy, control_flow);
             }
             _ => {}
+        }
+
+        if state.popup_visible && matches!(*control_flow, ControlFlow::Wait) {
+            *control_flow = ControlFlow::WaitUntil(Instant::now() + POPUP_FOCUS_POLL_INTERVAL);
         }
     })
 }
