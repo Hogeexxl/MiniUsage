@@ -142,7 +142,7 @@ fn t_dist_013_windows_release_has_static_runtime_and_install_smoke() {
         "-Wait",
         "-RedirectStandardOutput `$stdoutPath",
         "-RedirectStandardError `$stderrPath",
-        "exit `$miniUsage.ExitCode",
+        "exit `$usagi.ExitCode",
         "127.0.0.1:3210/api/health",
         "X-MiniUsage-Version",
         "expectedBinaryVersion = $env:CARGO_VERSION",
