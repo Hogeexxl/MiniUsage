@@ -7,7 +7,7 @@ use std::{
 #[cfg(debug_assertions)]
 use std::{
     io::{Read, Write},
-    net::TcpStream,
+    net::{TcpStream, ToSocketAddrs},
 };
 
 use directories::BaseDirs;
@@ -52,27 +52,35 @@ const DEV_TRAY_MARKER_HEADER: &str = "x-usagi-frontend: 1";
 
 #[cfg(debug_assertions)]
 fn is_usagi_vite_server(port: u16) -> bool {
-    let address = std::net::SocketAddr::from(([127, 0, 0, 1], port));
-    let Ok(mut stream) = TcpStream::connect_timeout(&address, DEV_TRAY_PROBE_TIMEOUT) else {
+    let Ok(addresses) = ("localhost", port).to_socket_addrs() else {
         return false;
     };
-    let _ = stream.set_read_timeout(Some(DEV_TRAY_PROBE_TIMEOUT));
-    let _ = stream.set_write_timeout(Some(DEV_TRAY_PROBE_TIMEOUT));
+    for address in addresses {
+        let Ok(mut stream) = TcpStream::connect_timeout(&address, DEV_TRAY_PROBE_TIMEOUT) else {
+            continue;
+        };
+        let _ = stream.set_read_timeout(Some(DEV_TRAY_PROBE_TIMEOUT));
+        let _ = stream.set_write_timeout(Some(DEV_TRAY_PROBE_TIMEOUT));
 
-    let request =
-        format!("GET /tray HTTP/1.1\r\nHost: localhost:{port}\r\nConnection: close\r\n\r\n");
-    if stream.write_all(request.as_bytes()).is_err() {
-        return false;
+        let request =
+            format!("GET /tray HTTP/1.1\r\nHost: localhost:{port}\r\nConnection: close\r\n\r\n");
+        if stream.write_all(request.as_bytes()).is_err() {
+            continue;
+        }
+
+        let mut response = [0_u8; 8192];
+        let Ok(read) = stream.read(&mut response) else {
+            continue;
+        };
+        if String::from_utf8_lossy(&response[..read])
+            .lines()
+            .take_while(|line| !line.trim().is_empty())
+            .any(|line| line.trim().eq_ignore_ascii_case(DEV_TRAY_MARKER_HEADER))
+        {
+            return true;
+        }
     }
-
-    let mut response = [0_u8; 8192];
-    let Ok(read) = stream.read(&mut response) else {
-        return false;
-    };
-    String::from_utf8_lossy(&response[..read])
-        .lines()
-        .take_while(|line| !line.trim().is_empty())
-        .any(|line| line.trim().eq_ignore_ascii_case(DEV_TRAY_MARKER_HEADER))
+    false
 }
 
 #[cfg(debug_assertions)]
