@@ -59,9 +59,8 @@ fn is_usagi_vite_server(port: u16) -> bool {
     let _ = stream.set_read_timeout(Some(DEV_TRAY_PROBE_TIMEOUT));
     let _ = stream.set_write_timeout(Some(DEV_TRAY_PROBE_TIMEOUT));
 
-    let request = format!(
-        "GET /tray HTTP/1.1\r\nHost: localhost:{port}\r\nConnection: close\r\n\r\n"
-    );
+    let request =
+        format!("GET /tray HTTP/1.1\r\nHost: localhost:{port}\r\nConnection: close\r\n\r\n");
     if stream.write_all(request.as_bytes()).is_err() {
         return false;
     }
@@ -676,9 +675,7 @@ fn create_production_ui(
     let ipc_proxy = proxy.clone();
     let webview = WebViewBuilder::new_with_web_context(context)
         .with_url(&tray_url)
-        .with_navigation_handler(move |url| {
-            url == navigation_url || url == navigation_url_slash
-        })
+        .with_navigation_handler(move |url| url == navigation_url || url == navigation_url_slash)
         .with_new_window_req_handler(|_, _| NewWindowResponse::Deny)
         .with_ipc_handler(move |request| {
             if request.body() == "open-dashboard" {
@@ -813,8 +810,7 @@ fn handle_tray_event(
             } else if let Err(error) = show_popup(state, rect, target) {
                 finish_production_fatal(state, error, control_flow);
             } else {
-                *control_flow =
-                    ControlFlow::WaitUntil(Instant::now() + POPUP_FOCUS_POLL_INTERVAL);
+                *control_flow = ControlFlow::WaitUntil(Instant::now() + POPUP_FOCUS_POLL_INTERVAL);
             }
         }
     }
