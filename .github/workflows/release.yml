@@ -118,34 +118,61 @@ jobs:
             throw "Static CRT guard found a Visual C++ runtime dependency:`n$imports"
           }
           if ($headers -notmatch '(?im)(Windows GUI|IMAGE_SUBSYSTEM_WINDOWS_GUI|\b2\s+subsystem\s+\(Windows GUI\))') {
-            throw "MiniUsage must be a GUI-subsystem executable:`n$headers"
+            throw "Usagi must be a GUI-subsystem executable:`n$headers"
           }
           if ($headers -notmatch '(?im)(machine\s+\(x64\)|IMAGE_FILE_MACHINE_AMD64|COFF-x86-64|\b866\b)') {
-            throw "MiniUsage release binary must be an x64 PE image:`n$headers"
+            throw "Usagi release binary must be an x64 PE image:`n$headers"
           }
           if ($headers -notmatch '(?im)(PE32\+|IMAGE_NT_OPTIONAL_HDR64_MAGIC|Magic:\s*0x20B\b)') {
-            throw "MiniUsage release binary must use the PE32+ optional header:`n$headers"
+            throw "Usagi release binary must use the PE32+ optional header:`n$headers"
           }
 
       - name: Install pinned cargo-packager
         shell: pwsh
         run: cargo install cargo-packager --locked --version $env:CARGO_PACKAGER_VERSION
 
-      - name: Build NSIS installer
+      - name: Build Usagi NSIS installer
         shell: pwsh
         run: |
-          cargo packager --release --formats nsis
-          $generated = @(Get-ChildItem -Path (Join-Path $env:GITHUB_WORKSPACE 'target/release') -Filter '*-setup.exe' -File)
+          $releaseDir = Join-Path $env:GITHUB_WORKSPACE 'target/release'
+          $cargoBinary = Join-Path $releaseDir 'mini-usage.exe'
+          $usagiBinary = Join-Path $releaseDir 'usagi.exe'
+          if (-not (Test-Path -LiteralPath $cargoBinary -PathType Leaf)) {
+            throw "Cargo release binary was not found: $cargoBinary"
+          }
+          Copy-Item -LiteralPath $cargoBinary -Destination $usagiBinary -Force
+          if (-not (Test-Path -LiteralPath $usagiBinary -PathType Leaf)) {
+            throw "Usagi Windows binary was not created: $usagiBinary"
+          }
+
+          # Keep the legacy identifier so existing MiniUsage installations upgrade in place,
+          # while the installed executable/product name becomes Usagi on Windows only.
+          $packagerConfig = @{
+            name = 'usagi'
+            productName = 'Usagi'
+            version = $env:CARGO_VERSION
+            identifier = 'com.hogeexxl.miniusage'
+            outDir = $releaseDir
+            binariesDir = $releaseDir
+            binaries = @(
+              @{
+                path = 'usagi'
+                main = $true
+              }
+            )
+            formats = @('nsis')
+          }
+          $configPath = Join-Path $releaseDir 'packager.windows.json'
+          $packagerConfig | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $configPath -Encoding utf8
+
+          cargo packager --release --config $configPath
+          $generated = @(Get-ChildItem -Path $releaseDir -Filter '*-setup.exe' -File)
           if ($generated.Count -ne 1) {
             throw "Expected exactly one NSIS installer, found $($generated.Count)"
           }
-          $expectedPackagerName = "mini-usage_$($env:CARGO_VERSION)_x64-setup.exe"
-          if ($generated[0].Name -cne $expectedPackagerName) {
-            throw "Expected cargo-packager NSIS basename $expectedPackagerName (Cargo base $env:CARGO_VERSION; final tag $env:TAG_VERSION), got $($generated[0].Name)"
-          }
-          $asset = Join-Path $env:GITHUB_WORKSPACE "target/release/MiniUsage-v$env:TAG_VERSION-windows-x64-setup.exe"
+          $asset = Join-Path $releaseDir "Usagi-v$env:TAG_VERSION-windows-x64-setup.exe"
           Move-Item -LiteralPath $generated[0].FullName -Destination $asset -Force
-          if (-not (Test-Path $asset)) {
+          if (-not (Test-Path -LiteralPath $asset -PathType Leaf)) {
             throw "Expected Windows asset was not created: $asset"
           }
 
@@ -158,7 +185,7 @@ jobs:
         with:
           name: windows-installer
           if-no-files-found: error
-          path: target/release/MiniUsage-v${{ steps.version.outputs.version }}-windows-x64-setup.exe
+          path: target/release/Usagi-v${{ steps.version.outputs.version }}-windows-x64-setup.exe
 
   macos:
     name: macOS arm64 release
@@ -520,7 +547,7 @@ jobs:
         run: |
           set -euo pipefail
           version="${{ steps.version.outputs.version }}"
-          windows_name="MiniUsage-v${version}-windows-x64-setup.exe"
+          windows_name="Usagi-v${version}-windows-x64-setup.exe"
           macos_name="MiniUsage-v${version}-macos-arm64.dmg"
           windows_path="$(find staging/windows -type f -name "$windows_name" -print -quit)"
           macos_path="$(find staging/macos -type f -name "$macos_name" -print -quit)"
@@ -549,7 +576,7 @@ jobs:
             exit 1
           fi
           gh release create "$GITHUB_REF_NAME" \
-            "release-assets/MiniUsage-v${version}-windows-x64-setup.exe" \
+            "release-assets/Usagi-v${version}-windows-x64-setup.exe" \
             "release-assets/MiniUsage-v${version}-macos-arm64.dmg" \
             release-assets/SHA256SUMS.txt \
             --repo "$GITHUB_REPOSITORY" \
