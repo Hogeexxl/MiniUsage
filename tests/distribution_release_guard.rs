@@ -51,7 +51,7 @@ fn t_dist_012_release_workflow_is_tag_gated_and_allows_explicit_dispatch() {
     assert!(release.contains("release_args+=(--draft --prerelease)"));
     assert!(release.contains("is_candidate=\"${{ steps.version.outputs.is_candidate }}\""));
     assert!(release.contains("\"${release_args[@]}\""));
-    assert!(release.contains("windows_name=\"MiniUsage-v${version}-windows-x64-setup.exe\""));
+    assert!(release.contains("windows_name=\"Usagi-v${version}-windows-x64-setup.exe\""));
     assert!(release.contains("macos_name=\"MiniUsage-v${version}-macos-arm64.dmg\""));
     assert!(release.contains("TAG_VERSION=$tagVersion"));
     assert!(release.contains("CARGO_VERSION=$cargoVersion"));
@@ -71,9 +71,9 @@ fn t_dist_012_release_jobs_build_only_supported_assets() {
         "cargo test --locked",
         "cargo build --release --locked --features embedded-frontend",
         "cargo install cargo-packager --locked --version",
-        "cargo packager --release --formats nsis",
+        "cargo packager --release --config $configPath",
         "cargo packager --release --formats dmg",
-        "MiniUsage-v$env:TAG_VERSION-windows-x64-setup.exe",
+        "Usagi-v$env:TAG_VERSION-windows-x64-setup.exe",
         "MiniUsage-v${TAG_VERSION}-macos-arm64.dmg",
         "actions/upload-artifact@v4",
         "actions/download-artifact@v4",
@@ -116,8 +116,11 @@ fn t_dist_013_windows_release_has_static_runtime_and_install_smoke() {
         "IMAGE_SUBSYSTEM_WINDOWS_GUI",
         "IMAGE_FILE_MACHINE_AMD64",
         "PE32+",
-        "expectedPackagerName = \"mini-usage_$($env:CARGO_VERSION)_x64-setup.exe\"",
-        "$generated[0].Name -cne $expectedPackagerName",
+        "$usagiBinary = Join-Path $releaseDir 'usagi.exe'",
+        "productName = 'Usagi'",
+        "identifier = 'com.hogeexxl.miniusage'",
+        "path = 'usagi'",
+        "cargo packager --release --config $configPath",
         "T-DIST-013 clean-runtime installer smoke",
         ".github/scripts/windows-release-smoke.ps1",
     ] {
@@ -130,7 +133,7 @@ fn t_dist_013_windows_release_has_static_runtime_and_install_smoke() {
     for required in [
         "Start-Process -FilePath $installer",
         "'/S'",
-        "MINIUSAGE_WINDOWS_HEADLESS_SMOKE",
+        "USAGI_WINDOWS_HEADLESS_SMOKE",
         "MINIUSAGE_DISABLE_BROWSER",
         "Start-Process -FilePath `$binaryPath",
         "-PassThru",
@@ -152,7 +155,7 @@ fn t_dist_013_windows_release_has_static_runtime_and_install_smoke() {
         "$uninstallers.Count -ne 1",
         "$uninstallerPath",
         "Start-Process -FilePath $uninstallerPath",
-        "NSIS uninstall left mini-usage.exe",
+        "NSIS uninstall left usagi.exe",
         "databaseHashBeforeUninstall",
         "sentinelHashBeforeUninstall",
         "New-LocalUser",
