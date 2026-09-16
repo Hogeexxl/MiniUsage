@@ -1,7 +1,7 @@
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-$installer = Join-Path $env:GITHUB_WORKSPACE "target/release/MiniUsage-v$env:TAG_VERSION-windows-x64-setup.exe"
+$installer = Join-Path $env:GITHUB_WORKSPACE "target/release/Usagi-v$env:TAG_VERSION-windows-x64-setup.exe"
 if (-not (Test-Path -LiteralPath $installer -PathType Leaf)) {
     throw "Windows installer was not found: $installer"
 }
@@ -275,7 +275,7 @@ Remove-Item Env:CARGO_HOME, Env:RUSTUP_HOME, Env:NODE_PATH, Env:npm_config_prefi
 `$env:TEMP = '$escapedTemp'
 `$env:TMP = '$escapedTemp'
 `$env:CODEX_HOME = '$escapedCodexHome'
-`$env:MINIUSAGE_WINDOWS_HEADLESS_SMOKE = '1'
+`$env:USAGI_WINDOWS_HEADLESS_SMOKE = '1'
 `$env:MINIUSAGE_DISABLE_BROWSER = '1'
 Set-Location -LiteralPath '$escapedRuntimeRoot'
 [pscustomobject]@{
@@ -462,9 +462,9 @@ try {
     }
     $install.Dispose()
 
-    $installedBinary = Get-ChildItem -Path $installRoot -Recurse -Filter 'mini-usage.exe' -File | Select-Object -First 1
+    $installedBinary = Get-ChildItem -Path $installRoot -Recurse -Filter 'usagi.exe' -File | Select-Object -First 1
     if ($null -eq $installedBinary) {
-        throw 'Installed mini-usage.exe was not found'
+        throw 'Installed usagi.exe was not found'
     }
     if ($installedBinary.FullName.StartsWith($env:GITHUB_WORKSPACE, [System.StringComparison]::OrdinalIgnoreCase)) {
         throw 'Installed binary unexpectedly resolves inside the repository'
@@ -505,9 +505,9 @@ try {
         throw 'NSIS reinstall changed the isolated MiniUsage database'
     }
 
-    $installedBinary = Get-ChildItem -Path $installRoot -Recurse -Filter 'mini-usage.exe' -File | Select-Object -First 1
+    $installedBinary = Get-ChildItem -Path $installRoot -Recurse -Filter 'usagi.exe' -File | Select-Object -First 1
     if ($null -eq $installedBinary) {
-        throw 'Reinstalled mini-usage.exe was not found'
+        throw 'Reinstalled usagi.exe was not found'
     }
     Invoke-InstalledRuntimeSmoke -BinaryPath $installedBinary.FullName -RuntimeRoot $runtimeRoot -CodexHome $codexHome -Temp $temp -ExpectedLocalAppData $localAppData
     if ((Get-Content -LiteralPath $sentinelPath -Raw) -ne 'preserve across reinstall') {
@@ -531,10 +531,46 @@ try {
         Start-Sleep -Milliseconds 250
     }
     if (Test-Path -LiteralPath $installedBinary.FullName) {
-        throw 'NSIS uninstall left mini-usage.exe in the install directory'
+        throw 'NSIS uninstall left usagi.exe in the install directory'
     }
     if (Test-Path -LiteralPath $installRoot) {
-        $remainingInstalledExecutables = @(Get-ChildItem -Path $installRoot -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '(?i)^mini-usage(?:\.exe)?$' })
+        $remainingInstalledExecutables = @(Get-ChildItem -Path $installRoot -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '(?i)^usagi(?:\.exe)?)
+        if ($remainingInstalledExecutables.Count -ne 0) {
+            throw 'NSIS uninstall left an installed Usagi executable in the install directory'
+        }
+        throw "NSIS uninstall left the install directory in place: $installRoot"
+    }
+    if (-not (Test-Path -LiteralPath $sentinelPath -PathType Leaf) -or -not (Test-Path -LiteralPath $databasePath -PathType Leaf)) {
+        throw 'NSIS uninstall removed isolated MiniUsage user data'
+    }
+    if ((Get-FileHash -LiteralPath $databasePath -Algorithm SHA256).Hash -ne $databaseHashBeforeUninstall) {
+        throw 'NSIS uninstall changed the isolated MiniUsage database'
+    }
+    if ((Get-FileHash -LiteralPath $sentinelPath -Algorithm SHA256).Hash -ne $sentinelHashBeforeUninstall) {
+        throw 'NSIS uninstall changed isolated MiniUsage user data'
+    }
+} finally {
+    if ($testUserCreated) {
+        if ($null -ne $testUserSid) {
+            try {
+                Get-CimInstance -ClassName Win32_UserProfile |
+                    Where-Object { [string]$_.SID -eq $testUserSid } |
+                    Remove-CimInstance -ErrorAction Stop
+            } catch {
+                Write-Warning "Unable to remove isolated Windows profile for $testUserSid`: $($_.Exception.Message)"
+            }
+        }
+        try {
+            Remove-LocalUser -Name $testUser -ErrorAction Stop
+        } catch {
+            Write-Warning "Unable to remove isolated Windows test user $testUser`: $($_.Exception.Message)"
+        }
+    }
+    if (Test-Path -LiteralPath $workRoot) {
+        Remove-Item -LiteralPath $workRoot -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+ })
         if ($remainingInstalledExecutables.Count -ne 0) {
             throw 'NSIS uninstall left an installed MiniUsage executable in the install directory'
         }
