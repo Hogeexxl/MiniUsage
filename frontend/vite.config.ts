@@ -29,6 +29,12 @@ export default defineConfig({
     },
   },
   server: {
+    host: "localhost",
+    port: 5173,
+    strictPort: false,
+    headers: {
+      "X-Usagi-Frontend": "1",
+    },
     proxy: {
       "/api": {
         target: "http://127.0.0.1:3210",
