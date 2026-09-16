@@ -86,7 +86,6 @@ export default defineConfig({
               if (discovered !== null) {
                 backendOrigin = discovered;
                 options.target = discovered;
-                proxy.options.target = discovered;
               }
             } finally {
               refreshInFlight = false;
