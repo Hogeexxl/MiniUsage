@@ -217,9 +217,8 @@ fn build_router(state: ApiState, frontend: static_assets::FrontendSource) -> Rou
         .layer(middleware::from_fn(api_no_store))
         .with_state(state.clone());
 
-    static_assets::with_fallback(Router::new().nest("/api", api), frontend).layer(
-        middleware::from_fn_with_state(state, local_request_guard),
-    )
+    static_assets::with_fallback(Router::new().nest("/api", api), frontend)
+        .layer(middleware::from_fn_with_state(state, local_request_guard))
 }
 
 async fn health() -> Response {
